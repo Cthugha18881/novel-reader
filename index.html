@@ -80,18 +80,18 @@
     body.theme-dark .chapter-toolbar { border-bottom-color: rgba(255,255,255,0.1); }
     .chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; }
 
-    /* READING PARAGRAPHS - สวยงาม แยกย่อหน้าชัดเจน */
+    /* READING PARAGRAPHS */
     #reading-content { line-height: 1.9; user-select: text; }
     .para-item {
       padding: 6px 8px;
-      margin-bottom: 14px; /* เว้นระยะห่างระหว่างย่อหน้าให้อ่านง่าย */
+      margin-bottom: 14px;
       border-radius: 6px;
       transition: background-color 0.15s ease;
     }
     .para-th {
       font-size: inherit;
       cursor: pointer;
-      text-indent: 1.5em; /* ย่อหน้าวรรคแรกแบบหนังสือนิยาย */
+      text-indent: 1.5em;
     }
     .para-th:hover {
       background-color: rgba(0,0,0,0.02);
@@ -172,6 +172,19 @@
       display: none; padding: 8px 10px; border-radius: 6px; font-size: 12px;
       margin-top: 8px; line-height: 1.4;
     }
+
+    /* BOOKSHELF CARD LIST */
+    .book-card {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08);
+      margin-bottom: 8px; cursor: pointer; transition: all 0.15s ease;
+    }
+    body.theme-dark .book-card { border-color: rgba(255,255,255,0.1); }
+    .book-card:hover { background-color: rgba(0,0,0,0.03); }
+    body.theme-dark .book-card:hover { background-color: rgba(255,255,255,0.04); }
+    .book-info { flex: 1; overflow: hidden; padding-right: 10px; }
+    .book-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .book-meta { font-size: 11px; opacity: 0.6; margin-top: 2px; }
   </style>
 </head>
 <body class="theme-sepia" id="app-body">
@@ -192,6 +205,7 @@
       </div>
 
       <div id="prefetch-badge">ตอนถัดไปพร้อม</div>
+      <button class="btn" onclick="openBookshelfModal()">ชั้นหนังสือ</button>
       <button class="btn btn-primary" onclick="openModal('import-modal')">+ วางลิงก์</button>
       <button class="btn" onclick="openModal('glossary-modal')">ศัพท์</button>
       <button class="btn" onclick="openModal('settings-modal')">ตั้งค่า</button>
@@ -239,11 +253,24 @@
 
   <!-- MOBILE BOTTOM DOCK -->
   <nav class="mobile-dock">
+    <button class="btn" onclick="openBookshelfModal()">ชั้นหนังสือ</button>
     <button class="btn" onclick="adjustFontSize(-1)">A-</button>
     <button class="btn" id="mobile-theme-btn" onclick="cycleTheme()">ถนอมสายตา</button>
     <button class="btn" onclick="adjustFontSize(1)">A+</button>
     <button class="btn" onclick="openModal('glossary-modal')">คลังศัพท์</button>
   </nav>
+
+  <!-- MODAL: BOOKSHELF (ชั้นหนังสือในเครื่อง) -->
+  <div class="modal-overlay" id="bookshelf-modal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title">ชั้นหนังสือของฉัน (ในเครื่อง)</div>
+        <button class="modal-close" onclick="closeModal('bookshelf-modal')">✕</button>
+      </div>
+      <div id="bookshelf-list" style="max-height: 280px; overflow-y: auto; margin-bottom: 12px;"></div>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ตอนที่แปลแล้วทั้งหมดจะถูกเก็บไว้ในเครื่อง อ่านซ้ำได้โดยไม่ต้องใช้อินเทอร์เน็ต</p>
+    </div>
+  </div>
 
   <!-- MODAL 1: IMPORT & TRANSLATE -->
   <div class="modal-overlay" id="import-modal">
@@ -347,7 +374,85 @@
   </div>
 
   <script>
-    // STATE
+    // ==================== INDEXEDDB ENGINE ====================
+    const DB_NAME = 'NovelTranslateDB';
+    const DB_VERSION = 1;
+    let db = null;
+
+    function initDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, DB_VERSION);
+        req.onupgradeneeded = (e) => {
+          const d = e.target.result;
+          if (!d.objectStoreNames.contains('books')) {
+            d.createObjectStore('books', { keyPath: 'bookId' });
+          }
+          if (!d.objectStoreNames.contains('chapters')) {
+            const chapStore = d.createObjectStore('chapters', { keyPath: 'id' });
+            chapStore.createIndex('bookId', 'bookId', { unique: false });
+          }
+        };
+        req.onsuccess = (e) => {
+          db = e.target.result;
+          resolve(db);
+        };
+        req.onerror = (e) => reject(e);
+      });
+    }
+
+    function dbSaveBook(book) {
+      return new Promise((resolve) => {
+        if (!db) return resolve();
+        const tx = db.transaction('books', 'readwrite');
+        tx.objectStore('books').put(book);
+        tx.oncomplete = () => resolve();
+      });
+    }
+
+    function dbSaveChapter(chapter) {
+      return new Promise((resolve) => {
+        if (!db) return resolve();
+        const tx = db.transaction('chapters', 'readwrite');
+        tx.objectStore('chapters').put(chapter);
+        tx.oncomplete = () => resolve();
+      });
+    }
+
+    function dbGetAllBooks() {
+      return new Promise((resolve) => {
+        if (!db) return resolve([]);
+        const tx = db.transaction('books', 'readonly');
+        const req = tx.objectStore('books').getAll();
+        req.onsuccess = () => resolve(req.result || []);
+      });
+    }
+
+    function dbGetChaptersByBook(bookId) {
+      return new Promise((resolve) => {
+        if (!db) return resolve([]);
+        const tx = db.transaction('chapters', 'readonly');
+        const index = tx.objectStore('chapters').index('bookId');
+        const req = index.getAll(bookId);
+        req.onsuccess = () => resolve(req.result || []);
+      });
+    }
+
+    function dbDeleteBook(bookId) {
+      return new Promise((resolve) => {
+        if (!db) return resolve();
+        const tx = db.transaction(['books', 'chapters'], 'readwrite');
+        tx.objectStore('books').delete(bookId);
+        const chapStore = tx.objectStore('chapters');
+        const index = chapStore.index('bookId');
+        const req = index.getAllKeys(bookId);
+        req.onsuccess = () => {
+          (req.result || []).forEach(k => chapStore.delete(k));
+        };
+        tx.oncomplete = () => resolve();
+      });
+    }
+
+    // ==================== APP STATE ====================
     let currentTheme = 'sepia';
     let currentFontSize = 18;
     let currentUrl = "";
@@ -355,11 +460,10 @@
     let prefetchedData = null;
     let isPrefetching = false;
     let lastChapterContext = "";
+    let currentBookId = "default_novel";
+    let currentBookTitle = "นิยายเล่มปัจจุบัน";
 
-    // Cancellation Token for Retries
     let retryAbortRequested = false;
-
-    // Selection Buffer
     let selectedWordBuffer = "";
     let isSelectedChinese = false;
 
@@ -372,20 +476,27 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบได้รับการอัปเกรดแยกย่อหน้าสวยงามแบบ 1 ต่อ 1 เรียบร้อยแล้ว", src: "已升级段落精准一对一拆分，阅读排版整齐优雅" },
-          { th: "แตะที่ย่อหน้านี้ เพื่อดูข้อความภาษาจีนต้นฉบับเด้งลงมาใต้ย่อหน้าทันที", src: "轻触本段落，即可在下方展开中文原文对比阅读" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับติดตั้งชั้นหนังสือในเครื่อง", src: "欢迎来到 NovelTranslate" },
+          { th: "ทุกตอนที่คุณแปลจะถูกบันทึกไว้ในเครื่องอัตโนมัติ กดปุ่ม 'ชั้นหนังสือ' เพื่อเปิดดูตอนเก่าได้ทันทีโดยไม่ต้องต่อเน็ต", src: "所有章节均保存在本地数据库中，随时支持离线阅读" }
         ]
       }
     ];
     let currentChapterIndex = 0;
 
     // INIT
-    window.addEventListener('DOMContentLoaded', () => {
+    window.addEventListener('DOMContentLoaded', async () => {
+      await initDB();
       loadSettings();
-      renderChapter();
-      renderGlossary();
       setupSelectionMonitor();
+      
+      // ฟื้นฟูนวนิยายเล่มล่าสุด
+      const lastBookId = localStorage.getItem('nov_last_book_id');
+      if (lastBookId) {
+        await loadBookFromDB(lastBookId);
+      } else {
+        renderChapter();
+      }
+      renderGlossary();
     });
 
     // THEME & FONT
@@ -411,7 +522,7 @@
     function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-    // RENDER CONTENT WITH ACCORDION SOURCE
+    // RENDER CONTENT
     function renderChapter() {
       const chap = chapters[currentChapterIndex];
       document.getElementById('display-chap-title').innerText = chap.title;
@@ -433,6 +544,20 @@
       });
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
+
+      // บันทึกตำแหน่งล่าสุด
+      if (currentBookId !== "default_novel") {
+        dbSaveBook({
+          bookId: currentBookId,
+          title: currentBookTitle,
+          lastChapterIndex: currentChapterIndex,
+          lastChapterTitle: chap.title,
+          totalChapters: chapters.length,
+          lastUrl: currentUrl,
+          updatedAt: Date.now()
+        });
+        localStorage.setItem('nov_last_book_id', currentBookId);
+      }
     }
 
     function toggleParagraphSrc(idx) {
@@ -494,7 +619,66 @@
       }, 150);
     }
 
-    // ==================== CLEAN SCRAPER ENGINE (NO METADATA JUNK) ====================
+    // ==================== BOOKSHELF UI LOGIC ====================
+    async function openBookshelfModal() {
+      const listContainer = document.getElementById('bookshelf-list');
+      listContainer.innerHTML = '<div style="text-align:center; padding:15px; opacity:0.6;">กำลังเปิดคลังหนังสือ...</div>';
+      openModal('bookshelf-modal');
+
+      const books = await dbGetAllBooks();
+      books.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+      if (books.length === 0) {
+        listContainer.innerHTML = '<div style="text-align:center; padding:20px; opacity:0.6; font-size:13px;">ยังไม่มีนิยายในชั้นหนังสือ ลองวางลิงก์เพื่อเริ่มอ่านและบันทึกตอนแรก</div>';
+        return;
+      }
+
+      listContainer.innerHTML = "";
+      books.forEach(b => {
+        const item = document.createElement('div');
+        item.className = 'book-card';
+        item.innerHTML = `
+          <div class="book-info" onclick="selectBookFromShelf('${b.bookId}')">
+            <div class="book-title">${b.title || 'นิยายเรื่องใหม่'}</div>
+            <div class="book-meta">อ่านค้างไว้: ${b.lastChapterTitle || 'ตอนที่ 1'} (${b.totalChapters || 1} ตอนที่เก็บไว้)</div>
+          </div>
+          <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบ</button>
+        `;
+        listContainer.appendChild(item);
+      });
+    }
+
+    async function selectBookFromShelf(bookId) {
+      await loadBookFromDB(bookId);
+      closeModal('bookshelf-modal');
+    }
+
+    async function loadBookFromDB(bookId) {
+      const books = await dbGetAllBooks();
+      const targetBook = books.find(b => b.bookId === bookId);
+      if (!targetBook) return;
+
+      const loadedChaps = await dbGetChaptersByBook(bookId);
+      if (loadedChaps.length > 0) {
+        loadedChaps.sort((a, b) => a.order - b.order);
+        chapters = loadedChaps;
+        currentBookId = bookId;
+        currentBookTitle = targetBook.title;
+        currentChapterIndex = Math.min(targetBook.lastChapterIndex || 0, chapters.length - 1);
+        currentUrl = targetBook.lastUrl || "";
+        nextUrlCalculated = chapters[currentChapterIndex].nextUrl || "";
+        renderChapter();
+      }
+    }
+
+    async function removeBookFromShelf(e, bookId) {
+      e.stopPropagation();
+      if (!confirm("ต้องการลบนิยายเรื่องนี้และตอนที่เก็บไว้ทั้งหมดในเครื่องใช่หรือไม่?")) return;
+      await dbDeleteBook(bookId);
+      openBookshelfModal();
+    }
+
+    // ==================== UNLIMITED SCRAPER ENGINE ====================
     async function scrapePage(url) {
       let rawText = "";
 
@@ -505,7 +689,6 @@
           const lines = md.split('\n')
             .map(l => l.trim())
             .filter(l => {
-              // ตัด Metadata ของ Jina และลิงก์ออกทั้งหมด
               if (!l || l.length < 3) return false;
               if (l.startsWith('Title:') || l.startsWith('URL Source:') || l.startsWith('Published Time:') || l.startsWith('Markdown Content:')) return false;
               if (l.startsWith('!') || l.startsWith('[') || l.startsWith('http')) return false;
@@ -549,6 +732,13 @@
       return { text: rawText, nextUrl: nextUrl };
     }
 
+    function extractBookIdFromUrl(url) {
+      // ตัวอย่าง: https://www.69shuba.com/txt/88724/40711443 -> bookId: 69shuba_88724
+      const m = url.match(/txt\/(\d+)\//);
+      if (m) return 'book_' + m[1];
+      return 'book_' + btoa(url.split('?')[0]).substring(0, 16);
+    }
+
     function getGenreInstruction(genre) {
       switch (genre) {
         case 'xianxia':
@@ -574,7 +764,6 @@
       }
     }
 
-    // ==================== 1:1 STRICT PARAGRAPH TRANSLATE CALL ====================
     async function executeApiCall(rawText, modelToUse) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
@@ -588,9 +777,9 @@
 
 ${genreRule}
 
-กฎเหล็กเรื่องการจัดย่อหน้าและโครงสร้าง (สำคัญสูงสุด):
-1. **ห้ามรวบย่อหน้ารวมกันเป็นก้อนเดียวเด็ดขาด** 
-2. แยกย่อหน้าแปลให้ตรงกับต้นฉบับแบบ 1 ต่อ 1 (ต้นฉบับมีกี่ย่อหน้า ใน JSON Array ต้องมีจำนวน Object เท่ากันเป๊ะๆ)
+กฎเหล็กเรื่องการจัดย่อหน้าและโครงสร้าง:
+1. ห้ามรวบย่อหน้ารวมกันเป็นก้อนเดียวเด็ดขาด
+2. แยกย่อหน้าแปลให้ตรงกับต้นฉบับแบบ 1 ต่อ 1
 3. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
 4. ล็อกสรรพนามของตัวละครให้สอดคล้องกัน ห้ามสลับไปมา
 ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${lastChapterContext}"` : ''}
@@ -619,10 +808,8 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
 
       const parsedResult = JSON.parse(outText);
 
-      // ถ้า AI หลุดรวบย่อหน้ามา ให้สั่งตัดแบ่งย่อยอัตโนมัติเพื่อความสวยงาม
       const formattedResult = [];
       parsedResult.forEach(item => {
-        // หากย่อหน้ายาวเกิน 400 ตัวอักษรและมีเครื่องหมายคำพูด ให้แยกบรรทัด
         if (item.th && item.th.length > 350 && item.th.includes('”')) {
           const subParas = item.th.split(/(?<=[”」\n])\s*/);
           subParas.forEach(sub => {
@@ -720,6 +907,8 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
       try {
         currentUrl = url;
         lastChapterContext = "";
+        currentBookId = extractBookIdFromUrl(url);
+
         const { text, nextUrl } = await scrapePage(url);
         nextUrlCalculated = nextUrl;
 
@@ -731,11 +920,35 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
           status.innerText = msg;
         });
 
-        chapters.push({
-          title: `ตอนที่ ${chapters.length + 1}`,
-          paragraphs: paragraphs
+        // ดึงชื่อเรื่องโดยประมาณ
+        currentBookTitle = `นิยาย ${currentBookId.replace('book_', '')}`;
+
+        const newChapter = {
+          id: `${currentBookId}_chap_1`,
+          bookId: currentBookId,
+          order: 1,
+          title: `ตอนที่ 1`,
+          paragraphs: paragraphs,
+          sourceUrl: url,
+          nextUrl: nextUrl
+        };
+
+        chapters = [newChapter];
+        currentChapterIndex = 0;
+
+        // บันทึกลง IndexedDB
+        await dbSaveChapter(newChapter);
+        await dbSaveBook({
+          bookId: currentBookId,
+          title: currentBookTitle,
+          lastChapterIndex: 0,
+          lastChapterTitle: newChapter.title,
+          totalChapters: 1,
+          lastUrl: url,
+          updatedAt: Date.now()
         });
-        currentChapterIndex = chapters.length - 1;
+        localStorage.setItem('nov_last_book_id', currentBookId);
+
         renderChapter();
         closeModal('import-modal');
 
@@ -758,9 +971,12 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
         const { text, nextUrl } = await scrapePage(url);
         const paragraphs = await translateTextWithPingPong(text, null);
         prefetchedData = {
+          id: `${currentBookId}_chap_${chapters.length + 1}`,
+          bookId: currentBookId,
+          order: chapters.length + 1,
           title: `ตอนที่ ${chapters.length + 1}`,
           paragraphs: paragraphs,
-          currentUrl: url,
+          sourceUrl: url,
           nextUrl: nextUrl
         };
         document.getElementById('prefetch-badge').style.display = 'inline-block';
@@ -773,22 +989,24 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
 
     // NEXT CHAPTER CLICK
     async function handleNextChapterClick() {
+      // 1. ถ้ามีตอนที่เคยเปิดไว้อยู่แล้ว
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
         renderChapter();
         return;
       }
 
+      // 2. ถ้า Prefetch เตรียมไว้แล้ว
       if (prefetchedData) {
-        chapters.push({
-          title: prefetchedData.title,
-          paragraphs: prefetchedData.paragraphs
-        });
-        currentUrl = prefetchedData.currentUrl;
-        nextUrlCalculated = prefetchedData.nextUrl;
+        const nextChap = prefetchedData;
+        chapters.push(nextChap);
+        currentUrl = nextChap.sourceUrl;
+        nextUrlCalculated = nextChap.nextUrl;
         prefetchedData = null;
         document.getElementById('prefetch-badge').style.display = 'none';
 
+        // บันทึกตอนที่ Prefetch ลง IndexedDB ทันที
+        await dbSaveChapter(nextChap);
         currentChapterIndex = chapters.length - 1;
         renderChapter();
 
@@ -796,6 +1014,7 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
         return;
       }
 
+      // 3. ถ้าไม่มีแคช ให้แปลสด
       if (nextUrlCalculated) {
         const btnText = document.getElementById('next-btn-text');
         const nextBtn = document.getElementById('next-chap-btn');
@@ -814,10 +1033,19 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
             btnText.innerText = msg.substring(0, 30) + "...";
           });
 
-          chapters.push({
+          const newChap = {
+            id: `${currentBookId}_chap_${chapters.length + 1}`,
+            bookId: currentBookId,
+            order: chapters.length + 1,
             title: `ตอนที่ ${chapters.length + 1}`,
-            paragraphs: paragraphs
-          });
+            paragraphs: paragraphs,
+            sourceUrl: currentUrl,
+            nextUrl: nextUrl
+          };
+
+          chapters.push(newChap);
+          await dbSaveChapter(newChap);
+
           currentChapterIndex = chapters.length - 1;
           renderChapter();
 
