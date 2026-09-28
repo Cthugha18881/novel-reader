@@ -23,7 +23,7 @@
     body.theme-light { background-color: #f8fafc; color: #1e293b; }
     body.theme-dark  { background-color: #0d1117; color: #e6edf3; }
 
-    /* HEADER */
+    /* HEADER (CLEANED - NO REDUNDANT CHAPTER TITLE) */
     header {
       position: sticky; top: 0; z-index: 40;
       display: flex; align-items: center; justify-content: space-between;
@@ -34,16 +34,16 @@
     body.theme-dark header { border-bottom-color: rgba(255,255,255,0.1); }
     .brand-box { display: flex; align-items: center; gap: 8px; }
     .brand-icon {
-      width: 30px; height: 30px; border-radius: 6px;
+      width: 32px; height: 32px; border-radius: 8px;
       background: #2563eb; color: #fff; font-family: 'Kanit', sans-serif;
-      font-weight: 600; font-size: 15px; display: flex; align-items: center; justify-content: center;
+      font-weight: 600; font-size: 16px; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 2px 5px rgba(37,99,235,0.3);
     }
-    .brand-title { font-family: 'Kanit', sans-serif; font-weight: 600; font-size: 15px; line-height: 1.2; }
-    .brand-sub { font-size: 11px; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
+    .brand-title { font-family: 'Kanit', sans-serif; font-weight: 600; font-size: 16px; line-height: 1.2; }
 
     .header-actions { display: flex; align-items: center; gap: 6px; }
     .btn {
-      padding: 6px 10px; font-size: 12px; font-weight: 500;
+      padding: 6px 11px; font-size: 12px; font-weight: 500;
       border-radius: 6px; border: 1px solid rgba(0,0,0,0.12);
       background: transparent; color: inherit; cursor: pointer;
       display: inline-flex; align-items: center; justify-content: center; gap: 4px;
@@ -57,35 +57,54 @@
     .btn-active { background: rgba(37,99,235,0.15) !important; border-color: #2563eb !important; color: #2563eb !important; font-weight: 600; }
 
     #prefetch-badge {
-      display: none; font-size: 10px; padding: 2px 6px; border-radius: 999px;
+      display: none; font-size: 10px; padding: 2px 7px; border-radius: 999px;
       background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
     }
 
     /* MAIN READING CANVAS */
     main {
       flex: 1; width: 100%; max-width: 720px; margin: 0 auto;
-      padding: 18px 16px 100px 16px;
+      padding: 20px 16px 120px 16px;
     }
-    @media (min-width: 768px) { main { padding-bottom: 40px; } }
+    @media (min-width: 768px) { main { padding-bottom: 50px; } }
 
     .chapter-toolbar {
       display: flex; justify-content: space-between; align-items: center;
-      border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 8px; margin-bottom: 16px;
+      border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 10px; margin-bottom: 18px;
     }
     body.theme-dark .chapter-toolbar { border-bottom-color: rgba(255,255,255,0.1); }
-    .chap-heading { font-family: 'Kanit', sans-serif; font-size: 19px; font-weight: 600; }
+    .chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; }
 
     /* READING PARAGRAPHS */
     #reading-content { line-height: 1.85; user-select: text; }
-    .para-item { padding: 5px 0; border-radius: 4px; }
+    .para-item {
+      padding: 6px 8px; border-radius: 6px; margin-bottom: 4px;
+      transition: background-color 0.2s, box-shadow 0.2s;
+    }
+    /* HIGHLIGHT EFFECT OVER PARAGRAPH WHEN FOCUSED */
+    .para-item.active-inspect {
+      background-color: rgba(245, 158, 11, 0.12) !important;
+      outline: 1.5px dashed #f59e0b;
+    }
+    body.theme-dark .para-item.active-inspect {
+      background-color: rgba(245, 158, 11, 0.18) !important;
+    }
+
     .para-th { font-size: inherit; }
-    .para-th span.term { font-weight: 600; color: #2563eb; text-decoration: underline dotted; }
-    body.theme-dark .para-th span.term { color: #60a5fa; }
+    .para-th span.term {
+      font-weight: 600; color: #2563eb;
+      background-color: rgba(37,99,235,0.08);
+      padding: 1px 4px; border-radius: 3px;
+      border-bottom: 1.5px solid #2563eb;
+      cursor: pointer;
+    }
+    body.theme-dark .para-th span.term { color: #60a5fa; background-color: rgba(96,165,250,0.12); border-bottom-color: #60a5fa; }
+
     .para-src {
-      display: none; margin-top: 6px; padding: 6px 10px;
-      border-radius: 4px; font-size: 13px; opacity: 0.75;
+      display: none; margin-top: 6px; padding: 8px 12px;
+      border-radius: 6px; font-size: 13px; opacity: 0.8;
       background: rgba(0,0,0,0.04); border-left: 3px solid #f59e0b;
-      font-family: monospace;
+      font-family: monospace; line-height: 1.6;
     }
     body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
 
@@ -107,18 +126,20 @@
     body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
     @media (min-width: 768px) { .mobile-dock { display: none; } }
 
-    /* POPUP ACTION FOR SELECTED TEXT */
-    #text-selection-popup {
-      display: none; position: absolute; z-index: 60;
-      background: #1e293b; color: #fff; padding: 4px 8px; border-radius: 6px;
-      font-size: 11px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-      cursor: pointer; transform: translate(-50%, -100%); margin-top: -8px;
-      white-space: nowrap;
+    /* BOTTOM FLOATING BAR FOR WORD ADDITION (NO BROWSER COLLISION) */
+    #selection-bar {
+      display: none; position: fixed; bottom: 65px; left: 50%; transform: translateX(-50%);
+      z-index: 45; width: calc(100% - 32px); max-width: 440px;
+      background: #1e293b; color: #fff; padding: 10px 14px; border-radius: 10px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.35); align-items: center; justify-content: space-between;
+      animation: slideUp 0.15s ease-out;
     }
-    #text-selection-popup::after {
-      content: ''; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
-      border-width: 4px 4px 0 4px; border-style: solid; border-color: #1e293b transparent transparent transparent;
-    }
+    @media (min-width: 768px) { #selection-bar { bottom: 25px; } }
+    @keyframes slideUp { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+    .sel-info { display: flex; flex-direction: column; overflow: hidden; max-width: 60%; }
+    .sel-tag { font-size: 10px; opacity: 0.6; text-transform: uppercase; font-weight: 600; }
+    .sel-text { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #38bdf8; }
 
     /* MODAL WINDOWS */
     .modal-overlay {
@@ -155,14 +176,11 @@
 </head>
 <body class="theme-sepia" id="app-body">
 
-  <!-- TOP HEADER -->
+  <!-- TOP HEADER (CLEANED) -->
   <header>
     <div class="brand-box">
       <div class="brand-icon">N</div>
-      <div>
-        <div class="brand-title">NovelTranslate AI</div>
-        <div class="brand-sub" id="header-chap-title">ตอนปัจจุบัน</div>
-      </div>
+      <div class="brand-title">NovelTranslate AI</div>
     </div>
     <div class="header-actions">
       <div id="prefetch-badge">ตอนถัดไปพร้อม</div>
@@ -172,8 +190,17 @@
     </div>
   </header>
 
-  <!-- QUICK SELECTION POPUP -->
-  <div id="text-selection-popup" onclick="quickAddGlossary()">+ เพิ่มลงคลังศัพท์</div>
+  <!-- BOTTOM SELECTION BAR -->
+  <div id="selection-bar">
+    <div class="sel-info">
+      <span class="sel-tag">คำที่เลือก</span>
+      <span class="sel-text" id="sel-preview-text">...</span>
+    </div>
+    <div style="display: flex; gap: 6px;">
+      <button class="btn" style="color:#fff; border-color:rgba(255,255,255,0.2);" onclick="dismissSelectionBar()">ยกเลิก</button>
+      <button class="btn btn-primary" onclick="confirmAddGlossaryFromBar()">+ เพิ่มลงคลัง</button>
+    </div>
+  </div>
 
   <!-- MAIN READING CANVAS -->
   <main>
@@ -238,17 +265,17 @@
         <div class="modal-title">คลังคำศัพท์เฉพาะ (Glossary)</div>
         <button class="modal-close" onclick="closeModal('glossary-modal')">✕</button>
       </div>
-      <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+      <div style="display: flex; gap: 6px; margin-bottom: 10px;">
         <input type="text" id="gloss-src" class="form-input" placeholder="คำเดิม (เช่น 林动)" style="flex: 1;">
         <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปล (เช่น หลินตง)" style="flex: 1;">
         <button class="btn btn-primary" onclick="addGlossary()">เพิ่ม</button>
       </div>
-      <p style="font-size: 11px; opacity: 0.6; margin-bottom: 8px;">*ทริก: ลากคลุมคำหรือกดค้างที่ข้อความในหน้าอ่าน เพื่อเพิ่มศัพท์ได้ทันที</p>
+      <p style="font-size: 11px; opacity: 0.6; margin-bottom: 8px;">*แตะที่ย่อหน้าเพื่อกางดูต้นฉบับ หรือลากคลุมคำเพื่อเพิ่มเข้าคลังทันที</p>
       <div id="glossary-list" style="max-height: 200px; overflow-y: auto; font-size: 13px;"></div>
     </div>
   </div>
 
-  <!-- MODAL 3: SETTINGS (GENRE / TONE PRESETS) -->
+  <!-- MODAL 3: SETTINGS -->
   <div class="modal-overlay" id="settings-modal">
     <div class="modal-box">
       <div class="modal-head">
@@ -297,9 +324,9 @@
     let prefetchedData = null;
     let isPrefetching = false;
     let showAllSource = false;
-    let lastChapterContext = ""; // เก็บสรุปตอนก่อนหน้าเพื่อความต่อเนื่อง
+    let lastChapterContext = "";
 
-    let selectedWordBuffer = "";
+    let capturedSelectionText = "";
 
     let glossary = {};
     try {
@@ -310,10 +337,9 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับอัปเกรดสำนวนและความต่อเนื่อง", src: "Welcome to NovelTranslate" },
-          { th: "1. ไปที่เมนู 'ตั้งค่า' เพื่อเลือกสไตล์สำนวนนิยาย (เช่น เซียนเซีย, ไซไฟ, สยองขวัญ)", src: "Genre Setup" },
-          { th: "2. สามารถกดปุ่ม 'แสดงต้นฉบับ' ด้านบนเพื่อเปิดดูภาษาจีนใต้ทุกย่อหน้าพร้อมกันทั้งบทได้", src: "Toggle Source View" },
-          { th: "3. ลองลากคลุมคำหรือแตะค้างที่คำศัพท์จีน จะมีปุ่มลอยขึ้นมาให้กดเพิ่มลงคลังศัพท์ได้ทันที", src: "Quick Term Add" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "Welcome to NovelTranslate" },
+          { th: "1. แตะที่ย่อหน้าใดก็ได้ จะมีกรอบสีส้มจางๆ ไฮไลต์จับคู่ระหว่างคำแปลไทยและต้นฉบับทันที", src: "Tap any paragraph to see inspect highlight." },
+          { th: "2. เมื่อลากคลุมคำหรือแตะค้าง แถบเครื่องมือจะขึ้นด้านล่าง ไม่ชนกับเมนูของเบราว์เซอร์อีกต่อไป", src: "Bottom bar prevents UI overlap." }
         ]
       }
     ];
@@ -324,7 +350,7 @@
       loadSettings();
       renderChapter();
       renderGlossary();
-      setupSelectionListener();
+      setupSelectionMonitor();
     });
 
     // THEME & FONT
@@ -341,7 +367,6 @@
       document.getElementById('reading-content').style.fontSize = currentFontSize + 'px';
     }
 
-    // TOGGLE SOURCE TEXT GLOBALLY
     function toggleAllSourceTexts() {
       showAllSource = !showAllSource;
       const btn = document.getElementById('toggle-all-src-btn');
@@ -362,15 +387,13 @@
       });
     }
 
-    // MODAL HANDLERS
     function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-    // RENDER CONTENT
+    // RENDER CONTENT WITH HIGHLIGHT MAPPING
     function renderChapter() {
       const chap = chapters[currentChapterIndex];
       document.getElementById('display-chap-title').innerText = chap.title;
-      document.getElementById('header-chap-title').innerText = chap.title;
 
       const container = document.getElementById('reading-content');
       container.innerHTML = "";
@@ -379,6 +402,7 @@
       chap.paragraphs.forEach((p, idx) => {
         const pEl = document.createElement('div');
         pEl.className = 'para-item';
+        pEl.id = `para-box-${idx}`;
 
         let thText = String(p.th || "");
         Object.values(glossary).forEach(name => {
@@ -389,7 +413,7 @@
         });
 
         pEl.innerHTML = `
-          <div class="para-th" onclick="toggleSrc(${idx})">${thText}</div>
+          <div class="para-th" onclick="inspectParagraph(${idx})">${thText}</div>
           <div class="para-src" id="src-${idx}" style="display: ${showAllSource ? 'block' : 'none'};">${p.src || ''}</div>
         `;
         container.appendChild(pEl);
@@ -398,51 +422,58 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function toggleSrc(idx) {
-      const el = document.getElementById(`src-${idx}`);
-      if (el) el.style.display = (el.style.display === 'block') ? 'none' : 'block';
-    }
+    // แตะที่ย่อหน้าเพื่อกางดูต้นฉบับและทำกรอบไฮไลต์คู่ทันที
+    function inspectParagraph(idx) {
+      document.querySelectorAll('.para-item').forEach(el => el.classList.remove('active-inspect'));
+      const targetBox = document.getElementById(`para-box-${idx}`);
+      const srcEl = document.getElementById(`src-${idx}`);
 
-    // SELECTION LISTENER (แตะค้าง / ลากคลุมคำ เพื่อเพิ่มศัพท์ทันที)
-    function setupSelectionListener() {
-      const popup = document.getElementById('text-selection-popup');
-
-      document.addEventListener('selectionchange', () => {
-        const selection = window.getSelection();
-        const text = selection.toString().trim();
-
-        if (text && text.length >= 1 && text.length <= 25) {
-          const range = selection.getRangeAt(0);
-          const rect = range.getBoundingClientRect();
-          if (rect.width > 0 && rect.height > 0) {
-            selectedWordBuffer = text;
-            popup.style.top = (rect.top + window.scrollY) + 'px';
-            popup.style.left = (rect.left + rect.width / 2) + 'px';
-            popup.style.display = 'block';
-            return;
-          }
+      if (targetBox) {
+        targetBox.classList.add('active-inspect');
+        if (!showAllSource && srcEl) {
+          srcEl.style.display = (srcEl.style.display === 'block') ? 'none' : 'block';
         }
-        popup.style.display = 'none';
-      });
-
-      document.addEventListener('mousedown', (e) => {
-        if (e.target !== popup) popup.style.display = 'none';
-      });
+      }
     }
 
-    function quickAddGlossary() {
-      const popup = document.getElementById('text-selection-popup');
-      popup.style.display = 'none';
-      
-      const isChinese = /[\u4e00-\u9fa5]/.test(selectedWordBuffer);
+    // MONITOR SELECTION & SHOW BOTTOM BAR
+    function setupSelectionMonitor() {
+      const bar = document.getElementById('selection-bar');
+      const preview = document.getElementById('sel-preview-text');
+
+      const checkSelection = () => {
+        const selection = window.getSelection();
+        const text = selection ? selection.toString().trim() : "";
+
+        if (text && text.length >= 1 && text.length <= 40) {
+          capturedSelectionText = text;
+          preview.innerText = text;
+          bar.style.display = 'flex';
+        }
+      };
+
+      document.addEventListener('mouseup', () => setTimeout(checkSelection, 50));
+      document.addEventListener('touchend', () => setTimeout(checkSelection, 100));
+    }
+
+    function dismissSelectionBar() {
+      document.getElementById('selection-bar').style.display = 'none';
+      if (window.getSelection) window.getSelection().removeAllRanges();
+    }
+
+    function confirmAddGlossaryFromBar() {
+      const bar = document.getElementById('selection-bar');
+      bar.style.display = 'none';
+
+      const isChinese = /[\u4e00-\u9fa5]/.test(capturedSelectionText);
       if (isChinese) {
-        document.getElementById('gloss-src').value = selectedWordBuffer;
+        document.getElementById('gloss-src').value = capturedSelectionText;
         document.getElementById('gloss-tgt').value = "";
       } else {
         document.getElementById('gloss-src').value = "";
-        document.getElementById('gloss-tgt').value = selectedWordBuffer;
+        document.getElementById('gloss-tgt').value = capturedSelectionText;
       }
-      
+
       openModal('glossary-modal');
       setTimeout(() => {
         if (isChinese) document.getElementById('gloss-tgt').focus();
@@ -492,42 +523,33 @@
       return { text: rawText, nextUrl: nextUrl };
     }
 
-    // GENRE-SPECIFIC SYSTEM PROMPT BUILDER
+    // GENRE RULES
     function getGenreInstruction(genre) {
       switch (genre) {
         case 'xianxia':
-          return `สไตล์สำนวน: "เทพเซียน / บำเพ็ญเพียร (Xianxia)"
-- ใช้สรรพนามโบราณ: "ข้า - เจ้า", "ผู้อาวุโส - ศิษย์น้อง/ผู้น้อย" เคร่งครัด ห้ามหลุดคำว่า "ฉัน/นาย/คุณ/ผม" เด็ดขาด
-- ศัพท์เฉพาะทางเต๋า: บำเพ็ญเพียร, ลมปราณ, แก่นทองคำ, ทัณฑ์สวรรค์, ตำหนัก, ยอดเขา, แดนลับ
-- น้ำเสียงขรึม โอ่อ่า เปี่ยมด้วยพลังแห่งฟ้าดิน`;
-
+          return `สไตล์: "เทพเซียน / บำเพ็ญเพียร (Xianxia)"
+- ใช้สรรพนาม: "ข้า - เจ้า", "ผู้อาวุโส - ศิษย์น้อง/ผู้น้อย" ห้ามหลุด "ฉัน/นาย/คุณ/ผม" เด็ดขาด
+- ศัพท์เต๋า: บำเพ็ญเพียร, ลมปราณ, แก่นทองคำ, ทัณฑ์สวรรค์, ตำหนัก, ยอดเขา`;
         case 'wuxia':
-          return `สไตล์สำนวน: "กำลังภายใน / ยุทธภพ (Wuxia)"
-- บรรยากาศยุทธจักร: สำนัก, คัมภีร์ยุทธ, ลมปราณคุ้มกาย, กระบี่, ท่องยุทธภพ, เหล้าดี
-- สรรพนามคลาสสิก: "ข้า - ท่าน/เจ้า", "พี่ใหญ่ - น้องร่วมสาบาน" สละสลวย ลื่นไหล`;
-
+          return `สไตล์: "กำลังภายใน / ยุทธภพ (Wuxia)"
+- บรรยากาศยุทธจักร: สำนัก, คัมภีร์ยุทธ, ปราณคุ้มกาย, กระบี่, ท่องยุทธภพ
+- สรรพนามคลาสสิก: "ข้า - ท่าน/เจ้า"`;
         case 'system_game':
-          return `สไตล์สำนวน: "ระบบ / ดันเจี้ยน / ผู้เล่น (System/Game)"
-- ข้อความแจ้งเตือนระบบ: ให้แปลกระชับ คมชัด เช่น [ติ๊ง! ตรวจพบภารกิจ], [เลเวลอัป]
-- ศัพท์เกมทับศัพท์หรือแปลให้เข้าใจง่าย สรรพนามทันสมัย เช่น "ฉัน - นาย" หรือสรรพนามตามบทบาท`;
-
+          return `สไตล์: "ระบบ / ดันเจี้ยน / ผู้เล่น (System/Game)"
+- ข้อความแจ้งเตือน: [ติ๊ง! ตรวจพบภารกิจ], [เลเวลอัป]
+- สรรพนามทันสมัย: "ฉัน - นาย"`;
         case 'scifi':
-          return `สไตล์สำนวน: "ไซไฟ / มหากาพย์อวกาศ (Sci-Fi)"
-- ศัพท์วิทยาศาสตร์และอวกาศ: ยานรบ, รูหนอน, วาร์ป, คลื่นแม่เหล็ก, พันธุกรรม, ปัญญาประดิษฐ์
-- น้ำเสียงจริงจัง แม่นยำ ชัดเจน`;
-
+          return `สไตล์: "ไซไฟ / มหากาพย์อวกาศ (Sci-Fi)"
+- ศัพท์วิทยาศาสตร์: ยานรบ, รูหนอน, วาร์ป, คลื่นแม่เหล็ก, พันธุกรรม`;
         case 'horror':
-          return `สไตล์สำนวน: "สยองขวัญ / เอาชีวิตรอด / ปริศนา (Horror)"
-- เน้นบรรยายบรรยากาศ: วังเวง, เย็นเยียบ, เสียงลมหายใจ, กลิ่นคาว, เงาตะคุ่ม
-- ใช้คำที่สร้างความกดดัน ชวนระแวง และตื่นตระหนก`;
-
+          return `สไตล์: "สยองขวัญ / เอาชีวิตรอด (Horror)"
+- เน้นบรรยายบรรยากาศ: วังเวง, เย็นเยียบ, เสียงลมหายใจ, กลิ่นคาว, เงาตะคุ่ม`;
         default:
-          return `สไตล์สำนวน: "วรรณกรรมสากลทั่วไป"
-- บทสนทนาเป็นธรรมชาติ ไหลลื่น คมคาย สรรพนามเหมาะสมกับบริบทตัวละคร`;
+          return `สไตล์: วรรณกรรมทั่วไป อ่านลื่นไหลเป็นธรรมชาติ`;
       }
     }
 
-    // TRANSLATE WITH CONTEXT & GENRE
+    // TRANSLATE
     async function translateText(rawText) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const model = (localStorage.getItem('nov_gemini_model') || "gemini-3.5-flash-lite").trim();
@@ -538,23 +560,23 @@
       const termList = Object.entries(glossary).map(([k,v]) => `${k}=${v}`).join(", ");
       const genreRule = getGenreInstruction(genre);
 
-      const prompt = `คุณคือนักแปลนิยายมืออาชีพชั้นครู แปลเนื้อหาต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น และคงอารมณ์วรรณกรรมสูงสุด
+      const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลเนื้อหาต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย
 
 ${genreRule}
 
-กฎเหล็กเรื่องความต่อเนื่องและคำศัพท์:
-1. หากพบคำศัพท์เหล่านี้ ต้องแปลตามนี้ 100%: [${termList}]
-2. รักษาความต่อเนื่องของสรรพนามระหว่างตัวละครเดิม อย่าเปลี่ยนคำเรียกไปมา
-${lastChapterContext ? `3. บริบทจากท้ายตอนก่อนหน้า (เพื่อความต่อเนื่อง): "${lastChapterContext}"` : ''}
+ข้อบังคับสำคัญ:
+1. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
+2. ล็อกสรรพนามของตัวละครให้สอดคล้องกัน ห้ามสลับไปมา
+${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${lastChapterContext}"` : ''}
 
-ตอบกลับเฉพาะรูปแบบ JSON Array ของ Object เท่านั้น: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ห้ามใส่ Markdown ครอบ ห้ามมีคำเกริ่นนำ`;
+ตอบกลับเฉพาะรูปแบบ JSON Array: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ไม่ต้องใส่ Markdown`;
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาที่ต้องแปล:\n${rawText.substring(0, 4800)}` }] }]
+          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหา:\n${rawText.substring(0, 4800)}` }] }]
         })
       });
 
@@ -568,7 +590,6 @@ ${lastChapterContext ? `3. บริบทจากท้ายตอนก่�
 
       const parsedResult = JSON.parse(outText);
 
-      // บันทึกบริบท 2 ย่อหน้าสุดท้ายไว้ส่งต่อให้บทถัดไป
       if (parsedResult.length > 0) {
         const lastTwo = parsedResult.slice(-2).map(item => item.th).join(" ");
         lastChapterContext = lastTwo.substring(0, 150);
@@ -595,7 +616,7 @@ ${lastChapterContext ? `3. บริบทจากท้ายตอนก่�
 
       try {
         currentUrl = url;
-        lastChapterContext = ""; // รีเซ็ตบริบทเมื่อเริ่มเรื่อง/ลิงก์ใหม่
+        lastChapterContext = "";
         const { text, nextUrl } = await scrapePage(url);
         nextUrlCalculated = nextUrl;
 
@@ -619,7 +640,7 @@ ${lastChapterContext ? `3. บริบทจากท้ายตอนก่�
       }
     }
 
-    // PREFETCH NEXT CHAPTER IN BACKGROUND
+    // PREFETCH
     async function triggerPrefetch(url) {
       if (isPrefetching || !url) return;
       isPrefetching = true;
