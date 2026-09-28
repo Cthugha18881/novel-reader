@@ -80,14 +80,18 @@
     body.theme-dark .chapter-toolbar { border-bottom-color: rgba(255,255,255,0.1); }
     .chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; }
 
-    /* READING PARAGRAPHS */
-    #reading-content { line-height: 1.85; user-select: text; }
+    /* READING PARAGRAPHS - สวยงาม แยกย่อหน้าชัดเจน */
+    #reading-content { line-height: 1.9; user-select: text; }
     .para-item {
-      padding: 5px 6px; margin-bottom: 6px; border-radius: 6px;
+      padding: 6px 8px;
+      margin-bottom: 14px; /* เว้นระยะห่างระหว่างย่อหน้าให้อ่านง่าย */
+      border-radius: 6px;
       transition: background-color 0.15s ease;
     }
     .para-th {
-      font-size: inherit; cursor: pointer;
+      font-size: inherit;
+      cursor: pointer;
+      text-indent: 1.5em; /* ย่อหน้าวรรคแรกแบบหนังสือนิยาย */
     }
     .para-th:hover {
       background-color: rgba(0,0,0,0.02);
@@ -97,7 +101,7 @@
     }
 
     .para-src {
-      display: none; margin-top: 6px; padding: 8px 12px;
+      display: none; margin-top: 8px; padding: 8px 12px;
       border-radius: 6px; font-size: 14px; opacity: 0.85;
       background: rgba(0,0,0,0.04); border-left: 3px solid #f59e0b;
       font-family: monospace; line-height: 1.6; user-select: text;
@@ -369,8 +373,8 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
-          { th: "แตะที่ย่อหน้านี้ เพื่อดูข้อความภาษาจีนต้นฉบับเด้งลงมาใต้ย่อหน้าทันที", src: "轻触本段落，即可在下方展开中文原文对比阅读" },
-          { th: "เนื้อหาทั้งตอนจะถูกดึงมาแปลจนจบบท โดยไม่ติดข้อจำกัดย่อหน้าหรือถูกโฆษณาบังอีกต่อไป", src: "已解除段落与字数限制，全章内容完整翻译" }
+          { th: "ระบบได้รับการอัปเกรดแยกย่อหน้าสวยงามแบบ 1 ต่อ 1 เรียบร้อยแล้ว", src: "已升级段落精准一对一拆分，阅读排版整齐优雅" },
+          { th: "แตะที่ย่อหน้านี้ เพื่อดูข้อความภาษาจีนต้นฉบับเด้งลงมาใต้ย่อหน้าทันที", src: "轻触本段落，即可在下方展开中文原文对比阅读" }
         ]
       }
     ];
@@ -490,25 +494,28 @@
       }, 150);
     }
 
-    // ==================== UNLIMITED SCRAPER ENGINE ====================
+    // ==================== CLEAN SCRAPER ENGINE (NO METADATA JUNK) ====================
     async function scrapePage(url) {
       let rawText = "";
 
-      // 1. ลองดึงผ่าน Jina AI (ตัดเฉพาะบรรทัดสั้น โฆษณา หรือลิงก์ออก แต่เอาทุกย่อหน้า)
       try {
         const res = await fetch(`https://r.jina.ai/${url}`);
         if (res.ok) {
           const md = await res.text();
           const lines = md.split('\n')
             .map(l => l.trim())
-            .filter(l => l.length > 5 && !l.startsWith('!') && !l.startsWith('['));
+            .filter(l => {
+              // ตัด Metadata ของ Jina และลิงก์ออกทั้งหมด
+              if (!l || l.length < 3) return false;
+              if (l.startsWith('Title:') || l.startsWith('URL Source:') || l.startsWith('Published Time:') || l.startsWith('Markdown Content:')) return false;
+              if (l.startsWith('!') || l.startsWith('[') || l.startsWith('http')) return false;
+              return true;
+            });
           
-          // ปลดล็อก: เอาทุกย่อหน้าจนจบบท
           rawText = lines.join('\n\n');
         }
       } catch (e) {}
 
-      // 2. ลองดึงผ่าน Allorigins fallback
       if (!rawText || rawText.length < 50) {
         const pRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
         const pData = await pRes.json();
@@ -516,15 +523,13 @@
           const parser = new DOMParser();
           const doc = parser.parseFromString(pData.contents, 'text/html');
 
-          // ลบแท็กขยะและโฆษณาออก
-          doc.querySelectorAll('script, style, nav, header, footer, noscript, .ads, ins, iframe').forEach(e => e.remove());
+          doc.querySelectorAll('script, style, nav, header, footer, noscript, .ads, ins, iframe, .bottem2').forEach(e => e.remove());
 
           const paras = [];
           doc.querySelectorAll('article p, .content p, #content, .txtnav, p').forEach(el => {
             const t = el.innerText ? el.innerText.trim() : '';
-            if (t.length > 5) paras.push(t);
+            if (t.length > 3 && !t.includes('69书吧') && !t.includes('www.69shuba.com')) paras.push(t);
           });
-          // ปลดล็อก: รวมทุกย่อหน้า
           rawText = paras.join('\n\n');
         }
       }
@@ -569,7 +574,7 @@
       }
     }
 
-    // ==================== UNLIMITED API TRANSLATE CALL ====================
+    // ==================== 1:1 STRICT PARAGRAPH TRANSLATE CALL ====================
     async function executeApiCall(rawText, modelToUse) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
@@ -583,21 +588,22 @@
 
 ${genreRule}
 
-ข้อบังคับสำคัญ:
-1. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
-2. ล็อกสรรพนามของตัวละครให้สอดคล้องกัน ห้ามสลับไปมา
-${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${lastChapterContext}"` : ''}
+กฎเหล็กเรื่องการจัดย่อหน้าและโครงสร้าง (สำคัญสูงสุด):
+1. **ห้ามรวบย่อหน้ารวมกันเป็นก้อนเดียวเด็ดขาด** 
+2. แยกย่อหน้าแปลให้ตรงกับต้นฉบับแบบ 1 ต่อ 1 (ต้นฉบับมีกี่ย่อหน้า ใน JSON Array ต้องมีจำนวน Object เท่ากันเป๊ะๆ)
+3. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
+4. ล็อกสรรพนามของตัวละครให้สอดคล้องกัน ห้ามสลับไปมา
+${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${lastChapterContext}"` : ''}
 
-ตอบกลับเฉพาะรูปแบบ JSON Array: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ไม่ต้องใส่ Markdown`;
+รูปแบบผลลัพธ์: ตอบกลับเฉพาะ JSON Array: [{"th": "คำแปลไทยของย่อหน้านั้น", "src": "ข้อความจีนของย่อหน้านั้น"}] ห้ามใส่ Markdown ห้ามมีคำอธิบายอื่น`;
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${key}`;
       
-      // ปลดล็อก: ส่งข้อความเต็มบท (rawText) ไม่จำกัด substring
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาทั้งตอนที่ต้องแปล:\n${rawText}` }] }]
+          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาที่ต้องแปล:\n${rawText}` }] }]
         })
       });
 
@@ -613,12 +619,26 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
 
       const parsedResult = JSON.parse(outText);
 
-      if (parsedResult.length > 0) {
-        const lastTwo = parsedResult.slice(-2).map(item => item.th).join(" ");
+      // ถ้า AI หลุดรวบย่อหน้ามา ให้สั่งตัดแบ่งย่อยอัตโนมัติเพื่อความสวยงาม
+      const formattedResult = [];
+      parsedResult.forEach(item => {
+        // หากย่อหน้ายาวเกิน 400 ตัวอักษรและมีเครื่องหมายคำพูด ให้แยกบรรทัด
+        if (item.th && item.th.length > 350 && item.th.includes('”')) {
+          const subParas = item.th.split(/(?<=[”」\n])\s*/);
+          subParas.forEach(sub => {
+            if (sub.trim()) formattedResult.push({ th: sub.trim(), src: item.src || "" });
+          });
+        } else {
+          formattedResult.push(item);
+        }
+      });
+
+      if (formattedResult.length > 0) {
+        const lastTwo = formattedResult.slice(-2).map(item => item.th).join(" ");
         lastChapterContext = lastTwo.substring(0, 150);
       }
 
-      return parsedResult;
+      return formattedResult;
     }
 
     // PING-PONG AUTO-RETRY ENGINE
@@ -693,7 +713,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       status.style.display = 'block';
       status.style.background = '#eff6ff';
       status.style.color = '#1e40af';
-      status.innerText = "กำลังดึงเนื้อหาทั้งบท...";
+      status.innerText = "กำลังดึงเนื้อหาและจัดระเบียบย่อหน้า...";
       startBtn.disabled = true;
       btnText.innerText = "กำลังทำงาน...";
 
@@ -703,7 +723,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
         const { text, nextUrl } = await scrapePage(url);
         nextUrlCalculated = nextUrl;
 
-        status.innerText = `ดึงเนื้อหาสำเร็จ (${text.length} ตัวอักษร) กำลังแปลผ่าน AI...`;
+        status.innerText = `ดึงเนื้อหาสำเร็จ (${text.length} ตัวอักษร) กำลังแปลแยกย่อหน้า...`;
 
         const paragraphs = await translateTextWithPingPong(text, (msg) => {
           status.style.background = '#fffbeb';
@@ -950,7 +970,6 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
         document.getElementById('gemini-key').value = localStorage.getItem('nov_gemini_key');
       }
 
-      // โหลดการตั้งค่าธีมและขนาดตัวอักษรเดิม
       if (localStorage.getItem('nov_theme')) {
         currentTheme = localStorage.getItem('nov_theme');
         document.getElementById('app-body').className = 'theme-' + currentTheme;
