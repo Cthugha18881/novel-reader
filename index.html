@@ -74,11 +74,12 @@
     @media (min-width: 768px) { main { padding-bottom: 50px; } }
 
     .chapter-toolbar {
-      display: flex; justify-content: space-between; align-items: center;
-      border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 10px; margin-bottom: 18px;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 12px; margin-bottom: 20px;
     }
     body.theme-dark .chapter-toolbar { border-bottom-color: rgba(255,255,255,0.1); }
-    .chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; }
+    .book-heading { font-size: 12px; opacity: 0.65; font-weight: 600; text-transform: uppercase; margin-bottom: 2px; }
+    .chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; line-height: 1.3; }
 
     /* READING PARAGRAPHS */
     #reading-content { line-height: 1.9; user-select: text; }
@@ -149,7 +150,7 @@
     }
     .modal-overlay.active { display: flex !important; }
     .modal-box {
-      width: 100%; max-width: 470px; border-radius: 12px;
+      width: 100%; max-width: 490px; border-radius: 12px;
       padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
       background-color: #fff; color: #1e293b;
     }
@@ -173,18 +174,36 @@
       margin-top: 8px; line-height: 1.4;
     }
 
-    /* BOOKSHELF CARD LIST */
-    .book-card {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 10px 12px; border-radius: 8px; border: 1px solid rgba(0,0,0,0.08);
-      margin-bottom: 8px; cursor: pointer; transition: all 0.15s ease;
+    /* ENHANCED BOOKSHELF STYLES */
+    .book-item-container {
+      border: 1px solid rgba(0,0,0,0.08); border-radius: 8px;
+      margin-bottom: 10px; overflow: hidden; background: rgba(0,0,0,0.01);
     }
-    body.theme-dark .book-card { border-color: rgba(255,255,255,0.1); }
-    .book-card:hover { background-color: rgba(0,0,0,0.03); }
-    body.theme-dark .book-card:hover { background-color: rgba(255,255,255,0.04); }
-    .book-info { flex: 1; overflow: hidden; padding-right: 10px; }
-    .book-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .book-meta { font-size: 11px; opacity: 0.6; margin-top: 2px; }
+    body.theme-dark .book-item-container { border-color: rgba(255,255,255,0.1); background: rgba(255,255,255,0.02); }
+    .book-card-header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 14px; cursor: pointer;
+    }
+    .book-card-header:hover { background-color: rgba(0,0,0,0.03); }
+    body.theme-dark .book-card-header:hover { background-color: rgba(255,255,255,0.04); }
+    .book-info { flex: 1; overflow: hidden; padding-right: 8px; }
+    .book-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #2563eb; }
+    body.theme-dark .book-title { color: #60a5fa; }
+    .book-meta { font-size: 11px; opacity: 0.65; margin-top: 2px; }
+
+    .book-chapters-list {
+      display: none; border-top: 1px solid rgba(0,0,0,0.06);
+      max-height: 170px; overflow-y: auto; background: rgba(0,0,0,0.02);
+      padding: 4px 0;
+    }
+    body.theme-dark .book-chapters-list { border-top-color: rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); }
+    .chap-subitem {
+      padding: 6px 14px; font-size: 12px; cursor: pointer;
+      display: flex; justify-content: space-between; align-items: center;
+      transition: background 0.1s ease;
+    }
+    .chap-subitem:hover { background-color: rgba(37,99,235,0.1); color: #2563eb; }
+    .chap-subitem.active { font-weight: 600; color: #2563eb; background-color: rgba(37,99,235,0.08); }
   </style>
 </head>
 <body class="theme-sepia" id="app-body">
@@ -227,6 +246,7 @@
   <main>
     <div class="chapter-toolbar">
       <div>
+        <div class="book-heading" id="display-book-title">ชื่อนิยาย</div>
         <h1 class="chap-heading" id="display-chap-title">ยินดีต้อนรับ</h1>
       </div>
       <button class="btn" onclick="exportTxt()" style="font-size: 11px;">.TXT</button>
@@ -266,8 +286,8 @@
         <div class="modal-title">ชั้นหนังสือของฉัน (ในเครื่อง)</div>
         <button class="modal-close" onclick="closeModal('bookshelf-modal')">✕</button>
       </div>
-      <div id="bookshelf-list" style="max-height: 280px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ตอนที่แปลแล้วทั้งหมดจะถูกเก็บไว้ในเครื่อง อ่านซ้ำได้โดยไม่ต้องใช้อินเทอร์เน็ต</p>
+      <div id="bookshelf-list" style="max-height: 330px; overflow-y: auto; margin-bottom: 12px;"></div>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แตะที่ชื่อเรื่องเพื่อกางดูและเลือกอ่านตอนที่แปลเก็บไว้แล้วได้ทันที</p>
     </div>
   </div>
 
@@ -460,7 +480,7 @@
     let isPrefetching = false;
     let lastChapterContext = "";
     let currentBookId = "default_novel";
-    let currentBookTitle = "นิยายเล่มปัจจุบัน";
+    let currentBookTitle = "NovelTranslate";
 
     let retryAbortRequested = false;
     let selectedWordBuffer = "";
@@ -475,9 +495,9 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบได้รับการอัปเกรดแยกย่อหน้าสวยงาม และเสริมเกราะป้องกัน JSON พังเรียบร้อยแล้ว", src: "已升级严格段落拆分与坚固的 JSON 解析保护机制" },
-          { th: "แตะที่ย่อหน้านี้ เพื่อดูข้อความภาษาจีนต้นฉบับเด้งลงมาใต้ย่อหน้าทันที", src: "轻触本段落，即可在下方展开中文原文对比阅读" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับดึงชื่อเรื่องและชื่อตอนตรงตามต้นฉบับ", src: "欢迎来到 NovelTranslate" },
+          { th: "ระบบจะตรวจจับชื่อตอนจริง (เช่น 第810章 ...) และชื่อเรื่องภาษาจีน พร้อมแปลเป็นภาษาไทยให้อัตโนมัติ", src: "已支持自动提取与翻译真实的章节名及小说名称" },
+          { th: "ในหน้า 'ชั้นหนังสือ' สามารถแตะที่ชื่อเรื่องเพื่อกางดูรายชื่อตอนทั้งหมดที่เคยแปลไว้และเลือกอ่านได้ทันที", src: "书架支持展开章节列表，随时切换阅读" }
         ]
       }
     ];
@@ -524,6 +544,7 @@
     // RENDER CONTENT
     function renderChapter() {
       const chap = chapters[currentChapterIndex];
+      document.getElementById('display-book-title').innerText = currentBookTitle;
       document.getElementById('display-chap-title').innerText = chap.title;
 
       const container = document.getElementById('reading-content');
@@ -617,7 +638,7 @@
       }, 150);
     }
 
-    // ==================== BOOKSHELF UI LOGIC ====================
+    // ==================== ENHANCED ACCORDION BOOKSHELF UI ====================
     async function openBookshelfModal() {
       const listContainer = document.getElementById('bookshelf-list');
       listContainer.innerHTML = '<div style="text-align:center; padding:15px; opacity:0.6;">กำลังเปิดคลังหนังสือ...</div>';
@@ -632,26 +653,54 @@
       }
 
       listContainer.innerHTML = "";
-      books.forEach(b => {
-        const item = document.createElement('div');
-        item.className = 'book-card';
-        item.innerHTML = `
-          <div class="book-info" onclick="selectBookFromShelf('${b.bookId}')">
-            <div class="book-title">${b.title || 'นิยายเรื่องใหม่'}</div>
-            <div class="book-meta">อ่านค้างไว้: ${b.lastChapterTitle || 'ตอนที่ 1'} (${b.totalChapters || 1} ตอนที่เก็บไว้)</div>
+      for (const b of books) {
+        const itemBox = document.createElement('div');
+        itemBox.className = 'book-item-container';
+
+        // ดึงรายการตอนของนิยายเล่มนี้
+        const bookChaps = await dbGetChaptersByBook(b.bookId);
+        bookChaps.sort((x, y) => x.order - y.order);
+
+        let chapsHtml = '';
+        bookChaps.forEach((ch, cIdx) => {
+          const isActive = (b.bookId === currentBookId && cIdx === currentChapterIndex) ? 'active' : '';
+          chapsHtml += `
+            <div class="chap-subitem ${isActive}" onclick="jumpToChapterFromShelf('${b.bookId}', ${cIdx})">
+              <span>📖 ${ch.title}</span>
+              <span style="font-size:10px; opacity:0.5;">อ่าน</span>
+            </div>
+          `;
+        });
+
+        itemBox.innerHTML = `
+          <div class="book-card-header">
+            <div class="book-info" onclick="toggleBookAccordion('${b.bookId}')">
+              <div class="book-title">📚 ${b.title || 'นิยายเรื่องใหม่'} <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนทั้งหมด)</span></div>
+              <div class="book-meta">อ่านค้างไว้: <b>${b.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${bookChaps.length} ตอนที่บันทึกไว้</div>
+            </div>
+            <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบ</button>
           </div>
-          <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบ</button>
+          <div class="book-chapters-list" id="shelf-chaps-${b.bookId}">
+            ${chapsHtml || '<div style="padding:8px 14px; font-size:11px; opacity:0.5;">ไม่มีตอน</div>'}
+          </div>
         `;
-        listContainer.appendChild(item);
-      });
+        listContainer.appendChild(itemBox);
+      }
     }
 
-    async function selectBookFromShelf(bookId) {
-      await loadBookFromDB(bookId);
+    function toggleBookAccordion(bookId) {
+      const list = document.getElementById(`shelf-chaps-${bookId}`);
+      if (list) {
+        list.style.display = (list.style.display === 'block') ? 'none' : 'block';
+      }
+    }
+
+    async function jumpToChapterFromShelf(bookId, chapIdx) {
+      await loadBookFromDB(bookId, chapIdx);
       closeModal('bookshelf-modal');
     }
 
-    async function loadBookFromDB(bookId) {
+    async function loadBookFromDB(bookId, specifyIdx = null) {
       const books = await dbGetAllBooks();
       const targetBook = books.find(b => b.bookId === bookId);
       if (!targetBook) return;
@@ -662,8 +711,14 @@
         chapters = loadedChaps;
         currentBookId = bookId;
         currentBookTitle = targetBook.title;
-        currentChapterIndex = Math.min(targetBook.lastChapterIndex || 0, chapters.length - 1);
-        currentUrl = targetBook.lastUrl || "";
+
+        if (specifyIdx !== null) {
+          currentChapterIndex = Math.min(specifyIdx, chapters.length - 1);
+        } else {
+          currentChapterIndex = Math.min(targetBook.lastChapterIndex || 0, chapters.length - 1);
+        }
+
+        currentUrl = chapters[currentChapterIndex].sourceUrl || targetBook.lastUrl || "";
         nextUrlCalculated = chapters[currentChapterIndex].nextUrl || "";
         renderChapter();
       }
@@ -676,33 +731,67 @@
       openBookshelfModal();
     }
 
-    // ==================== UNLIMITED SCRAPER ENGINE ====================
+    // ==================== SMART TITLE & CHAPTER SCRAPER ====================
     async function scrapePage(url) {
       let rawText = "";
+      let rawChapTitle = "";
+      let rawBookTitle = "";
 
+      // 1. ลองผ่าน Jina Reader
       try {
         const res = await fetch(`https://r.jina.ai/${url}`);
         if (res.ok) {
           const md = await res.text();
-          const lines = md.split('\n')
-            .map(l => l.trim())
-            .filter(l => {
-              if (!l || l.length < 3) return false;
-              if (l.startsWith('Title:') || l.startsWith('URL Source:') || l.startsWith('Published Time:') || l.startsWith('Markdown Content:')) return false;
-              if (l.startsWith('!') || l.startsWith('[') || l.startsWith('http')) return false;
-              return true;
-            });
+          const lines = md.split('\n').map(l => l.trim());
+
+          // หาชื่อตอนและชื่อเรื่องจาก Metadata ของ Jina
+          const titleLine = lines.find(l => l.startsWith('Title:'));
+          if (titleLine) {
+            const cleanTitle = titleLine.replace('Title:', '').trim();
+            // ตัวอย่าง: 苟在初圣魔门当人材-第810章 老龙母！？-69书吧
+            const parts = cleanTitle.split(/[-_]/);
+            if (parts.length >= 2) {
+              rawBookTitle = parts[0].trim();
+              rawChapTitle = parts[1].trim();
+            } else {
+              rawChapTitle = cleanTitle.replace('-69书吧', '').trim();
+            }
+          }
+
+          const filteredLines = lines.filter(l => {
+            if (!l || l.length < 3) return false;
+            if (l.startsWith('Title:') || l.startsWith('URL Source:') || l.startsWith('Published Time:') || l.startsWith('Markdown Content:')) return false;
+            if (l.startsWith('!') || l.startsWith('[') || l.startsWith('http')) return false;
+            // ดักจับชื่อตอนถ้าอยู่ต้นบรรทัด
+            if (!rawChapTitle && (l.includes('第') && l.includes('章'))) {
+              rawChapTitle = l;
+              return false;
+            }
+            return true;
+          });
           
-          rawText = lines.join('\n\n');
+          rawText = filteredLines.join('\n\n');
         }
       } catch (e) {}
 
+      // 2. ลองผ่าน Allorigins
       if (!rawText || rawText.length < 50) {
         const pRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
         const pData = await pRes.json();
         if (pData.contents) {
           const parser = new DOMParser();
           const doc = parser.parseFromString(pData.contents, 'text/html');
+
+          // หาชื่อตอนจาก h1 หรือ .hide-720
+          const h1 = doc.querySelector('h1, .hide-720, .txtnav h1');
+          if (h1 && h1.innerText.trim()) rawChapTitle = h1.innerText.trim();
+
+          // หาชื่อเรื่องจาก Breadcrumbs
+          const breadcrumb = doc.querySelector('.bread, .con_top, .nav');
+          if (breadcrumb) {
+            const links = breadcrumb.querySelectorAll('a');
+            if (links.length >= 2) rawBookTitle = links[1].innerText.trim();
+          }
 
           doc.querySelectorAll('script, style, nav, header, footer, noscript, .ads, ins, iframe, .bottem2').forEach(e => e.remove());
 
@@ -727,7 +816,12 @@
         nextUrl = prefix + nextNum + suffix;
       }
 
-      return { text: rawText, nextUrl: nextUrl };
+      return {
+        text: rawText,
+        nextUrl: nextUrl,
+        rawChapTitle: rawChapTitle || "บทนิยาย",
+        rawBookTitle: rawBookTitle || ""
+      };
     }
 
     function extractBookIdFromUrl(url) {
@@ -761,8 +855,8 @@
       }
     }
 
-    // ==================== ROBUST JSON TRANSLATE CALL ====================
-    async function executeApiCall(rawText, modelToUse) {
+    // ==================== ROBUST JSON TRANSLATE CALL WITH TITLE TRANSLATION ====================
+    async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "") {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
 
@@ -776,14 +870,23 @@
 ${genreRule}
 
 กฎเหล็กเรื่องการจัดย่อหน้าและโครงสร้าง (สำคัญสูงสุด):
-1. ห้ามรวบย่อหน้ารวมกันเป็นก้อนเดียวเด็ดขาด
-2. แยกย่อหน้าแปลให้ตรงกับต้นฉบับแบบ 1 ต่อ 1
+1. **แปลชื่อตอนและชื่อเรื่องภาษาจีนให้สละสลวยตรงความหมาย**
+   - ชื่อตอนต้นฉบับ: "${rawChapTitle}"
+   - ชื่อเรื่องต้นฉบับ: "${rawBookTitle}"
+2. ห้ามรวบย่อหน้ารวมกันเป็นก้อนเดียวเด็ดขาด แยกย่อหน้าแปลให้ตรงกับต้นฉบับแบบ 1 ต่อ 1
 3. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
 4. ล็อกสรรพนามของตัวละครให้สอดคล้องกัน ห้ามสลับไปมา
 5. ในบทสนทนา ให้ใช้เครื่องหมายอัญประกาศ ' หรือ “ ” ห้ามใช้เครื่องหมาย " ซ้ำซ้อน เพื่อไม่ให้ JSON เสียหาย
 ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${lastChapterContext}"` : ''}
 
-ผลลัพธ์ต้องเป็น JSON Array เท่านั้น: [{"th": "คำแปลไทยของย่อหน้านั้น", "src": "ข้อความจีนของย่อหน้านั้น"}]`;
+ผลลัพธ์ต้องส่งกลับเป็น JSON Object ตามโครงสร้างนี้เท่านั้น:
+{
+  "translatedBookTitle": "คำแปลชื่อเรื่องภาษาไทย (ถ้าไม่มีให้ใส่ว่าง)",
+  "translatedChapterTitle": "คำแปลชื่อตอนภาษาไทย (เช่น บทที่ 810: ...)",
+  "paragraphs": [
+    {"th": "คำแปลไทยของย่อหน้านั้น", "src": "ข้อความจีนของย่อหน้านั้น"}
+  ]
+}`;
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${key}`;
       
@@ -805,48 +908,46 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
       let outText = data.candidates[0].content.parts[0].text.trim();
       
-      // Safe JSON Parser & Repair
+      // Safe JSON Parser
       let parsedResult;
       try {
         parsedResult = JSON.parse(outText);
       } catch (e) {
         let cleaned = outText.replace(/,\s*([\]}])/g, '$1');
-        if (!cleaned.endsWith(']')) cleaned += ']';
-        try {
-          parsedResult = JSON.parse(cleaned);
-        } catch (e2) {
-          parsedResult = [];
-          const regex = /\{\s*"th"\s*:\s*"(.*?)"\s*,\s*"src"\s*:\s*"(.*?)"\s*\}/gs;
-          let match;
-          while ((match = regex.exec(outText)) !== null) {
-            parsedResult.push({ th: match[1], src: match[2] });
-          }
-          if (parsedResult.length === 0) throw new Error("โครงสร้าง JSON จาก AI ผิดพลาด ไม่สามารถแกะข้อความได้");
-        }
+        parsedResult = JSON.parse(cleaned);
       }
 
-      const formattedResult = [];
-      parsedResult.forEach(item => {
+      // รองรับทั้งแบบโครงสร้างใหม่และแบบ Array เก่า
+      let paragraphs = Array.isArray(parsedResult) ? parsedResult : (parsedResult.paragraphs || []);
+      let translatedChapTitle = parsedResult.translatedChapterTitle || rawChapTitle;
+      let translatedBookTitle = parsedResult.translatedBookTitle || rawBookTitle;
+
+      const formattedParas = [];
+      paragraphs.forEach(item => {
         if (item.th && item.th.length > 350 && (item.th.includes('”') || item.th.includes('"'))) {
           const subParas = item.th.split(/(?<=[”」\n])\s*/);
           subParas.forEach(sub => {
-            if (sub.trim()) formattedResult.push({ th: sub.trim(), src: item.src || "" });
+            if (sub.trim()) formattedParas.push({ th: sub.trim(), src: item.src || "" });
           });
         } else {
-          formattedResult.push(item);
+          formattedParas.push(item);
         }
       });
 
-      if (formattedResult.length > 0) {
-        const lastTwo = formattedResult.slice(-2).map(item => item.th).join(" ");
+      if (formattedParas.length > 0) {
+        const lastTwo = formattedParas.slice(-2).map(item => item.th).join(" ");
         lastChapterContext = lastTwo.substring(0, 150);
       }
 
-      return formattedResult;
+      return {
+        bookTitle: translatedBookTitle,
+        chapterTitle: translatedChapTitle,
+        paragraphs: formattedParas
+      };
     }
 
     // PING-PONG AUTO-RETRY ENGINE
-    async function translateTextWithPingPong(rawText, onStatusUpdate = null) {
+    async function translateTextWithPingPong(rawText, onStatusUpdate = null, rawChapTitle = "", rawBookTitle = "") {
       retryAbortRequested = false;
 
       const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
@@ -862,7 +963,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         }
 
         try {
-          return await executeApiCall(rawText, activeModel);
+          return await executeApiCall(rawText, activeModel, rawChapTitle, rawBookTitle);
         } catch (err) {
           const errMsg = (err.message || "").toLowerCase();
           const isHighDemand = errMsg.includes("high demand") || 
@@ -917,7 +1018,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       status.style.display = 'block';
       status.style.background = '#eff6ff';
       status.style.color = '#1e40af';
-      status.innerText = "กำลังดึงเนื้อหาและจัดระเบียบย่อหน้า...";
+      status.innerText = "กำลังดึงเนื้อหาและตรวจหาชื่อตอน...";
       startBtn.disabled = true;
       btnText.innerText = "กำลังทำงาน...";
 
@@ -926,25 +1027,26 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         lastChapterContext = "";
         currentBookId = extractBookIdFromUrl(url);
 
-        const { text, nextUrl } = await scrapePage(url);
+        const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(url);
         nextUrlCalculated = nextUrl;
 
-        status.innerText = `ดึงเนื้อหาสำเร็จ (${text.length} ตัวอักษร) กำลังแปลแยกย่อหน้า...`;
+        status.innerText = `พบ "${rawChapTitle}" กำลังแปลชื่อและเนื้อหาผ่าน AI...`;
 
-        const paragraphs = await translateTextWithPingPong(text, (msg) => {
+        const result = await translateTextWithPingPong(text, (msg) => {
           status.style.background = '#fffbeb';
           status.style.color = '#b45309';
           status.innerText = msg;
-        });
+        }, rawChapTitle, rawBookTitle);
 
-        currentBookTitle = `นิยาย ${currentBookId.replace('book_', '')}`;
+        if (result.bookTitle) currentBookTitle = result.bookTitle;
+        const chapTitle = result.chapterTitle || rawChapTitle || "ตอนที่ 1";
 
         const newChapter = {
           id: `${currentBookId}_chap_1`,
           bookId: currentBookId,
           order: 1,
-          title: `ตอนที่ 1`,
-          paragraphs: paragraphs,
+          title: chapTitle,
+          paragraphs: result.paragraphs,
           sourceUrl: url,
           nextUrl: nextUrl
         };
@@ -983,14 +1085,16 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       if (isPrefetching || !url) return;
       isPrefetching = true;
       try {
-        const { text, nextUrl } = await scrapePage(url);
-        const paragraphs = await translateTextWithPingPong(text, null);
+        const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(url);
+        const result = await translateTextWithPingPong(text, null, rawChapTitle, rawBookTitle);
+        const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${chapters.length + 1}`;
+
         prefetchedData = {
           id: `${currentBookId}_chap_${chapters.length + 1}`,
           bookId: currentBookId,
           order: chapters.length + 1,
-          title: `ตอนที่ ${chapters.length + 1}`,
-          paragraphs: paragraphs,
+          title: chapTitle,
+          paragraphs: result.paragraphs,
           sourceUrl: url,
           nextUrl: nextUrl
         };
@@ -1037,19 +1141,21 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
         try {
           currentUrl = nextUrlCalculated;
-          const { text, nextUrl } = await scrapePage(currentUrl);
+          const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(currentUrl);
           nextUrlCalculated = nextUrl;
 
-          const paragraphs = await translateTextWithPingPong(text, (msg) => {
+          const result = await translateTextWithPingPong(text, (msg) => {
             btnText.innerText = msg.substring(0, 30) + "...";
-          });
+          }, rawChapTitle, rawBookTitle);
+
+          const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${chapters.length + 1}`;
 
           const newChap = {
             id: `${currentBookId}_chap_${chapters.length + 1}`,
             bookId: currentBookId,
             order: chapters.length + 1,
-            title: `ตอนที่ ${chapters.length + 1}`,
-            paragraphs: paragraphs,
+            title: chapTitle,
+            paragraphs: result.paragraphs,
             sourceUrl: currentUrl,
             nextUrl: nextUrl
           };
@@ -1247,12 +1353,12 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
     // EXPORT
     function exportTxt() {
       const chap = chapters[currentChapterIndex];
-      let txt = chap.title + "\n\n";
+      let txt = `${currentBookTitle}\n${chap.title}\n\n`;
       chap.paragraphs.forEach(p => { txt += p.th + "\n\n"; });
       const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
       const a = document.createElement('a');
       a.href = URL.createObjectURL(blob);
-      a.download = chap.title + ".txt";
+      a.download = `${chap.title}.txt`;
       a.click();
     }
   </script>
