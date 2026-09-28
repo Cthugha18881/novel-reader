@@ -1,339 +1,344 @@
 <!DOCTYPE html>
-<html lang="th" class="h-full">
+<html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>NovelTranslate AI</title>
-  
-  <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
-  <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          colors: {
-            sepia: {
-              50: '#fbf7ee',
-              100: '#f4ecd8',
-              200: '#e9dac1',
-              800: '#433422',
-              900: '#2b2114'
-            }
-          }
-        }
-      }
-    }
-  </script>
-
-  <link rel="preconnect" href="[https://fonts.googleapis.com](https://fonts.googleapis.com)">
-  <link rel="preconnect" href="[https://fonts.gstatic.com](https://fonts.gstatic.com)" crossorigin>
-  <link href="[https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&family=Sarabun:wght@300;400;500;600&display=swap](https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&family=Sarabun:wght@300;400;500;600&display=swap)" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
 
   <style>
-    body { font-family: 'Sarabun', sans-serif; -webkit-tap-highlight-color: transparent; }
-    .font-kanit { font-family: 'Kanit', sans-serif; }
-    .theme-light { background-color: #f8fafc; color: #1e293b; }
-    .theme-sepia { background-color: #f4ecd8; color: #2b2114; }
-    .theme-dark { background-color: #0b0f17; color: #e2e8f0; }
-
-    .card-light { background-color: #ffffff; border-color: #e2e8f0; }
-    .card-sepia { background-color: #fbf7ee; border-color: #e9dac1; }
-    .card-dark { background-color: #151d2a; border-color: #1e293b; }
-
-    .reading-highlight {
-      background-color: rgba(59, 130, 246, 0.15);
-      border-left: 4px solid #3b82f6;
-      padding-left: 0.75rem;
-      border-radius: 0.25rem;
-      transition: all 0.2s ease;
+    /* RESET & BASE STYLES (No CDN Dependency) */
+    * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: 'Sarabun', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      transition: background-color 0.2s, color 0.2s;
     }
+
+    /* THEMES */
+    body.theme-sepia { background-color: #f4ecd8; color: #2b2114; }
+    body.theme-light { background-color: #f8fafc; color: #1e293b; }
+    body.theme-dark  { background-color: #0d1117; color: #e6edf3; }
+
+    /* HEADER */
+    header {
+      position: sticky; top: 0; z-index: 40;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 10px 16px; border-bottom: 1px solid rgba(0,0,0,0.08);
+      backdrop-filter: blur(8px);
+      background-color: inherit;
+    }
+    body.theme-dark header { border-bottom-color: rgba(255,255,255,0.1); }
+    .brand-box { display: flex; align-items: center; gap: 8px; }
+    .brand-icon {
+      width: 30px; height: 30px; border-radius: 6px;
+      background: #2563eb; color: #fff; font-family: 'Kanit', sans-serif;
+      font-weight: 600; font-size: 15px; display: flex; align-items: center; justify-content: center;
+    }
+    .brand-title { font-family: 'Kanit', sans-serif; font-weight: 600; font-size: 15px; line-height: 1.2; }
+    .brand-sub { font-size: 11px; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+
+    .header-actions { display: flex; align-items: center; gap: 6px; }
+    .btn {
+      padding: 6px 12px; font-size: 13px; font-weight: 500;
+      border-radius: 6px; border: 1px solid rgba(0,0,0,0.12);
+      background: transparent; color: inherit; cursor: pointer;
+      display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+      font-family: inherit;
+    }
+    body.theme-dark .btn { border-color: rgba(255,255,255,0.15); }
+    .btn:hover { background-color: rgba(0,0,0,0.05); }
+    body.theme-dark .btn:hover { background-color: rgba(255,255,255,0.08); }
+    .btn-primary { background: #2563eb !important; color: #fff !important; border: none !important; }
+    .btn-primary:hover { background: #1d4ed8 !important; }
+
+    /* PREFETCH BADGE */
+    #prefetch-badge {
+      display: none; font-size: 10px; padding: 3px 8px; border-radius: 999px;
+      background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
+    }
+    body.theme-dark #prefetch-badge { background: #064e3b; color: #a7f3d0; border-color: #047857; }
+
+    /* MAIN READING CANVAS */
+    main {
+      flex: 1; width: 100%; max-width: 720px; margin: 0 auto;
+      padding: 20px 16px 100px 16px;
+    }
+    @media (min-width: 768px) { main { padding-bottom: 40px; } }
+
+    .chapter-header {
+      display: flex; justify-content: space-between; align-items: flex-end;
+      border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 10px; margin-bottom: 18px;
+    }
+    body.theme-dark .chapter-header { border-bottom-color: rgba(255,255,255,0.1); }
+    .chap-heading { font-family: 'Kanit', sans-serif; font-size: 20px; font-weight: 600; }
+
+    /* READING PARAGRAPHS */
+    #reading-content { line-height: 1.85; user-select: text; }
+    .para-item { padding: 4px 0; cursor: pointer; border-radius: 4px; }
+    .para-th { font-size: inherit; }
+    .para-th span.term { font-weight: 600; color: #2563eb; }
+    body.theme-dark .para-th span.term { color: #60a5fa; }
+    .para-src {
+      display: none; margin-top: 6px; padding: 8px 10px;
+      border-radius: 4px; font-size: 13px; opacity: 0.75;
+      background: rgba(0,0,0,0.04); border-left: 3px solid #f59e0b;
+      font-family: monospace;
+    }
+    body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
+
+    /* BOTTOM NAV FOR CHAPTERS */
+    .chap-nav {
+      margin-top: 30px; padding-top: 18px;
+      border-top: 1px solid rgba(0,0,0,0.08);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    body.theme-dark .chap-nav { border-top-color: rgba(255,255,255,0.1); }
+
+    /* MOBILE DOCK */
+    .mobile-dock {
+      display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+      background: inherit; border-top: 1px solid rgba(0,0,0,0.08);
+      padding: 8px 12px; justify-content: space-around; align-items: center;
+      backdrop-filter: blur(12px);
+    }
+    body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
+    @media (min-width: 768px) { .mobile-dock { display: none; } }
+
+    /* MODAL WINDOWS (CRITICAL: HIDDEN BY DEFAULT) */
+    .modal-overlay {
+      display: none; /* MUST BE HIDDEN */
+      position: fixed; inset: 0; z-index: 50;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
+      align-items: center; justify-content: center; padding: 16px;
+    }
+    .modal-overlay.active { display: flex !important; }
+    .modal-box {
+      width: 100%; max-width: 440px; border-radius: 12px;
+      padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      background-color: #fff; color: #1e293b;
+    }
+    body.theme-sepia .modal-box { background-color: #fbf7ee; color: #2b2114; border: 1px solid #e9dac1; }
+    body.theme-dark .modal-box  { background-color: #161b22; color: #e6edf3; border: 1px solid #30363d; }
+
+    .modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+    .modal-title { font-family: 'Kanit', sans-serif; font-size: 16px; font-weight: 600; }
+    .modal-close { background: transparent; border: none; font-size: 18px; cursor: pointer; color: inherit; opacity: 0.6; }
+
+    .form-group { margin-bottom: 12px; }
+    .form-label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; opacity: 0.8; }
+    .form-input {
+      width: 100%; padding: 8px 10px; font-size: 13px; border-radius: 6px;
+      border: 1px solid rgba(0,0,0,0.15); outline: none; background: #fff; color: #000;
+      font-family: inherit;
+    }
+    body.theme-dark .form-input { background: #0d1117; color: #fff; border-color: rgba(255,255,255,0.2); }
+    .status-msg {
+      display: none; padding: 8px 10px; border-radius: 6px; font-size: 12px;
+      margin-top: 8px; line-height: 1.4;
+    }
+
+    /* LOADER SPINNER */
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid #fff; border-top-color: transparent;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
-<body id="app-body" class="theme-sepia min-h-screen flex flex-col transition-colors duration-200">
+<body class="theme-sepia" id="app-body">
 
-  <!-- Top Navigation Bar -->
-  <header id="top-nav" class="sticky top-0 z-40 backdrop-blur-md bg-opacity-90 border-b border-black/5 px-4 py-3 flex items-center justify-between shadow-sm">
-    <div class="flex items-center gap-2">
-      <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
-        N
-      </div>
+  <!-- TOP HEADER -->
+  <header>
+    <div class="brand-box">
+      <div class="brand-icon">N</div>
       <div>
-        <h1 class="font-kanit font-semibold text-base leading-tight">NovelTranslate AI</h1>
-        <p id="chapter-title-nav" class="text-xs opacity-60 truncate max-w-[130px] sm:max-w-xs">ตอนปัจจุบัน</p>
+        <div class="brand-title">NovelTranslate AI</div>
+        <div class="brand-sub" id="header-chap-title">ตอนปัจจุบัน</div>
       </div>
     </div>
-
-    <!-- Actions -->
-    <div class="flex items-center gap-1.5 sm:gap-2">
-      <div id="prefetch-indicator" class="hidden text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-1 rounded-full font-medium flex items-center gap-1 border border-emerald-300 dark:border-emerald-800">
-        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-        <span class="hidden sm:inline">ตอนถัดไปพร้อมแล้ว</span>
-        <span class="sm:hidden">พร้อม</span>
-      </div>
-
-      <button onclick="openImportModal()" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium flex items-center gap-1 shadow transition">
-        <span>+ วางลิงก์</span>
-      </button>
-
-      <button onclick="toggleGlossaryModal()" class="px-2 py-1.5 rounded-lg border border-black/10 hover:bg-black/5 text-xs sm:text-sm font-medium transition">
-        คลังศัพท์
-      </button>
-
-      <button onclick="openSettingsModal()" class="px-2 py-1.5 rounded-lg border border-black/10 hover:bg-black/5 text-xs sm:text-sm font-medium transition">
-        ตั้งค่า
-      </button>
+    <div class="header-actions">
+      <div id="prefetch-badge">ตอนถัดไปพร้อม</div>
+      <button class="btn btn-primary" onclick="openModal('import-modal')">+ วางลิงก์</button>
+      <button class="btn" onclick="openModal('glossary-modal')">ศัพท์</button>
+      <button class="btn" onclick="openModal('settings-modal')">ตั้งค่า</button>
     </div>
   </header>
 
-  <!-- TTS Sticky Control Bar -->
-  <div id="tts-bar" class="hidden sticky top-[57px] z-30 bg-blue-600 text-white px-4 py-2 text-xs flex items-center justify-between shadow-md">
-    <div class="flex items-center gap-2 truncate">
-      <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
-      <span id="tts-status">กำลังอ่านออกเสียง...</span>
-    </div>
-    <div class="flex items-center gap-3">
-      <button onclick="toggleTTSPlayback()" id="tts-play-btn" class="font-bold underline">หยุดชั่วคราว</button>
-      <button onclick="stopTTS()" class="opacity-80 hover:opacity-100 font-bold">ปิดเสียง</button>
-    </div>
-  </div>
-
-  <!-- Main Reading Canvas Area -->
-  <main class="flex-1 w-full max-w-2xl sm:max-w-3xl mx-auto px-4 sm:px-6 py-6 pb-28 md:pb-16">
-    <div class="mb-6 flex items-center justify-between border-b border-black/10 pb-3">
+  <!-- MAIN READING CANVAS -->
+  <main>
+    <div class="chapter-header">
       <div>
-        <span id="novel-name" class="text-xs uppercase tracking-wider font-semibold opacity-60">ชื่อเรื่อง</span>
-        <h2 id="chapter-title" class="font-kanit font-bold text-xl sm:text-2xl mt-0.5">ยินดีต้อนรับ</h2>
+        <h1 class="chap-heading" id="display-chap-title">ยินดีต้อนรับ</h1>
       </div>
-      <div class="text-right">
-        <button onclick="exportTxt()" class="text-xs opacity-70 hover:opacity-100 flex items-center gap-1 underline">
-          บันทึก .TXT
-        </button>
-      </div>
+      <button class="btn" onclick="exportTxt()" style="font-size: 11px;">บันทึก .TXT</button>
     </div>
 
-    <!-- Reading Content Container -->
-    <div id="reading-content" class="space-y-4 text-base sm:text-lg leading-relaxed select-text"></div>
-
-    <!-- Inline Loader for Automatic Next Chapter -->
-    <div id="chapter-loader" class="hidden py-8 flex flex-col items-center justify-center gap-2 text-sm opacity-80">
-      <div class="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-      <span id="loader-status">กำลังโหลดและแปลตอนถัดไปอัตโนมัติ...</span>
-    </div>
+    <!-- Reading Paragraphs -->
+    <div id="reading-content"></div>
 
     <!-- Chapter Navigation -->
-    <div class="mt-10 pt-6 border-t border-black/10 flex items-center justify-between">
-      <button onclick="prevChapter()" class="px-4 py-2 rounded-lg border border-black/10 hover:bg-black/5 text-sm font-medium">
-        ← ตอนก่อนหน้า
-      </button>
-      <button onclick="handleNextChapterClick()" id="next-chap-btn" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium shadow flex items-center gap-1.5 transition">
+    <div class="chap-nav">
+      <button class="btn" onclick="prevChapter()">← ตอนก่อนหน้า</button>
+      <button class="btn btn-primary" id="next-chap-btn" onclick="handleNextChapterClick()">
         <span id="next-btn-text">ตอนถัดไป →</span>
       </button>
     </div>
   </main>
 
-  <!-- Mobile Bottom Dock -->
-  <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-inherit border-t border-black/10 backdrop-blur-lg bg-opacity-95 px-4 py-2.5 flex items-center justify-between shadow-lg">
-    <button onclick="adjustFontSize(-1)" class="p-2 rounded-lg hover:bg-black/5 text-xs font-bold">
-      A- เล็ก
-    </button>
-    <button onclick="cycleTheme()" class="p-2 rounded-lg hover:bg-black/5 text-xs font-semibold">
-      <span id="mobile-theme-label">ถนอมสายตา</span>
-    </button>
-    <button onclick="startTTS()" class="px-3 py-1.5 rounded-full bg-blue-600 text-white text-xs font-bold shadow">
-      อ่านเสียง
-    </button>
-    <button onclick="adjustFontSize(1)" class="p-2 rounded-lg hover:bg-black/5 text-xs font-bold">
-      A+ ใหญ่
-    </button>
-    <button onclick="toggleGlossaryModal()" class="p-2 rounded-lg hover:bg-black/5 text-xs font-semibold">
-      ศัพท์
-    </button>
+  <!-- MOBILE BOTTOM DOCK -->
+  <nav class="mobile-dock">
+    <button class="btn" onclick="adjustFontSize(-1)">A-</button>
+    <button class="btn" id="mobile-theme-btn" onclick="cycleTheme()">ถนอมสายตา</button>
+    <button class="btn" onclick="adjustFontSize(1)">A+</button>
+    <button class="btn" onclick="openModal('glossary-modal')">คลังศัพท์</button>
   </nav>
 
-  <!-- Import Modal -->
-  <div id="import-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="w-full max-w-lg rounded-2xl p-5 shadow-2xl card-light" id="import-modal-card">
-      <div class="flex items-center justify-between border-b pb-3 mb-4">
-        <div>
-          <h3 class="font-kanit font-bold text-lg">นำเข้า URL หน้านิยาย</h3>
-          <p class="text-xs opacity-60">ใส่ URL หน้านิยายตอนที่ต้องการอ่าน</p>
-        </div>
-        <button onclick="closeImportModal()" class="p-1 rounded-full hover:bg-black/5 text-gray-500 font-bold">✕</button>
+  <!-- MODAL 1: IMPORT & TRANSLATE -->
+  <div class="modal-overlay" id="import-modal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title">วาง URL หน้านิยาย</div>
+        <button class="modal-close" onclick="closeModal('import-modal')">✕</button>
       </div>
-
-      <div class="space-y-3">
-        <div>
-          <label class="block text-xs font-semibold mb-1 opacity-80">URL หน้านิยาย</label>
-          <input type="url" id="import-url" placeholder="[https://www.69shuba.com/txt/](https://www.69shuba.com/txt/)..." class="w-full text-sm px-3 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-black">
-        </div>
-
-        <div id="import-status-box" class="p-3 bg-gray-50 rounded-lg border text-xs text-gray-700 hidden leading-relaxed">
-          <span id="import-status-text">พร้อมประมวลผล</span>
-        </div>
+      <div class="form-group">
+        <label class="form-label">URL หน้านิยาย (เช่น 69shuba)</label>
+        <input type="url" id="import-url" class="form-input" placeholder="https://www.69shuba.com/txt/88724/40711443">
       </div>
-
-      <div class="mt-5 flex gap-2">
-        <button onclick="closeImportModal()" class="w-1/3 py-2.5 rounded-lg border text-sm font-medium hover:bg-black/5">ยกเลิก</button>
-        <button onclick="startFirstChapter()" id="start-btn" class="w-2/3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow flex items-center justify-center gap-1.5 transition">
-          <span id="btn-text">เริ่มแปลตอนนี้</span>
+      <div class="status-msg" id="import-status"></div>
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <button class="btn" style="flex: 1;" onclick="closeModal('import-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" style="flex: 2;" id="start-btn" onclick="startTranslateFirst()">
+          <span id="start-btn-text">เริ่มแปลตอนนี้</span>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- Glossary Modal -->
-  <div id="glossary-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="w-full max-w-md rounded-2xl p-5 shadow-2xl card-light" id="glossary-modal-card">
-      <div class="flex items-center justify-between border-b pb-3 mb-4">
-        <div>
-          <h3 class="font-kanit font-bold text-lg">คลังคำศัพท์เฉพาะ (Glossary)</h3>
-          <p class="text-xs opacity-60">ล็อกชื่อตัวละครและวิชา เพื่อให้ทุกบทแปลสะกดเหมือนเดิม</p>
-        </div>
-        <button onclick="toggleGlossaryModal()" class="p-1 rounded-full hover:bg-black/5 text-gray-500 font-bold">✕</button>
+  <!-- MODAL 2: GLOSSARY -->
+  <div class="modal-overlay" id="glossary-modal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title">คลังคำศัพท์เฉพาะ (Glossary)</div>
+        <button class="modal-close" onclick="closeModal('glossary-modal')">✕</button>
       </div>
-      <div class="flex gap-2 mb-4">
-        <input type="text" id="glossary-source" placeholder="คำเดิม (เช่น 林动)" class="w-1/2 text-xs px-2.5 py-2 rounded-lg border text-black outline-none">
-        <input type="text" id="glossary-target" placeholder="คำแปล (เช่น หลินตง)" class="w-1/2 text-xs px-2.5 py-2 rounded-lg border text-black outline-none">
-        <button onclick="addGlossaryTerm()" class="px-3 bg-blue-600 text-white rounded-lg text-xs font-semibold shrink-0">เพิ่ม</button>
+      <div style="display: flex; gap: 6px; margin-bottom: 12px;">
+        <input type="text" id="gloss-src" class="form-input" placeholder="คำเดิม (เช่น 林动)" style="flex: 1;">
+        <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปล (เช่น หลินตง)" style="flex: 1;">
+        <button class="btn btn-primary" onclick="addGlossary()">เพิ่ม</button>
       </div>
-      <div id="glossary-list" class="max-h-56 overflow-y-auto space-y-2 pr-1 text-xs"></div>
+      <div id="glossary-list" style="max-height: 180px; overflow-y: auto; font-size: 13px;"></div>
     </div>
   </div>
 
-  <!-- Settings Modal -->
-  <div id="settings-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
-    <div class="w-full max-w-md rounded-2xl p-5 shadow-2xl card-light" id="settings-modal-card">
-      <div class="flex items-center justify-between border-b pb-3 mb-4">
-        <h3 class="font-kanit font-bold text-lg">ตั้งค่าระบบ</h3>
-        <button onclick="openSettingsModal()" class="p-1 rounded-full hover:bg-black/5 text-gray-500 font-bold">✕</button>
+  <!-- MODAL 3: SETTINGS -->
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title">ตั้งค่า API</div>
+        <button class="modal-close" onclick="closeModal('settings-modal')">✕</button>
       </div>
-
-      <div class="space-y-4 text-xs">
-        <div>
-          <label class="block font-semibold mb-1 opacity-80">Google Gemini API Key</label>
-          <input type="password" id="gemini-api-key" placeholder="AIzaSy..." class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black">
-        </div>
-
-        <div>
-          <label class="block font-semibold mb-1 opacity-80">เลือกรุ่นโมเดล</label>
-          <select id="gemini-model-select" onchange="toggleCustomModelInput()" class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black bg-white">
-            <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash-Lite (แนะนำ / สปีดสูง ประหยัด Token)</option>
-            <option value="gemini-3.8-flash">Gemini 3.8 Flash (โมเดลเรือธง / สำนวนดีที่สุด)</option>
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-            <option value="custom">-- กำหนดชื่อโมเดลเอง --</option>
-          </select>
-        </div>
-
-        <div id="custom-model-box" class="hidden">
-          <label class="block font-semibold mb-1 opacity-80">พิมพ์ชื่อโมเดลเอง</label>
-          <input type="text" id="custom-model-name" placeholder="gemini-..." class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black">
-        </div>
-
-        <div class="pt-2 border-t">
-          <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" id="auto-prefetch-toggle" checked class="rounded text-blue-600 focus:ring-0">
-            <span class="font-semibold opacity-90">แปลตอนถัดไปล่วงหน้าอัตโนมัติ (Zero-wait Prefetch)</span>
-          </label>
-          <p class="text-[11px] opacity-60 mt-1 pl-5">ระบบจะแอบแปลตอนต่อไปรอไว้ เพื่อให้กดเปลี่ยนบทได้ทันทีโดยไม่ต้องรอ</p>
-        </div>
+      <div class="form-group">
+        <label class="form-label">Google Gemini API Key</label>
+        <input type="password" id="gemini-key" class="form-input" placeholder="AIzaSy...">
       </div>
-
-      <div class="mt-5">
-        <button onclick="saveSettings()" class="w-full py-2.5 bg-blue-600 text-white rounded-lg text-sm font-semibold shadow">
-          บันทึกการตั้งค่า
-        </button>
+      <div class="form-group">
+        <label class="form-label">โมเดล AI (Active Model)</label>
+        <select id="gemini-model" class="form-input">
+          <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash-Lite (แนะนำ / สปีดเร็ว)</option>
+          <option value="gemini-3.8-flash">Gemini 3.8 Flash (เรือธง / สำนวนดี)</option>
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+        </select>
+      </div>
+      <div style="margin-top: 14px;">
+        <button class="btn btn-primary" style="width: 100%;" onclick="saveSettings()">บันทึกการตั้งค่า</button>
       </div>
     </div>
   </div>
 
+  <!-- JAVASCRIPT APPLICATION LOGIC -->
   <script>
+    // STATE
     let currentTheme = 'sepia';
     let currentFontSize = 18;
-
-    let nextChapterUrl = null;
-    let prefetchedChapter = null;
+    let currentUrl = "";
+    let nextUrlCalculated = "";
+    let prefetchedData = null; // Buffer: { title, paragraphs, nextUrl }
     let isPrefetching = false;
 
-    // Load Glossary ปลอดภัย
     let glossary = {};
     try {
-      const stored = JSON.parse(localStorage.getItem('novel_glossary') || '{}');
-      if (typeof stored === 'object' && stored !== null && !Array.isArray(stored)) {
-        Object.entries(stored).forEach(([k, v]) => {
-          if (typeof v === 'string') glossary[k] = v;
-        });
-      }
-    } catch(e) {
-      glossary = {"林动": "หลินตง", "九品": "ขั้นเก้า"};
-    }
+      glossary = JSON.parse(localStorage.getItem('nov_gloss') || '{"林动":"หลินตง","九品":"ขั้นเก้า"}');
+    } catch(e) { glossary = {}; }
 
     let chapters = [
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "Welcome to NovelTranslate" },
-          { th: "1. กดปุ่ม 'วางลิงก์' แล้วใส่ URL หน้านิยายตอนที่ต้องการอ่าน", src: "Setup Chapter URL" },
-          { th: "2. ระบบจะตรวจหาลิงก์ตอนถัดไปให้อัตโนมัติ", src: "Auto Sniffer" },
-          { th: "3. เมื่ออ่านจบ แค่กดปุ่ม 'ตอนถัดไป →' บทใหม่จะถูกแปลต่อเนื่องทันที!", src: "One-tap Next Chapter" }
+          { th: "1. กดปุ่ม '+ วางลิงก์' ด้านบน แล้วใส่ URL หน้านิยาย (เช่น เว็บ 69shuba)", src: "Step 1" },
+          { th: "2. ระบบจะแปลบทให้อัตโนมัติ และคำนวณลิงก์ตอนถัดไปรอไว้ให้", src: "Step 2" },
+          { th: "3. เมื่ออ่านจบตอน กดปุ่ม 'ตอนถัดไป →' บทใหม่จะถูกดึงมาแปลทันที!", src: "Step 3" }
         ]
       }
     ];
     let currentChapterIndex = 0;
 
+    // INIT
     window.addEventListener('DOMContentLoaded', () => {
       loadSettings();
-      applyTheme(currentTheme);
       renderChapter();
-      renderGlossaryList();
+      renderGlossary();
     });
 
+    // THEME & FONT
     function cycleTheme() {
-      const themes = ['light', 'sepia', 'dark'];
-      applyTheme(themes[(themes.indexOf(currentTheme) + 1) % themes.length]);
-    }
-
-    function applyTheme(theme) {
-      currentTheme = theme;
-      document.getElementById('app-body').className = `theme-${theme} min-h-screen flex flex-col transition-colors duration-200`;
-      const lbl = document.getElementById('mobile-theme-label');
-      if (lbl) lbl.innerText = theme === 'light' ? 'สว่าง' : (theme === 'sepia' ? 'ถนอมสายตา' : 'มืด');
+      const themes = ['sepia', 'light', 'dark'];
+      currentTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length];
+      document.getElementById('app-body').className = 'theme-' + currentTheme;
+      document.getElementById('mobile-theme-btn').innerText = 
+        currentTheme === 'sepia' ? 'ถนอมสายตา' : (currentTheme === 'light' ? 'สว่าง' : 'มืด');
     }
 
     function adjustFontSize(delta) {
-      currentFontSize = Math.min(28, Math.max(14, currentFontSize + delta));
-      const content = document.getElementById('reading-content');
-      if (content) content.style.fontSize = `${currentFontSize}px`;
+      currentFontSize = Math.min(26, Math.max(14, currentFontSize + delta));
+      document.getElementById('reading-content').style.fontSize = currentFontSize + 'px';
     }
 
+    // MODAL HANDLERS
+    function openModal(id) { document.getElementById(id).classList.add('active'); }
+    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+
+    // RENDER CONTENT
     function renderChapter() {
       const chap = chapters[currentChapterIndex];
-      document.getElementById('chapter-title').innerText = chap.title;
-      document.getElementById('chapter-title-nav').innerText = chap.title;
+      document.getElementById('display-chap-title').innerText = chap.title;
+      document.getElementById('header-chap-title').innerText = chap.title;
 
       const container = document.getElementById('reading-content');
       container.innerHTML = "";
-      container.style.fontSize = `${currentFontSize}px`;
+      container.style.fontSize = currentFontSize + 'px';
 
       chap.paragraphs.forEach((p, idx) => {
         const pEl = document.createElement('div');
-        pEl.id = `para-${idx}`;
-        pEl.className = "py-1 cursor-pointer rounded";
+        pEl.className = 'para-item';
 
         let thText = String(p.th || "");
-
         Object.values(glossary).forEach(name => {
-          if (typeof name === 'string' && name.trim().length > 0) {
+          if (name && typeof name === 'string' && name.trim()) {
             const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const regex = new RegExp(`(${escaped})`, 'g');
-            thText = thText.replace(regex, '<span class="font-semibold text-blue-600 dark:text-blue-400">$1</span>');
+            thText = thText.replace(new RegExp(`(${escaped})`, 'g'), '<span class="term">$1</span>');
           }
         });
 
         pEl.innerHTML = `
-          <div class="paragraph-th" onclick="toggleDualView(${idx})">${thText}</div>
-          <div id="dual-src-${idx}" class="hidden mt-1.5 p-2 rounded text-xs opacity-70 bg-black/5 dark:bg-white/5 font-mono border-l-2 border-amber-500">
-            ${p.src || ''}
-          </div>
+          <div class="para-th" onclick="toggleSrc(${idx})">${thText}</div>
+          <div class="para-src" id="src-${idx}">${p.src || ''}</div>
         `;
         container.appendChild(pEl);
       });
@@ -341,229 +346,149 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    function toggleDualView(idx) {
-      const el = document.getElementById(`dual-src-${idx}`);
-      if (el) el.classList.toggle('hidden');
+    function toggleSrc(idx) {
+      const el = document.getElementById(`src-${idx}`);
+      if (el) el.style.display = (el.style.display === 'block') ? 'none' : 'block';
     }
 
-    function openImportModal(prefillUrl = "") {
-      const modal = document.getElementById('import-modal');
-      const input = document.getElementById('import-url');
-      if (prefillUrl) input.value = prefillUrl;
-      else if (nextChapterUrl) input.value = nextChapterUrl;
-      modal.classList.remove('hidden');
-    }
-    function closeImportModal() { document.getElementById('import-modal').classList.add('hidden'); }
-    function toggleGlossaryModal() { document.getElementById('glossary-modal').classList.toggle('hidden'); }
-    function openSettingsModal() { document.getElementById('settings-modal').classList.toggle('hidden'); }
-
-    function toggleCustomModelInput() {
-      const sel = document.getElementById('gemini-model-select').value;
-      const box = document.getElementById('custom-model-box');
-      if (sel === 'custom') box.classList.remove('hidden');
-      else box.classList.add('hidden');
-    }
-
-    // ==================== SMART SCRAPER & LINK DETECTOR ====================
-
-    async function scrapeNovelPageWithNextLink(url) {
+    // SCRAPER ENGINE WITH NUMBER SEQUENCING
+    async function scrapePage(url) {
+      // 1. Fetch via Jina AI
       let rawText = "";
-      let foundNextUrl = null;
-
       try {
-        const jinaUrl = `[https://r.jina.ai/$](https://r.jina.ai/$){url}`;
-        const res = await fetch(jinaUrl);
+        const res = await fetch(`https://r.jina.ai/${url}`);
         if (res.ok) {
           const md = await res.text();
-          if (md && md.length > 200) {
-            const parsed = parseMarkdownWithNextLink(md, url);
-            rawText = parsed.text;
-            foundNextUrl = parsed.nextUrl;
-          }
-        }
-      } catch (e) {
-        console.warn("Jina Scraper failed, fallback to AllOrigins...");
-      }
-
-      if (!rawText || rawText.length < 100) {
-        try {
-          const proxyUrl = `[https://api.allorigins.win/get?url=$](https://api.allorigins.win/get?url=$){encodeURIComponent(url)}`;
-          const res = await fetch(proxyUrl);
-          const data = await res.json();
-          if (data && data.contents) {
-            const parsed = parseHtmlWithNextLink(data.contents, url);
-            rawText = parsed.text;
-            if (!foundNextUrl) foundNextUrl = parsed.nextUrl;
-          }
-        } catch (e) {
-          console.warn("AllOrigins failed...");
-        }
-      }
-
-      if (!foundNextUrl) {
-        foundNextUrl = predictNextChapterUrl(url);
-      }
-
-      if (!rawText || rawText.length < 50) {
-        throw new Error("ไม่สามารถดึงเนื้อหาจากเว็บนี้ได้ กรุณาตรวจสอบ URL");
-      }
-
-      return { text: rawText, nextUrl: foundNextUrl };
-    }
-
-    function parseMarkdownWithNextLink(md, baseUrl) {
-      let nextUrl = null;
-      const linkRegex = /\[([^\]]*?(?:下一章|下一页|Next|ตอนถัดไป|ตอนต่อไป)[^\]]*?)\]\((https?:\/\/[^\s\)]+|\/[^\s\)]+|[a-zA-Z0-9_\-\.\/]+)\)/gi;
-      let match;
-      while ((match = linkRegex.exec(md)) !== null) {
-        const rawHref = match[2];
-        try {
-          nextUrl = new URL(rawHref, baseUrl).href;
-          break;
-        } catch(e) {}
-      }
-
-      const lines = md.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      const textLines = lines.filter(l => !l.startsWith('!') && !l.startsWith('http') && l.length > 10);
-      const fullText = textLines.slice(0, 40).join('\n\n');
-
-      return { text: fullText, nextUrl: nextUrl };
-    }
-
-    function parseHtmlWithNextLink(html, baseUrl) {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-
-      let nextUrl = null;
-      const links = doc.querySelectorAll('a');
-      for (let i = 0; i < links.length; i++) {
-        const a = links[i];
-        const text = (a.innerText || "").trim().toLowerCase();
-        if (text.includes("下一章") || text.includes("下一页") || text === "next" || text === "next chapter" || text.includes("ตอนต่อไป") || text.includes("ตอนถัดไป")) {
-          const href = a.getAttribute('href');
-          if (href && !href.startsWith('javascript') && !href.startsWith('#')) {
-            try {
-              nextUrl = new URL(href, baseUrl).href;
-              break;
-            } catch(e) {}
-          }
-        }
-      }
-
-      doc.querySelectorAll('script, style, nav, header, footer, noscript, .ads, .bottem2').forEach(e => e.remove());
-      const paras = [];
-      doc.querySelectorAll('article p, .content p, #content, .txtnav, p').forEach(el => {
-        const t = el.innerText ? el.innerText.trim() : '';
-        if (t.length > 20) paras.push(t);
-      });
-
-      const fullText = paras.slice(0, 40).join('\n\n');
-      return { text: fullText, nextUrl: nextUrl };
-    }
-
-    function predictNextChapterUrl(currentUrl) {
-      try {
-        const match = currentUrl.match(/^(.*?)(\d+)(\.html?|\/)?$/);
-        if (match) {
-          const prefix = match[1];
-          const numStr = match[2];
-          const suffix = match[3] || '';
-          const nextNum = (parseInt(numStr, 10) + 1).toString();
-          return prefix + nextNum + suffix;
+          const lines = md.split('\n').map(l => l.trim()).filter(l => l.length > 10 && !l.startsWith('!') && !l.startsWith('['));
+          rawText = lines.slice(0, 35).join('\n\n');
         }
       } catch (e) {}
-      return null;
+
+      // 2. Fetch via Allorigins fallback
+      if (!rawText || rawText.length < 50) {
+        const pRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
+        const pData = await pRes.json();
+        if (pData.contents) {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(pData.contents, 'text/html');
+          const paras = [];
+          doc.querySelectorAll('article p, .content p, #content, .txtnav, p').forEach(el => {
+            const t = el.innerText ? el.innerText.trim() : '';
+            if (t.length > 20) paras.push(t);
+          });
+          rawText = paras.slice(0, 35).join('\n\n');
+        }
+      }
+
+      if (!rawText || rawText.length < 30) throw new Error("ไม่สามารถดึงข้อความจากเว็บนี้ได้");
+
+      // 3. Smart Next URL Predictor (เช่น .../40711443 -> .../40711444)
+      let nextUrl = null;
+      const numMatch = url.match(/^(.*?)(\d+)(\.html?|\/)?$/);
+      if (numMatch) {
+        const prefix = numMatch[1];
+        const num = numMatch[2];
+        const suffix = numMatch[3] || '';
+        const nextNum = (parseInt(num, 10) + 1).toString();
+        nextUrl = prefix + nextNum + suffix;
+      }
+
+      return { text: rawText, nextUrl: nextUrl };
     }
 
-    // ==================== TRANSLATION PIPELINE ====================
+    // GEMINI TRANSLATION
+    async function translateText(rawText) {
+      const key = (localStorage.getItem('nov_gemini_key') || "").trim();
+      const model = (localStorage.getItem('nov_gemini_model') || "gemini-3.5-flash-lite").trim();
 
-    async function startFirstChapter() {
+      if (!key) throw new Error("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
+
+      const termList = Object.entries(glossary).map(([k,v]) => `${k}=${v}`).join(", ");
+      const prompt = `คุณคือนักแปลนิยาย แปลข้อความต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย
+คำศัพท์เฉพาะ: [${termList}]
+ตอบกลับเฉพาะรูปแบบ JSON Array: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ไม่ต้องใส่คำอธิบายอื่น`;
+
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\n${rawText.substring(0, 4500)}` }] }]
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || "ยิง API ไม่สำเร็จ");
+
+      let outText = data.candidates[0].content.parts[0].text;
+      const jsonMatch = outText.match(/\[\s*\{[\s\S]*\}\s*\]/);
+      if (jsonMatch) outText = jsonMatch[0];
+      else outText = outText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+      return JSON.parse(outText);
+    }
+
+    // START FIRST CHAPTER
+    async function startTranslateFirst() {
       const url = document.getElementById('import-url').value.trim();
-      if (!url) return alert("กรุณาวาง URL หน้านิยาย");
+      if (!url) return alert("กรุณาใส่ URL หน้านิยาย");
 
-      const statusBox = document.getElementById('import-status-box');
-      const statusText = document.getElementById('import-status-text');
+      const status = document.getElementById('import-status');
       const startBtn = document.getElementById('start-btn');
-      const btnText = document.getElementById('btn-text');
+      const btnText = document.getElementById('start-btn-text');
 
-      statusBox.classList.remove('hidden');
-      statusText.innerText = "กำลังดึงเนื้อหาและตรวจหาตอนถัดไป...";
+      status.style.display = 'block';
+      status.style.background = '#eff6ff';
+      status.style.color = '#1e40af';
+      status.innerText = "กำลังดึงเนื้อหาและแปลภาษา...";
       startBtn.disabled = true;
-      btnText.innerText = "กำลังประมวลผล...";
+      btnText.innerText = "กำลังทำงาน...";
 
       try {
-        await loadAndTranslateChapter(url, true);
-        closeImportModal();
+        currentUrl = url;
+        const { text, nextUrl } = await scrapePage(url);
+        nextUrlCalculated = nextUrl;
+
+        const paragraphs = await translateText(text);
+        chapters.push({
+          title: `ตอนที่ ${chapters.length + 1}`,
+          paragraphs: paragraphs
+        });
+        currentChapterIndex = chapters.length - 1;
+        renderChapter();
+        closeModal('import-modal');
+
+        // Trigger Prefetch
+        if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
       } catch (err) {
-        statusText.innerText = "เกิดข้อผิดพลาด: " + err.message;
-        statusBox.className = "p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs leading-relaxed";
+        status.style.background = '#fef2f2';
+        status.style.color = '#991b1b';
+        status.innerText = "ข้อผิดพลาด: " + err.message;
       } finally {
         startBtn.disabled = false;
         btnText.innerText = "เริ่มแปลตอนนี้";
       }
     }
 
-    async function loadAndTranslateChapter(url, isFirst = false) {
-      const { text, nextUrl } = await scrapeNovelPageWithNextLink(url);
-      nextChapterUrl = nextUrl;
-
-      const apiKey = (localStorage.getItem('gemini_api_key') || "").trim();
-      let model = (localStorage.getItem('gemini_model') || "gemini-3.5-flash-lite").trim();
-      if (model === 'custom') model = (localStorage.getItem('gemini_custom_model') || "gemini-3.5-flash-lite").trim();
-      if (!model) model = "gemini-3.5-flash-lite";
-
-      if (!apiKey) throw new Error("ยังไม่ได้ใส่ API Key ในเมนู 'ตั้งค่า'");
-
-      const paragraphs = await callGeminiAPI(text, apiKey, model);
-
-      chapters.push({
-        title: `ตอนที่ ${chapters.length + 1}`,
-        paragraphs: paragraphs,
-        sourceUrl: url,
-        nextUrl: nextUrl
-      });
-
-      currentChapterIndex = chapters.length - 1;
-      renderChapter();
-
-      prefetchedChapter = null;
-      document.getElementById('prefetch-indicator').classList.add('hidden');
-      
-      const prefetchEnabled = document.getElementById('auto-prefetch-toggle') ? document.getElementById('auto-prefetch-toggle').checked : true;
-      if (prefetchEnabled && nextChapterUrl) {
-        triggerPrefetchNextChapter(nextChapterUrl);
-      }
-    }
-
-    // ==================== BACKGROUND PREFETCH ====================
-
-    async function triggerPrefetchNextChapter(url) {
+    // PREFETCH
+    async function triggerPrefetch(url) {
       if (isPrefetching || !url) return;
       isPrefetching = true;
-
       try {
-        const { text, nextUrl } = await scrapeNovelPageWithNextLink(url);
-        const apiKey = (localStorage.getItem('gemini_api_key') || "").trim();
-        let model = (localStorage.getItem('gemini_model') || "gemini-3.5-flash-lite").trim();
-        if (model === 'custom') model = (localStorage.getItem('gemini_custom_model') || "gemini-3.5-flash-lite").trim();
-
-        if (apiKey && text) {
-          const paragraphs = await callGeminiAPI(text, apiKey, model);
-          prefetchedChapter = {
-            title: `ตอนที่ ${chapters.length + 1}`,
-            paragraphs: paragraphs,
-            sourceUrl: url,
-            nextUrl: nextUrl
-          };
-          document.getElementById('prefetch-indicator').classList.remove('hidden');
-        }
-      } catch (e) {
-        console.warn("Background prefetch failed:", e);
-      } finally {
-        isPrefetching = false;
-      }
+        const { text, nextUrl } = await scrapePage(url);
+        const paragraphs = await translateText(text);
+        prefetchedData = {
+          title: `ตอนที่ ${chapters.length + 1}`,
+          paragraphs: paragraphs,
+          currentUrl: url,
+          nextUrl: nextUrl
+        };
+        document.getElementById('prefetch-badge').style.display = 'inline-block';
+      } catch(e) {}
+      finally { isPrefetching = false; }
     }
 
+    // NEXT CHAPTER CLICK (ONE TAP)
     async function handleNextChapterClick() {
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
@@ -571,194 +496,55 @@
         return;
       }
 
-      if (prefetchedChapter) {
-        chapters.push(prefetchedChapter);
-        nextChapterUrl = prefetchedChapter.nextUrl;
-        prefetchedChapter = null;
-        document.getElementById('prefetch-indicator').classList.add('hidden');
+      // If prefetched
+      if (prefetchedData) {
+        chapters.push({
+          title: prefetchedData.title,
+          paragraphs: prefetchedData.paragraphs
+        });
+        currentUrl = prefetchedData.currentUrl;
+        nextUrlCalculated = prefetchedData.nextUrl;
+        prefetchedData = null;
+        document.getElementById('prefetch-badge').style.display = 'none';
+
         currentChapterIndex = chapters.length - 1;
         renderChapter();
 
-        if (nextChapterUrl) triggerPrefetchNextChapter(nextChapterUrl);
+        if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
         return;
       }
 
-      if (nextChapterUrl) {
-        const loader = document.getElementById('chapter-loader');
-        const nextBtn = document.getElementById('next-chap-btn');
-        loader.classList.remove('hidden');
-        nextBtn.disabled = true;
+      // If not prefetched yet, fetch on-the-fly
+      if (nextUrlCalculated) {
+        const btnText = document.getElementById('next-btn-text');
+        btnText.innerText = "กำลังแปลตอนถัดไป...";
+        document.getElementById('next-chap-btn').disabled = true;
 
         try {
-          await loadAndTranslateChapter(nextChapterUrl);
+          currentUrl = nextUrlCalculated;
+          const { text, nextUrl } = await scrapePage(currentUrl);
+          nextUrlCalculated = nextUrl;
+
+          const paragraphs = await translateText(text);
+          chapters.push({
+            title: `ตอนที่ ${chapters.length + 1}`,
+            paragraphs: paragraphs
+          });
+          currentChapterIndex = chapters.length - 1;
+          renderChapter();
+
+          if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
         } catch (err) {
-          alert("ไม่สามารถโหลดตอนถัดไปอัตโนมัติได้: " + err.message);
-          openImportModal(nextChapterUrl);
+          alert("ไม่สามารถดึงตอนถัดไปอัตโนมัติได้: " + err.message);
+          document.getElementById('import-url').value = nextUrlCalculated;
+          openModal('import-modal');
         } finally {
-          loader.classList.add('hidden');
-          nextBtn.disabled = false;
+          btnText.innerText = "ตอนถัดไป →";
+          document.getElementById('next-chap-btn').disabled = false;
         }
       } else {
-        openImportModal();
+        openModal('import-modal');
       }
-    }
-
-    // ==================== ROBUST GEMINI API CALL ====================
-
-    async function callGeminiAPI(text, key, rawModelName) {
-      let cleanModel = rawModelName.replace(/^models\//, '').trim();
-      const glossaryContext = Object.entries(glossary).map(([k, v]) => `${k} = ${v}`).join(", ");
-      
-      const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลข้อความด้านล่างนี้เป็นภาษาไทยให้อ่านลื่นไหล สละสลวย ได้อารมณ์นิยาย
-สำคัญมาก:
-1. หากพบคำศัพท์เหล่านี้ ให้แปลตามที่กำหนดอย่างเคร่งครัด: [${glossaryContext}]
-2. ตอบกลับเป็นรูปแบบ JSON Array ของ Object เท่านั้น: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ไม่ต้องใส่คำอธิบายอื่น`;
-
-      const endpoint = `[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){cleanModel}:generateContent?key=${key}`;
-
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [
-            { role: "user", parts: [{ text: `${prompt}\n\nข้อความที่ต้องแปล:\n${text.substring(0, 5000)}` }] }
-          ]
-        })
-      });
-
-      const resData = await response.json();
-      if (!response.ok) {
-        throw new Error(resData.error?.message || "เชื่อมต่อ Gemini API ไม่สำเร็จ");
-      }
-
-      let aiText = resData.candidates[0].content.parts[0].text;
-      
-      // ดึงเฉพาะก้อน JSON Array ป้องกัน AI แถมข้อความมาจน JSON.parse พัง
-      const jsonMatch = aiText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-      if (jsonMatch) {
-        aiText = jsonMatch[0];
-      } else {
-        aiText = aiText.replace(/```json/g, '').replace(/```/g, '').trim();
-      }
-
-      return JSON.parse(aiText);
-    }
-
-    // ==================== GLOSSARY & SETTINGS ====================
-
-    function renderGlossaryList() {
-      const list = document.getElementById('glossary-list');
-      list.innerHTML = "";
-      Object.entries(glossary).forEach(([src, tgt]) => {
-        const item = document.createElement('div');
-        item.className = "flex items-center justify-between p-2 rounded bg-black/5 dark:bg-white/5";
-        item.innerHTML = `
-          <span><b>${src}</b> ➔ ${tgt}</span>
-          <button onclick="deleteGlossaryTerm('${src}')" class="text-red-500 font-bold hover:underline">ลบ</button>
-        `;
-        list.appendChild(item);
-      });
-    }
-
-    function addGlossaryTerm() {
-      const src = document.getElementById('glossary-source').value.trim();
-      const tgt = document.getElementById('glossary-target').value.trim();
-      if (!src || !tgt) return;
-      glossary[src] = tgt;
-      localStorage.setItem('novel_glossary', JSON.stringify(glossary));
-      document.getElementById('glossary-source').value = "";
-      document.getElementById('glossary-target').value = "";
-      renderGlossaryList();
-      renderChapter();
-    }
-
-    function deleteGlossaryTerm(src) {
-      delete glossary[src];
-      localStorage.setItem('novel_glossary', JSON.stringify(glossary));
-      renderGlossaryList();
-      renderChapter();
-    }
-
-    function saveSettings() {
-      localStorage.setItem('gemini_api_key', document.getElementById('gemini-api-key').value.trim());
-      localStorage.setItem('gemini_model', document.getElementById('gemini-model-select').value);
-      localStorage.setItem('gemini_custom_model', document.getElementById('custom-model-name').value.trim());
-      openSettingsModal();
-      alert("บันทึกการตั้งค่าเรียบร้อยแล้ว");
-    }
-
-    function loadSettings() {
-      if (localStorage.getItem('gemini_api_key')) {
-        document.getElementById('gemini-api-key').value = localStorage.getItem('gemini_api_key');
-      }
-      if (localStorage.getItem('gemini_model')) {
-        document.getElementById('gemini-model-select').value = localStorage.getItem('gemini_model');
-        toggleCustomModelInput();
-      }
-      if (localStorage.getItem('gemini_custom_model')) {
-        document.getElementById('custom-model-name').value = localStorage.getItem('gemini_custom_model');
-      }
-    }
-
-    // ==================== TTS & UTILS ====================
-
-    let ttsIndex = 0;
-    let isTTSPlaying = false;
-    let synth = window.speechSynthesis;
-
-    function startTTS() {
-      if (!synth) return alert("อุปกรณ์นี้ไม่รองรับระบบอ่านออกเสียง");
-      stopTTS();
-      ttsIndex = 0;
-      isTTSPlaying = true;
-      document.getElementById('tts-bar').classList.remove('hidden');
-      playNextTTSParagraph();
-    }
-
-    function playNextTTSParagraph() {
-      const chap = chapters[currentChapterIndex];
-      if (ttsIndex >= chap.paragraphs.length || !isTTSPlaying) return stopTTS();
-
-      document.querySelectorAll('.reading-highlight').forEach(el => el.classList.remove('reading-highlight'));
-      const activeEl = document.getElementById(`para-${ttsIndex}`);
-      if (activeEl) {
-        activeEl.classList.add('reading-highlight');
-        activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-
-      const utter = new SpeechSynthesisUtterance(chap.paragraphs[ttsIndex].th);
-      utter.lang = 'th-TH';
-      utter.onend = () => { ttsIndex++; playNextTTSParagraph(); };
-      utter.onerror = () => stopTTS();
-      synth.speak(utter);
-    }
-
-    function toggleTTSPlayback() {
-      if (synth.speaking && !synth.paused) {
-        synth.pause();
-        document.getElementById('tts-play-btn').innerText = "อ่านต่อ";
-      } else if (synth.paused) {
-        synth.resume();
-        document.getElementById('tts-play-btn').innerText = "หยุดชั่วคราว";
-      }
-    }
-
-    function stopTTS() {
-      if (synth) synth.cancel();
-      isTTSPlaying = false;
-      document.getElementById('tts-bar').classList.add('hidden');
-      document.querySelectorAll('.reading-highlight').forEach(el => el.classList.remove('reading-highlight'));
-    }
-
-    function exportTxt() {
-      const chap = chapters[currentChapterIndex];
-      let content = `${chap.title}\n\n`;
-      chap.paragraphs.forEach(p => { content += `${p.th}\n\n`; });
-      const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${chap.title}.txt`;
-      a.click();
     }
 
     function prevChapter() {
@@ -766,6 +552,66 @@
         currentChapterIndex--;
         renderChapter();
       }
+    }
+
+    // GLOSSARY
+    function renderGlossary() {
+      const list = document.getElementById('glossary-list');
+      list.innerHTML = "";
+      Object.entries(glossary).forEach(([k,v]) => {
+        const row = document.createElement('div');
+        row.style.cssText = "display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.05);";
+        row.innerHTML = `<span><b>${k}</b> ➔ ${v}</span><a href="javascript:void(0)" onclick="delGloss('${k}')" style="color:red; font-weight:600; text-decoration:none;">ลบ</a>`;
+        list.appendChild(row);
+      });
+    }
+
+    function addGlossary() {
+      const s = document.getElementById('gloss-src').value.trim();
+      const t = document.getElementById('gloss-tgt').value.trim();
+      if (!s || !t) return;
+      glossary[s] = t;
+      localStorage.setItem('nov_gloss', JSON.stringify(glossary));
+      document.getElementById('gloss-src').value = "";
+      document.getElementById('gloss-tgt').value = "";
+      renderGlossary();
+      renderChapter();
+    }
+
+    function delGloss(k) {
+      delete glossary[k];
+      localStorage.setItem('nov_gloss', JSON.stringify(glossary));
+      renderGlossary();
+      renderChapter();
+    }
+
+    // SETTINGS
+    function saveSettings() {
+      localStorage.setItem('nov_gemini_key', document.getElementById('gemini-key').value.trim());
+      localStorage.setItem('nov_gemini_model', document.getElementById('gemini-model').value);
+      closeModal('settings-modal');
+      alert("บันทึกการตั้งค่าเรียบร้อยแล้ว");
+    }
+
+    function loadSettings() {
+      if (localStorage.getItem('nov_gemini_key')) {
+        document.getElementById('gemini-key').value = localStorage.getItem('nov_gemini_key');
+      }
+      if (localStorage.getItem('nov_gemini_model')) {
+        document.getElementById('gemini-model').value = localStorage.getItem('nov_gemini_model');
+      }
+    }
+
+    // EXPORT
+    function exportTxt() {
+      const chap = chapters[currentChapterIndex];
+      let txt = chap.title + "\n\n";
+      chap.paragraphs.forEach(p => { txt += p.th + "\n\n"; });
+      const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = chap.title + ".txt";
+      a.click();
     }
   </script>
 </body>
