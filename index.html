@@ -41,7 +41,7 @@
     }
     .brand-title { font-family: 'Kanit', sans-serif; font-weight: 600; font-size: 16px; line-height: 1.2; }
 
-    .header-actions { display: flex; align-items: center; gap: 6px; }
+    .header-actions { display: flex; align-items: center; gap: 5px; }
     .btn {
       padding: 6px 11px; font-size: 12px; font-weight: 500;
       border-radius: 6px; border: 1px solid rgba(0,0,0,0.12);
@@ -58,6 +58,9 @@
     body.theme-dark .btn-secondary { background: rgba(255,255,255,0.1); }
     .btn-danger { background: #dc2626 !important; color: #fff !important; border: none !important; }
 
+    .desktop-controls { display: none; align-items: center; gap: 4px; }
+    @media (min-width: 768px) { .desktop-controls { display: flex; } }
+
     #prefetch-badge {
       display: none; font-size: 10px; padding: 2px 7px; border-radius: 999px;
       background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
@@ -65,7 +68,7 @@
 
     /* MAIN READING CANVAS */
     main {
-      flex: 1; width: 100%; max-width: 720px; margin: 0 auto;
+      flex: 1; width: 100%; max-width: 740px; margin: 0 auto;
       padding: 20px 16px 120px 16px;
     }
     @media (min-width: 768px) { main { padding-bottom: 50px; } }
@@ -175,7 +178,15 @@
       <div class="brand-icon">N</div>
       <div class="brand-title">NovelTranslate AI</div>
     </div>
+    
     <div class="header-actions">
+      <!-- Desktop Theme & Font Size Controls -->
+      <div class="desktop-controls">
+        <button class="btn" onclick="adjustFontSize(-1)" title="ลดขนาดตัวอักษร">A-</button>
+        <button class="btn" onclick="adjustFontSize(1)" title="เพิ่มขนาดตัวอักษร">A+</button>
+        <button class="btn" id="desktop-theme-btn" onclick="cycleTheme()" title="เปลี่ยนธีม">ถนอมสายตา</button>
+      </div>
+
       <div id="prefetch-badge">ตอนถัดไปพร้อม</div>
       <button class="btn btn-primary" onclick="openModal('import-modal')">+ วางลิงก์</button>
       <button class="btn" onclick="openModal('glossary-modal')">ศัพท์</button>
@@ -268,7 +279,7 @@
     </div>
   </div>
 
-  <!-- MODAL 3: SETTINGS (WITH LIVE API MODEL FETCHER) -->
+  <!-- MODAL 3: SETTINGS -->
   <div class="modal-overlay" id="settings-modal">
     <div class="modal-box">
       <div class="modal-head">
@@ -359,7 +370,7 @@
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
           { th: "แตะที่ย่อหน้านี้ เพื่อดูข้อความภาษาจีนต้นฉบับเด้งลงมาใต้ย่อหน้าทันที", src: "轻触本段落，即可在下方展开中文原文对比阅读" },
-          { th: "ไปที่เมนู 'ตั้งค่า' แล้วกดปุ่ม 'ตรวจเช็กโมเดล' เพื่อดึงรายชื่อโมเดลล่าสุดจาก Google API ได้ทันที", src: "可在设置页面一键获取可用的模型列表" }
+          { th: "เนื้อหาทั้งตอนจะถูกดึงมาแปลจนจบบท โดยไม่ติดข้อจำกัดย่อหน้าหรือถูกโฆษณาบังอีกต่อไป", src: "已解除段落与字数限制，全章内容完整翻译" }
         ]
       }
     ];
@@ -378,13 +389,19 @@
       const themes = ['sepia', 'light', 'dark'];
       currentTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length];
       document.getElementById('app-body').className = 'theme-' + currentTheme;
-      document.getElementById('mobile-theme-btn').innerText = 
-        currentTheme === 'sepia' ? 'ถนอมสายตา' : (currentTheme === 'light' ? 'สว่าง' : 'มืด');
+      
+      const themeText = currentTheme === 'sepia' ? 'ถนอมสายตา' : (currentTheme === 'light' ? 'สว่าง' : 'มืด');
+      const mobileBtn = document.getElementById('mobile-theme-btn');
+      const desktopBtn = document.getElementById('desktop-theme-btn');
+      if (mobileBtn) mobileBtn.innerText = themeText;
+      if (desktopBtn) desktopBtn.innerText = themeText;
+      localStorage.setItem('nov_theme', currentTheme);
     }
 
     function adjustFontSize(delta) {
-      currentFontSize = Math.min(26, Math.max(14, currentFontSize + delta));
+      currentFontSize = Math.min(28, Math.max(14, currentFontSize + delta));
       document.getElementById('reading-content').style.fontSize = currentFontSize + 'px';
+      localStorage.setItem('nov_font_size', currentFontSize);
     }
 
     function openModal(id) { document.getElementById(id).classList.add('active'); }
@@ -473,30 +490,42 @@
       }, 150);
     }
 
-    // SCRAPER ENGINE
+    // ==================== UNLIMITED SCRAPER ENGINE ====================
     async function scrapePage(url) {
       let rawText = "";
+
+      // 1. ลองดึงผ่าน Jina AI (ตัดเฉพาะบรรทัดสั้น โฆษณา หรือลิงก์ออก แต่เอาทุกย่อหน้า)
       try {
         const res = await fetch(`https://r.jina.ai/${url}`);
         if (res.ok) {
           const md = await res.text();
-          const lines = md.split('\n').map(l => l.trim()).filter(l => l.length > 10 && !l.startsWith('!') && !l.startsWith('['));
-          rawText = lines.slice(0, 35).join('\n\n');
+          const lines = md.split('\n')
+            .map(l => l.trim())
+            .filter(l => l.length > 5 && !l.startsWith('!') && !l.startsWith('['));
+          
+          // ปลดล็อก: เอาทุกย่อหน้าจนจบบท
+          rawText = lines.join('\n\n');
         }
       } catch (e) {}
 
+      // 2. ลองดึงผ่าน Allorigins fallback
       if (!rawText || rawText.length < 50) {
         const pRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
         const pData = await pRes.json();
         if (pData.contents) {
           const parser = new DOMParser();
           const doc = parser.parseFromString(pData.contents, 'text/html');
+
+          // ลบแท็กขยะและโฆษณาออก
+          doc.querySelectorAll('script, style, nav, header, footer, noscript, .ads, ins, iframe').forEach(e => e.remove());
+
           const paras = [];
           doc.querySelectorAll('article p, .content p, #content, .txtnav, p').forEach(el => {
             const t = el.innerText ? el.innerText.trim() : '';
-            if (t.length > 20) paras.push(t);
+            if (t.length > 5) paras.push(t);
           });
-          rawText = paras.slice(0, 35).join('\n\n');
+          // ปลดล็อก: รวมทุกย่อหน้า
+          rawText = paras.join('\n\n');
         }
       }
 
@@ -540,6 +569,7 @@
       }
     }
 
+    // ==================== UNLIMITED API TRANSLATE CALL ====================
     async function executeApiCall(rawText, modelToUse) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
@@ -561,11 +591,13 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
 ตอบกลับเฉพาะรูปแบบ JSON Array: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ไม่ต้องใส่ Markdown`;
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${key}`;
+      
+      // ปลดล็อก: ส่งข้อความเต็มบท (rawText) ไม่จำกัด substring
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหา:\n${rawText.substring(0, 4800)}` }] }]
+          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาทั้งตอนที่ต้องแปล:\n${rawText}` }] }]
         })
       });
 
@@ -626,8 +658,8 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
           for (let sec = 5; sec > 0; sec--) {
             if (retryAbortRequested) throw new Error("ผู้ใช้ยกเลิกการส่งซ้ำ");
             if (onStatusUpdate) {
-              const modelLabel = hasBackup ? `กำลังสลับใช้: ${activeModel}` : `โมเดล: ${activeModel}`;
-              onStatusUpdate(`เซิร์ฟเวอร์หนาแน่น! ลองใหม่รอบที่ ${attempt}/${maxRetries} (${modelLabel}) ใน ${sec} วิ...`);
+              const modelLabel = hasBackup ? `สลับใช้: ${activeModel}` : `โมเดล: ${activeModel}`;
+              onStatusUpdate(`คิวแน่น! ลองใหม่รอบที่ ${attempt}/${maxRetries} (${modelLabel}) ใน ${sec} วิ...`);
             }
             await new Promise(r => setTimeout(r, 1000));
           }
@@ -661,7 +693,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       status.style.display = 'block';
       status.style.background = '#eff6ff';
       status.style.color = '#1e40af';
-      status.innerText = "กำลังดึงเนื้อหาและวิเคราะห์ข้อความ...";
+      status.innerText = "กำลังดึงเนื้อหาทั้งบท...";
       startBtn.disabled = true;
       btnText.innerText = "กำลังทำงาน...";
 
@@ -671,7 +703,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
         const { text, nextUrl } = await scrapePage(url);
         nextUrlCalculated = nextUrl;
 
-        status.innerText = "กำลังแปลเนื้อหาผ่าน AI...";
+        status.innerText = `ดึงเนื้อหาสำเร็จ (${text.length} ตัวอักษร) กำลังแปลผ่าน AI...`;
 
         const paragraphs = await translateTextWithPingPong(text, (msg) => {
           status.style.background = '#fffbeb';
@@ -824,7 +856,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       renderChapter();
     }
 
-    // ==================== LIVE MODEL FETCHER ====================
+    // LIVE MODEL FETCHER
     async function fetchLiveModels() {
       const key = document.getElementById('gemini-key').value.trim();
       const statusText = document.getElementById('fetch-status-text');
@@ -853,7 +885,6 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
           throw new Error("ไม่พบข้อมูลโมเดลในบัญชีนี้");
         }
 
-        // กรองเฉพาะโมเดลที่รองรับ generateContent และเป็นตระกูล gemini
         const availableModels = data.models
           .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
           .map(m => m.name.replace(/^models\//, ''))
@@ -863,10 +894,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
           throw new Error("ไม่พบโมเดล Gemini ที่พร้อมใช้งาน");
         }
 
-        // บันทึกลงแคช
         localStorage.setItem('nov_cached_models', JSON.stringify(availableModels));
-
-        // อัปเดต Dropdown ทั้ง Primary และ Backup
         populateModelDropdowns(availableModels);
 
         statusText.style.color = "#16a34a";
@@ -887,7 +915,6 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       const savedPrimary = localStorage.getItem('nov_primary_model') || primarySelect.value;
       const savedBackup = localStorage.getItem('nov_backup_model') || backupSelect.value;
 
-      // อัปเดตตัวหลัก
       primarySelect.innerHTML = "";
       modelsList.forEach(m => {
         const opt = document.createElement('option');
@@ -897,7 +924,6 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
         primarySelect.appendChild(opt);
       });
 
-      // อัปเดตตัวสำรอง
       backupSelect.innerHTML = `<option value="none">(ไม่ใช้โมเดลสำรอง - ใช้เฉพาะตัวหลัก)</option>`;
       modelsList.forEach(m => {
         const opt = document.createElement('option');
@@ -924,7 +950,21 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
         document.getElementById('gemini-key').value = localStorage.getItem('nov_gemini_key');
       }
 
-      // โหลดโมเดลที่เคยตรวจพบจากแคชก่อน
+      // โหลดการตั้งค่าธีมและขนาดตัวอักษรเดิม
+      if (localStorage.getItem('nov_theme')) {
+        currentTheme = localStorage.getItem('nov_theme');
+        document.getElementById('app-body').className = 'theme-' + currentTheme;
+        const themeText = currentTheme === 'sepia' ? 'ถนอมสายตา' : (currentTheme === 'light' ? 'สว่าง' : 'มืด');
+        const mobileBtn = document.getElementById('mobile-theme-btn');
+        const desktopBtn = document.getElementById('desktop-theme-btn');
+        if (mobileBtn) mobileBtn.innerText = themeText;
+        if (desktopBtn) desktopBtn.innerText = themeText;
+      }
+
+      if (localStorage.getItem('nov_font_size')) {
+        currentFontSize = parseInt(localStorage.getItem('nov_font_size'), 10);
+      }
+
       try {
         const cached = JSON.parse(localStorage.getItem('nov_cached_models') || '[]');
         if (Array.isArray(cached) && cached.length > 0) {
