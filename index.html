@@ -57,7 +57,6 @@
     .btn-secondary { background: rgba(0,0,0,0.06); }
     body.theme-dark .btn-secondary { background: rgba(255,255,255,0.1); }
     .btn-danger { background: #dc2626 !important; color: #fff !important; border: none !important; }
-    .btn-success { background: #16a34a !important; color: #fff !important; border: none !important; }
 
     .desktop-controls { display: none; align-items: center; gap: 4px; }
     @media (min-width: 768px) { .desktop-controls { display: flex; } }
@@ -207,9 +206,9 @@
     .book-meta { font-size: 11px; opacity: 0.65; margin-top: 2px; }
 
     .batch-bar {
-      display: flex; align-items: center; gap: 6px; padding: 6px 14px;
+      display: flex; align-items: center; gap: 6px; padding: 8px 14px;
       background: rgba(0,0,0,0.02); border-top: 1px dashed rgba(0,0,0,0.08);
-      font-size: 12px;
+      font-size: 12px; flex-wrap: wrap;
     }
     body.theme-dark .batch-bar { background: rgba(255,255,255,0.03); border-top-color: rgba(255,255,255,0.08); }
 
@@ -233,7 +232,7 @@
       padding: 2px 6px; font-size: 10px; border-radius: 4px; border: none; cursor: pointer;
     }
 
-    /* PROGRESS BOX (DEFAULT / SUCCESS) */
+    /* PROGRESS BOX */
     .progress-box {
       display: none; margin: 10px 0; padding: 10px 12px; border-radius: 8px;
       background: #eff6ff; color: #1e40af; font-size: 12px; transition: all 0.2s ease;
@@ -338,7 +337,7 @@
         <button class="modal-close" onclick="closeModal('bookshelf-modal')">✕</button>
       </div>
 
-      <!-- Batch Progress Status Box (With Success / Close State) -->
+      <!-- Batch Progress Status Box -->
       <div class="progress-box" id="batch-progress-box">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <b id="batch-progress-title">กำลังแปลล่วงหน้า...</b>
@@ -348,7 +347,27 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 330px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แตะที่ชื่อเรื่องเพื่อกางดูตอน และสามารถกดลบตอนเก่าทีละบทได้อิสระ</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*รองรับทั้งแปลอัตโนมัติ และการวางชุด URL หลายบทพร้อมกัน</p>
+    </div>
+  </div>
+
+  <!-- MODAL: BATCH URL QUEUE INPUT -->
+  <div class="modal-overlay" id="batch-urls-modal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title">วางชุด URL ตอนที่ต้องการแปล</div>
+        <button class="modal-close" onclick="closeModal('batch-urls-modal')">✕</button>
+      </div>
+      <p style="font-size: 12px; opacity: 0.8; margin-bottom: 8px;">
+        วาง URL ของบทที่ต้องการแปลต่อเนื่อง (บรรทัดละ 1 URL) เช่น ลิงก์บทที่ 815, 816, 817:
+      </p>
+      <textarea id="batch-urls-textarea" class="form-input" style="height: 120px; font-family: monospace; font-size: 11px;" placeholder="https://www.69shuba.com/txt/88724/40711452
+https://www.69shuba.com/txt/88724/40711453
+https://www.69shuba.com/txt/88724/40711454"></textarea>
+      <div style="display: flex; gap: 8px; margin-top: 12px;">
+        <button class="btn" style="flex: 1;" onclick="closeModal('batch-urls-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" style="flex: 2;" onclick="startCustomUrlsBatch()">เริ่มแปลตามรายการนี้</button>
+      </div>
     </div>
   </div>
 
@@ -555,6 +574,8 @@
     let retryAbortRequested = false;
     let batchCancelRequested = false;
     let isBatchRunning = false;
+    let isBatchComplete = false;
+    let targetBookIdForQueue = "";
 
     let selectedWordBuffer = "";
     let isSelectedChinese = false;
@@ -568,8 +589,8 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับจัดการบททีละตอนและแจ้งเตือนสถานะสำเร็จ", src: "欢迎来到 NovelTranslate" },
-          { th: "ในหน้า 'ชั้นหนังสือ' คุณสามารถกดลบตอนเก่าทีละบทได้แล้ว และเมื่อแปลล่วงหน้าเสร็จจะขึ้นแถบสีเขียวพร้อมปุ่มปิด", src: "支持单章删除及翻译完成状态提示" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับระบบแปลล่วงหน้าทนทานต่อ Anti-Bot", src: "欢迎来到 NovelTranslate" },
+          { th: "คุณสามารถกดปุ่ม '+ วางชุด URL' ในชั้นหนังสือเพื่อนำลิงก์หลายๆ ตอนมาใส่ให้แปลต่อเนื่องได้ทันที หรือกดเริ่มแปลล่วงหน้าได้ตามปกติ", src: "支持多URL队列批量输入与自动下一章抓取" }
         ]
       }
     ];
@@ -754,7 +775,7 @@
       }, 150);
     }
 
-    // ==================== BOOKSHELF UI WITH INDIVIDUAL CHAPTER DELETE ====================
+    // ==================== BOOKSHELF UI ====================
     async function openBookshelfModal() {
       const listContainer = document.getElementById('bookshelf-list');
       listContainer.innerHTML = '<div style="text-align:center; padding:15px; opacity:0.6;">กำลังเปิดคลังหนังสือ...</div>';
@@ -802,12 +823,15 @@
           </div>
           <div class="batch-bar">
             <span>แปลล่วงหน้า</span>
-            <input type="number" id="batch-input-${b.bookId}" class="form-input" style="width: 55px; padding: 3px 6px; font-size: 12px;" min="1" max="50" value="5">
+            <input type="number" id="batch-input-${b.bookId}" class="form-input" style="width: 50px; padding: 3px 6px; font-size: 12px;" min="1" max="50" value="5">
             <span>บท</span>
-            <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px; margin-left: 4px;" onclick="startBatchTranslateForBook('${b.bookId}')">
+            <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="startBatchTranslateForBook('${b.bookId}')">
               ⚡ เริ่มแปลล่วงหน้า
             </button>
-            <button class="btn" style="padding: 3px 6px; font-size: 10px; margin-left: auto;" onclick="fixBookNextUrl('${b.bookId}')" title="หากต้องการระบุหรือแก้ไข URL ตอนต่อไป">
+            <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="openBatchUrlsModal('${b.bookId}')" title="วางชุด URL หลายๆ ตอนเพื่อแปลรวดเดียว">
+              + วางชุด URL
+            </button>
+            <button class="btn" style="padding: 3px 6px; font-size: 10px; margin-left: auto;" onclick="fixBookNextUrl('${b.bookId}')" title="แก้ไข URL สำหรับบทถัดไป">
               🔗 แก้ URL ถัดไป
             </button>
           </div>
@@ -826,14 +850,12 @@
       }
     }
 
-    // ฟังก์ชันลบตอนเฉพาะบท
     async function deleteSingleChapter(e, bookId, chapId, chapTitle) {
       e.stopPropagation();
       if (!confirm(`ต้องการลบ "${chapTitle}" ออกจากเครื่องใช่หรือไม่?`)) return;
 
       await dbDeleteSpecificChapter(chapId);
 
-      // โหลดและอัปเดตข้อมูลของหนังสือนั้นใหม่
       const remainingChaps = await dbGetChaptersByBook(bookId);
       remainingChaps.sort((x, y) => x.order - y.order);
 
@@ -859,7 +881,6 @@
         }
       }
 
-      // ถ้ากำลังเปิดอ่านเรื่องนี้อยู่ ให้อัปเดตวิวปัจจุบันด้วย
       if (currentBookId === bookId) {
         await loadBookFromDB(bookId);
       }
@@ -882,6 +903,12 @@
         }
         alert("อัปเดต URL เรียบร้อยแล้ว ตอนนี้สามารถกด 'เริ่มแปลล่วงหน้า' ได้ทันที");
       }
+    }
+
+    function openBatchUrlsModal(bookId) {
+      targetBookIdForQueue = bookId;
+      document.getElementById('batch-urls-textarea').value = "";
+      openModal('batch-urls-modal');
     }
 
     async function jumpToChapterFromShelf(bookId, chapIdx) {
@@ -966,13 +993,14 @@
       return null;
     }
 
-    // ==================== UNIVERSAL SCRAPER ENGINE ====================
+    // ==================== SCRAPER ENGINE ====================
     async function scrapePage(url) {
       let rawText = "";
       let rawChapTitle = "";
       let rawBookTitle = "";
       let realNextUrl = null;
 
+      // 1. ลองผ่าน Allorigins / Corsproxy
       const proxyList = [
         `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
         `https://corsproxy.io/?${encodeURIComponent(url)}`
@@ -1028,6 +1056,7 @@
         }
       }
 
+      // 2. ลองผ่าน Jina AI Reader สำรอง
       if (!rawText || rawText.length < 50) {
         try {
           const res = await fetch(`https://r.jina.ai/${url}`);
@@ -1488,18 +1517,118 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
     }
 
     // ==================== BATCH PRE-TRANSLATE WITH SUCCESS STATUS ====================
-    let isBatchComplete = false;
-
     function handleBatchActionClick() {
       if (isBatchComplete) {
-        // ถ้าแปลเสร็จแล้ว กดยุบปิดแถบแจ้งเตือน
         document.getElementById('batch-progress-box').style.display = 'none';
       } else {
-        // ถ้ากำลังแปลอยู่ กดเพื่อสั่งหยุด
         cancelBatchTranslate();
       }
     }
 
+    // ฟังก์ชันแปลล่วงหน้าตามคิว URL ที่ผู้ใช้วางเอง (เสถียรที่สุด 100%)
+    async function startCustomUrlsBatch() {
+      const text = document.getElementById('batch-urls-textarea').value.trim();
+      if (!text) return alert("กรุณาวาง URL อย่างน้อย 1 บรรทัด");
+
+      const urls = text.split('\n').map(u => u.trim()).filter(u => u.startsWith('http'));
+      if (urls.length === 0) return alert("ไม่พบ URL ที่ถูกต้อง กรุณาตรวจสอบลิงก์");
+
+      closeModal('batch-urls-modal');
+
+      const bookId = targetBookIdForQueue || currentBookId;
+      let bookChaps = await dbGetChaptersByBook(bookId);
+      bookChaps.sort((a, b) => a.order - b.order);
+
+      isBatchRunning = true;
+      batchCancelRequested = false;
+      isBatchComplete = false;
+
+      const progressBox = document.getElementById('batch-progress-box');
+      const progressTitle = document.getElementById('batch-progress-title');
+      const progressDesc = document.getElementById('batch-progress-desc');
+      const actionBtn = document.getElementById('batch-action-btn');
+
+      progressBox.className = 'progress-box';
+      progressBox.style.display = 'block';
+      progressTitle.innerText = "กำลังแปลล่วงหน้าจากคิว URL...";
+      actionBtn.className = 'btn btn-danger';
+      actionBtn.innerText = "หยุดแปล";
+
+      let successCount = 0;
+
+      for (let i = 0; i < urls.length; i++) {
+        if (batchCancelRequested) {
+          progressDesc.innerText = `หยุดการแปลตามคำสั่งแล้ว (แปลเสร็จสิ้น ${successCount} ตอน)`;
+          break;
+        }
+
+        const targetUrl = urls[i];
+        progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i + 1}/${urls.length}...`;
+
+        try {
+          const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(targetUrl);
+          
+          const result = await translateTextWithPingPong(text, (msg) => {
+            progressDesc.innerText = `[${i + 1}/${urls.length}] ${msg.substring(0, 32)}...`;
+          }, rawChapTitle, rawBookTitle);
+
+          const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${bookChaps.length + i + 1}`;
+          const nextInQueue = (i + 1 < urls.length) ? urls[i + 1] : nextUrl;
+
+          const newChap = {
+            id: `${bookId}_chap_${Date.now()}_${i}`,
+            bookId: bookId,
+            order: bookChaps.length + i + 1,
+            title: chapTitle,
+            paragraphs: result.paragraphs,
+            sourceUrl: targetUrl,
+            nextUrl: nextInQueue
+          };
+
+          await dbSaveChapter(newChap);
+          successCount++;
+
+          await dbSaveBook({
+            bookId: bookId,
+            title: result.bookTitle || currentBookTitle,
+            lastChapterIndex: (bookId === currentBookId) ? currentChapterIndex : bookChaps.length + i,
+            lastChapterTitle: newChap.title,
+            totalChapters: bookChaps.length + i + 1,
+            lastUrl: targetUrl,
+            updatedAt: Date.now()
+          });
+
+          if (i + 1 < urls.length && !batchCancelRequested) {
+            progressDesc.innerText = `บันทึก "${chapTitle}" สำเร็จ พักระบบ 2.5 วิก่อนเริ่มบทถัดไป...`;
+            await new Promise(r => setTimeout(r, 2500));
+          }
+        } catch (err) {
+          progressDesc.innerText = `หยุดที่ตอนที่ ${i + 1}: ${err.message}`;
+          break;
+        }
+      }
+
+      isBatchRunning = false;
+      if (successCount > 0 && !batchCancelRequested) {
+        isBatchComplete = true;
+        progressBox.className = 'progress-box success';
+        progressTitle.innerText = "✓ แปลล่วงหน้าเสร็จสมบูรณ์!";
+        progressDesc.innerText = `บันทึกเนื้อหาเรียบร้อยแล้วทั้งหมด ${successCount} ตอน พร้อมให้อ่านแบบออฟไลน์`;
+        actionBtn.className = 'btn btn-secondary';
+        actionBtn.innerText = "ปิดการแจ้งเตือน";
+      } else if (batchCancelRequested) {
+        actionBtn.className = 'btn btn-secondary';
+        actionBtn.innerText = "ปิดการแจ้งเตือน";
+        isBatchComplete = true;
+      }
+
+      openBookshelfModal();
+      if (currentBookId === bookId) {
+        loadBookFromDB(bookId, currentChapterIndex);
+      }
+    }
+
+    // ฟังก์ชันแปลล่วงหน้าตามจำนวนตอนปกติ
     async function startBatchTranslateForBook(bookId) {
       if (isBatchRunning) {
         alert("กำลังมีกระบวนการแปลล่วงหน้าทำงานอยู่ กรุณารอหรือกดยกเลิกก่อน");
@@ -1534,7 +1663,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       const progressDesc = document.getElementById('batch-progress-desc');
       const actionBtn = document.getElementById('batch-action-btn');
 
-      // รีเซ็ตสไตล์เป็นสีน้ำเงิน (กำลังแปล)
       progressBox.className = 'progress-box';
       progressBox.style.display = 'block';
       progressTitle.innerText = "กำลังแปลล่วงหน้า...";
@@ -1601,13 +1729,12 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
       isBatchRunning = false;
 
-      // ตรวจสอบสถานะเมื่อทำงานจบ
       if (successCount > 0 && !batchCancelRequested) {
         isBatchComplete = true;
-        progressBox.className = 'progress-box success'; // เปลี่ยนเป็นสีเขียว
+        progressBox.className = 'progress-box success';
         progressTitle.innerText = "✓ แปลล่วงหน้าเสร็จสมบูรณ์!";
         progressDesc.innerText = `บันทึกเนื้อหาเรียบร้อยแล้วทั้งหมด ${successCount} ตอน พร้อมให้อ่านแบบออฟไลน์`;
-        actionBtn.className = 'btn btn-secondary'; // เปลี่ยนเป็นปุ่มปิด
+        actionBtn.className = 'btn btn-secondary';
         actionBtn.innerText = "ปิดการแจ้งเตือน";
       } else if (batchCancelRequested) {
         actionBtn.className = 'btn btn-secondary';
