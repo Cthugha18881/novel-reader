@@ -3,9 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>NovelTranslate AI - เครื่องมือแปลและอ่านนิยาย</title>
+  <title>NovelTranslate AI</title>
   
-  <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -26,16 +25,12 @@
     }
   </script>
 
-  <!-- Google Fonts: Sarabun & Kanit -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&family=Sarabun:wght@300;400;500;600&display=swap" rel="stylesheet">
 
   <style>
-    body {
-      font-family: 'Sarabun', sans-serif;
-      -webkit-tap-highlight-color: transparent;
-    }
+    body { font-family: 'Sarabun', sans-serif; -webkit-tap-highlight-color: transparent; }
     .font-kanit { font-family: 'Kanit', sans-serif; }
     .theme-light { background-color: #f8fafc; color: #1e293b; }
     .theme-sepia { background-color: #f4ecd8; color: #2b2114; }
@@ -64,28 +59,28 @@
       </div>
       <div>
         <h1 class="font-kanit font-semibold text-base leading-tight">NovelTranslate AI</h1>
-        <p id="chapter-title-nav" class="text-xs opacity-60 truncate max-w-[160px] sm:max-w-xs">ตอนปัจจุบัน</p>
+        <p id="chapter-title-nav" class="text-xs opacity-60 truncate max-w-[150px] sm:max-w-xs">ตอนปัจจุบัน</p>
       </div>
     </div>
 
-    <!-- Top Action Buttons -->
+    <!-- Actions -->
     <div class="flex items-center gap-1.5 sm:gap-2">
       <button onclick="openImportModal()" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium flex items-center gap-1 shadow transition">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        <span>นำเข้า/แปล</span>
+        <span>วางลิงก์แปล</span>
       </button>
 
-      <button onclick="toggleGlossaryModal()" class="p-2 rounded-lg border border-black/10 hover:bg-black/5 transition" title="คลังคำศัพท์">
+      <button onclick="toggleGlossaryModal()" class="p-2 rounded-lg border border-black/10 hover:bg-black/5 transition" title="คลังศัพท์">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
       </button>
 
-      <button onclick="openSettingsModal()" class="p-2 rounded-lg border border-black/10 hover:bg-black/5 transition" title="ตั้งค่า">
+      <button onclick="openSettingsModal()" class="p-2 rounded-lg border border-black/10 hover:bg-black/5 transition" title="ตั้งค่า API">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
       </button>
     </div>
   </header>
 
-  <!-- TTS Sticky Control Bar -->
+  <!-- TTS Bar -->
   <div id="tts-bar" class="hidden sticky top-[57px] z-30 bg-blue-600 text-white px-4 py-2 text-xs flex items-center justify-between shadow-md">
     <div class="flex items-center gap-2 truncate">
       <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
@@ -97,183 +92,144 @@
     </div>
   </div>
 
-  <!-- Main Reading Canvas Area -->
+  <!-- Reading Canvas -->
   <main class="flex-1 w-full max-w-2xl sm:max-w-3xl mx-auto px-4 sm:px-6 py-6 pb-28 md:pb-16">
     <div class="mb-6 flex items-center justify-between border-b border-black/10 pb-3">
       <div>
         <span id="novel-name" class="text-xs uppercase tracking-wider font-semibold opacity-60">ชื่อเรื่อง</span>
-        <h2 id="chapter-title" class="font-kanit font-bold text-xl sm:text-2xl mt-0.5">ตอนที่ 1: การตื่นขึ้น</h2>
+        <h2 id="chapter-title" class="font-kanit font-bold text-xl sm:text-2xl mt-0.5">ยินดีต้อนรับ</h2>
       </div>
       <div class="text-right">
         <button onclick="exportTxt()" class="text-xs opacity-70 hover:opacity-100 flex items-center gap-1 underline">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
           บันทึก .TXT
         </button>
       </div>
     </div>
 
-    <!-- Paragraphs Container -->
-    <div id="reading-content" class="space-y-4 text-base sm:text-lg leading-relaxed select-text">
-      <!-- Paragraphs will be rendered here dynamically -->
-    </div>
+    <!-- Content -->
+    <div id="reading-content" class="space-y-4 text-base sm:text-lg leading-relaxed select-text"></div>
 
     <!-- Chapter Navigation -->
     <div class="mt-10 pt-6 border-t border-black/10 flex items-center justify-between">
-      <button onclick="prevChapter()" class="px-4 py-2 rounded-lg border border-black/10 hover:bg-black/5 text-sm font-medium flex items-center gap-1">
-        <span>← ตอนก่อนหน้า</span>
+      <button onclick="prevChapter()" class="px-4 py-2 rounded-lg border border-black/10 hover:bg-black/5 text-sm font-medium">
+        ← ตอนก่อนหน้า
       </button>
-      <button onclick="nextChapter()" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium flex items-center gap-1 shadow">
-        <span>ตอนถัดไป →</span>
+      <button onclick="nextChapter()" id="next-chap-btn" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium shadow">
+        ตอนถัดไป →
       </button>
     </div>
   </main>
 
-  <!-- Mobile Bottom Reading Dock (Thumb-friendly) -->
+  <!-- Mobile Bottom Dock -->
   <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-inherit border-t border-black/10 backdrop-blur-lg bg-opacity-95 px-3 py-2 flex items-center justify-around shadow-lg">
-    <!-- Font Size Down -->
     <button onclick="adjustFontSize(-1)" class="p-2 rounded-full hover:bg-black/5 text-sm font-bold flex flex-col items-center">
       <span>A-</span>
       <span class="text-[10px] opacity-60">เล็กลง</span>
     </button>
-
-    <!-- Theme Cycle Button -->
     <button onclick="cycleTheme()" class="p-2 rounded-full hover:bg-black/5 flex flex-col items-center">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
       <span id="mobile-theme-label" class="text-[10px] opacity-60">ถนอมสายตา</span>
     </button>
-
-    <!-- Centered Floating TTS Button -->
-    <button onclick="startTTS()" class="w-12 h-12 -mt-5 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg border-2 border-white hover:scale-105 transition transform">
+    <button onclick="startTTS()" class="w-12 h-12 -mt-5 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg border-2 border-white">
       <svg class="w-6 h-6 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/></svg>
     </button>
-
-    <!-- Font Size Up -->
     <button onclick="adjustFontSize(1)" class="p-2 rounded-full hover:bg-black/5 text-sm font-bold flex flex-col items-center">
       <span>A+</span>
       <span class="text-[10px] opacity-60">ใหญ่ขึ้น</span>
     </button>
-
-    <!-- Toggle Glossary -->
     <button onclick="toggleGlossaryModal()" class="p-2 rounded-full hover:bg-black/5 flex flex-col items-center">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
       <span class="text-[10px] opacity-60">ศัพท์</span>
     </button>
   </nav>
 
-  <!-- ==================== MODALS ==================== -->
-
-  <!-- 1. Import / Translate Modal -->
-  <div id="import-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-end sm:items-center justify-center p-0 sm:p-4">
-    <div class="w-full max-w-lg rounded-t-2xl sm:rounded-2xl p-5 shadow-2xl transition-all card-light" id="import-modal-card">
+  <!-- Import Modal (One-click URL Translator) -->
+  <div id="import-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="w-full max-w-lg rounded-2xl p-5 shadow-2xl card-light" id="import-modal-card">
       <div class="flex items-center justify-between border-b pb-3 mb-4">
-        <h3 class="font-kanit font-bold text-lg">นำเข้าและแปลนิยาย</h3>
+        <div>
+          <h3 class="font-kanit font-bold text-lg">ดึงเนื้อหาและแปลทันที</h3>
+          <p class="text-xs opacity-60">แค่วาง URL หน้านิยาย ระบบจะดึงและเริ่มแปลอัตโนมัติ</p>
+        </div>
         <button onclick="closeImportModal()" class="p-1 rounded-full hover:bg-black/5 text-gray-500">✕</button>
       </div>
 
-      <!-- Import Mode Switcher -->
-      <div class="flex border rounded-lg overflow-hidden mb-4 text-xs font-semibold">
-        <button id="tab-url-btn" onclick="switchImportTab('url')" class="flex-1 py-2 bg-blue-600 text-white text-center transition">
-          ดึงผ่าน URL เว็บ
-        </button>
-        <button id="tab-raw-btn" onclick="switchImportTab('raw')" class="flex-1 py-2 bg-gray-100 text-gray-700 text-center transition hover:bg-gray-200">
-          วางข้อความดิบ (ชัวร์ 100%)
-        </button>
-      </div>
-
-      <!-- Tab 1: Web URL -->
-      <div id="tab-url-content" class="space-y-3">
+      <div class="space-y-3">
         <div>
-          <label class="block text-xs font-semibold mb-1 opacity-80">URL ลิงก์หน้านิยาย</label>
-          <div class="flex gap-2">
-            <input type="url" id="import-url" placeholder="https://example.com/chapter-1" class="w-full text-sm px-3 py-2 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-black">
-            <button onclick="fetchWebContent()" id="fetch-btn" class="px-3 py-2 bg-gray-800 text-white rounded-lg text-xs font-medium shrink-0 hover:bg-black transition">
-              ดึงข้อความ
-            </button>
-          </div>
-          <p class="text-[11px] text-gray-500 mt-1">
-            *ระบบจะทะลวง CORS ผ่าน Web Proxy อัตโนมัติ หากเว็บติดระบบกันบอท แนะนำให้ใช้แท็บ "วางข้อความดิบ"
-          </p>
+          <label class="block text-xs font-semibold mb-1 opacity-80">URL หน้านิยาย (เว็บจีน / ญี่ปุ่น / เกาหลี / อังกฤษ)</label>
+          <input type="url" id="import-url" placeholder="https://..." class="w-full text-sm px-3 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-black">
+        </div>
+
+        <div id="import-status-box" class="p-3 bg-gray-50 rounded-lg border text-xs text-gray-700 hidden leading-relaxed">
+          <span id="import-status-text">พร้อมประมวลผล</span>
         </div>
       </div>
 
-      <!-- Tab 2: Raw Text -->
-      <div id="tab-raw-content" class="space-y-3 hidden">
-        <div>
-          <label class="block text-xs font-semibold mb-1 opacity-80">วางข้อความภาษาต้นฉบับ (จีน/ญี่ปุ่น/เกาหลี/อังกฤษ)</label>
-          <textarea id="import-raw-text" rows="5" placeholder="คัดลอกเนื้อหาจากเว็บนิยายมาวางที่นี่..." class="w-full text-sm p-3 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-black"></textarea>
-        </div>
-      </div>
-
-      <!-- Status or Preview Box -->
-      <div id="import-status-box" class="mt-3 p-3 bg-gray-50 rounded-lg border text-xs text-gray-600 hidden">
-        <span id="import-status-text">พร้อมประมวลผล</span>
-      </div>
-
-      <!-- Submit Translate Button -->
       <div class="mt-5 flex gap-2">
         <button onclick="closeImportModal()" class="w-1/3 py-2.5 rounded-lg border text-sm font-medium hover:bg-black/5">ยกเลิก</button>
-        <button onclick="executeTranslation()" id="execute-btn" class="w-2/3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow flex items-center justify-center gap-1.5 transition">
-          <span id="btn-text">เริ่มแปลภาษาทันที</span>
+        <button onclick="autoScrapeAndTranslate()" id="start-btn" class="w-2/3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow flex items-center justify-center gap-1.5 transition">
+          <span id="btn-text">ดึงและแปลทันที</span>
           <svg id="loading-spinner" class="hidden animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
         </button>
       </div>
     </div>
   </div>
 
-  <!-- 2. Glossary Management Modal -->
+  <!-- Glossary Modal -->
   <div id="glossary-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
     <div class="w-full max-w-md rounded-2xl p-5 shadow-2xl card-light" id="glossary-modal-card">
       <div class="flex items-center justify-between border-b pb-3 mb-4">
         <div>
           <h3 class="font-kanit font-bold text-lg">คลังคำศัพท์เฉพาะ (Glossary)</h3>
-          <p class="text-xs opacity-60">ล็อกชื่อตัวละครและวิชา เพื่อให้ AI แปลตรงกันทุกบท</p>
+          <p class="text-xs opacity-60">ล็อกชื่อตัวละครเพื่อให้ทุกบทแปลสะกดเหมือนเดิม</p>
         </div>
         <button onclick="toggleGlossaryModal()" class="p-1 rounded-full hover:bg-black/5 text-gray-500">✕</button>
       </div>
-
-      <!-- Add New Word -->
       <div class="flex gap-2 mb-4">
         <input type="text" id="glossary-source" placeholder="คำเดิม (เช่น 林动)" class="w-1/2 text-xs px-2.5 py-2 rounded-lg border text-black outline-none">
         <input type="text" id="glossary-target" placeholder="คำแปล (เช่น หลินตง)" class="w-1/2 text-xs px-2.5 py-2 rounded-lg border text-black outline-none">
         <button onclick="addGlossaryTerm()" class="px-3 bg-blue-600 text-white rounded-lg text-xs font-semibold shrink-0">เพิ่ม</button>
       </div>
-
-      <!-- Term List -->
-      <div id="glossary-list" class="max-h-56 overflow-y-auto space-y-2 pr-1 text-xs">
-        <!-- Rendered items -->
-      </div>
+      <div id="glossary-list" class="max-h-56 overflow-y-auto space-y-2 pr-1 text-xs"></div>
     </div>
   </div>
 
-  <!-- 3. Settings Modal -->
+  <!-- Settings Modal (Updated Current API Models) -->
   <div id="settings-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
     <div class="w-full max-w-md rounded-2xl p-5 shadow-2xl card-light" id="settings-modal-card">
       <div class="flex items-center justify-between border-b pb-3 mb-4">
-        <h3 class="font-kanit font-bold text-lg">ตั้งค่าระบบ</h3>
+        <h3 class="font-kanit font-bold text-lg">ตั้งค่า Gemini API</h3>
         <button onclick="openSettingsModal()" class="p-1 rounded-full hover:bg-black/5 text-gray-500">✕</button>
       </div>
 
       <div class="space-y-4 text-xs">
         <div>
-          <label class="block font-semibold mb-1 opacity-80">Google Gemini API Key (BYOK)</label>
+          <label class="block font-semibold mb-1 opacity-80">Google Gemini API Key (จาก Google AI Studio)</label>
           <input type="password" id="gemini-api-key" placeholder="AIzaSy..." class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black">
-          <p class="text-[11px] text-gray-500 mt-1">คีย์จะถูกเซฟไว้ในเครื่องของคุณเท่านั้น (Local Storage) หากไม่ใส่ ระบบจะใช้ระบบจำลอง</p>
         </div>
 
         <div>
-          <label class="block font-semibold mb-1 opacity-80">โมเดล AI สำหรับแปล</label>
-          <select id="gemini-model-select" class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black bg-white">
-            <option value="gemini-2.5-flash">Gemini 2.5 Flash (เร็วที่สุด ประหยัด แนะนำ)</option>
-            <option value="gemini-1.5-pro">Gemini 1.5 Pro (สำนวนสละสลวยขึ้น)</option>
+          <label class="block font-semibold mb-1 opacity-80">เลือกรุ่นโมเดล (Active Models)</label>
+          <select id="gemini-model-select" onchange="toggleCustomModelInput()" class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black bg-white">
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash (เสถียร / แนะนำสำหรับแปลนิยาย)</option>
+            <option value="gemini-2.5-flash-lite">Gemini 2.5 Flash-Lite (เร็วมาก / ประหยัด Token สูงสุด)</option>
+            <option value="gemini-3.5-flash">Gemini 3.5 Flash (สปีดสูง / ฉลาดขึ้น)</option>
+            <option value="gemini-3.8-flash">Gemini 3.8 Flash (โมเดลเรือธง / สำนวนดีที่สุด)</option>
+            <option value="custom">-- กำหนดชื่อโมเดลเอง (Custom Endpoint) --</option>
           </select>
         </div>
 
+        <div id="custom-model-box" class="hidden">
+          <label class="block font-semibold mb-1 opacity-80">พิมพ์ชื่อโมเดลเอง (เช่น gemini-3.8-flash)</label>
+          <input type="text" id="custom-model-name" placeholder="gemini-..." class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black">
+        </div>
+
         <div>
-          <label class="block font-semibold mb-1 opacity-80">สไตล์สำนวน (Persona)</label>
+          <label class="block font-semibold mb-1 opacity-80">สไตล์สำนวนการแปล</label>
           <select id="style-select" class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black bg-white">
-            <option value="wuxia">นิยายกำลังภายใน / เทพเซียน (สำนวนโบราณ ยุทธภพ)</option>
-            <option value="fantasy">แฟนตาซีตะวันตก / ดันเจี้ยน (สากล ทับศัพท์)</option>
-            <option value="standard">วรรณกรรมสากลทั่วไป (กระชับ เข้าใจง่าย)</option>
+            <option value="wuxia">นิยายกำลังภายใน / เทพเซียน (สำนวนยุทธภพ สละสลวย)</option>
+            <option value="fantasy">แฟนตาซี / ดันเจี้ยน / ระบบ (ทับศัพท์ กระชับ)</option>
+            <option value="standard">วรรณกรรมทั่วไป (อ่านลื่นไหลเป็นธรรมชาติ)</option>
           </select>
         </div>
       </div>
@@ -287,44 +243,23 @@
   </div>
 
   <script>
-    // App State
     let currentTheme = 'sepia';
     let currentFontSize = 18;
-    let fetchedRawContent = "";
-    let activeImportTab = 'url';
-    
-    // Glossary Storage
-    let glossary = JSON.parse(localStorage.getItem('novel_glossary') || '{"林动":"หลินตง", "九品":"ขั้นเก้า", "乾坤袋":"ถุงเอกภพ"}');
+    let nextChapterUrl = "";
+    let glossary = JSON.parse(localStorage.getItem('novel_glossary') || '{"林动":"หลินตง", "九品":"ขั้นเก้า"}');
 
-    // Default Sample Data
     let chapters = [
       {
-        id: 1,
-        title: "ตอนที่ 1: การตื่นขึ้น",
+        title: "คู่มือเริ่มต้น",
         paragraphs: [
-          {
-            th: "แสงแดดยามเช้าสาดส่องผ่านรอยแตกของหลังคาบ้านไม้เก่าๆ ปลุกให้เด็กหนุ่มลืมตาขึ้นมาจากห้วงนิทรา",
-            src: "晨曦的微光透过破旧木屋房顶的裂隙倾洒而下，将沉睡中的少年唤醒。"
-          },
-          {
-            th: "หลินตง ขยับกายลุกขึ้นอย่างยากลำบาก ความเจ็บปวดแปลบแล่นปราดไปทั่วร่างอันบอบบางของเขา",
-            src: "林动艰难地挪动着身躯站了起来，一阵钻心的剧痛瞬间席卷了他那略显单薄的身躯。"
-          },
-          {
-            th: "ข้างกายของเขา มี ถุงเอกภพ สีมอซอวางอยู่ มันคือสิ่งตกทอดเพียงชิ้นเดียวที่บิดาของเขาทิ้งไว้ให้ก่อนจะหายสาบสูญ",
-            src: "在他身旁，静静躺着一个略显斑驳的乾坤袋，那是父亲失踪前留给他的唯一遗物。"
-          },
-          {
-            th: "เขากำหมัดแน่น 'ตราบใดที่ข้ายังก้าวไม่ถึง ขั้นเก้า ข้าจะไม่มีวันยอมแพ้เป็นอันขาด!' แววตาของเขาเปี่ยมด้วยความมุ่งมั่นที่ไม่ยอมสยบต่อโชคชะตา",
-            src: "他紧紧攥起双拳：“只要我一天未能踏入九品之境，我就绝不轻言放弃！”他的眼神中闪烁着对不公命运的决绝抗争。"
-          }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "Welcome to NovelTranslate" },
+          { th: "1. ไปที่เมนู 'ตั้งค่า' (ไอคอนฟันเฟือง) เพื่อใส่ API Key ของคุณ และเลือกรุ่นโมเดล", src: "Setup API Key" },
+          { th: "2. กดปุ่ม 'วางลิงก์แปล' แล้วใส่ URL หน้านิยาย ระบบจะดึงเนื้อหาและแปลให้อัตโนมัติในคลิกเดียว โดยไม่ต้องก๊อปปี้ข้อความเอง", src: "One-click URL Translate" }
         ]
       }
     ];
-
     let currentChapterIndex = 0;
 
-    // Initialization
     window.addEventListener('DOMContentLoaded', () => {
       loadSettings();
       applyTheme(currentTheme);
@@ -332,41 +267,24 @@
       renderGlossaryList();
     });
 
-    // Theme Switcher
     function cycleTheme() {
       const themes = ['light', 'sepia', 'dark'];
-      const nextIdx = (themes.indexOf(currentTheme) + 1) % themes.length;
-      applyTheme(themes[nextIdx]);
+      applyTheme(themes[(themes.indexOf(currentTheme) + 1) % themes.length]);
     }
 
     function applyTheme(theme) {
       currentTheme = theme;
-      const body = document.getElementById('app-body');
-      const mobileLabel = document.getElementById('mobile-theme-label');
-      body.className = `theme-${theme} min-h-screen flex flex-col transition-colors duration-200`;
-
-      if(mobileLabel) {
-        mobileLabel.innerText = theme === 'light' ? 'สว่าง' : (theme === 'sepia' ? 'ถนอมสายตา' : 'มืด');
-      }
-
-      // Update Modals Card
-      ['import-modal-card', 'glossary-modal-card', 'settings-modal-card'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.className = `w-full max-w-lg rounded-2xl p-5 shadow-2xl card-${theme}`;
-      });
+      document.getElementById('app-body').className = `theme-${theme} min-h-screen flex flex-col transition-colors duration-200`;
+      const lbl = document.getElementById('mobile-theme-label');
+      if (lbl) lbl.innerText = theme === 'light' ? 'สว่าง' : (theme === 'sepia' ? 'ถนอมสายตา' : 'มืด');
     }
 
-    // Font Scaling
     function adjustFontSize(delta) {
       currentFontSize = Math.min(28, Math.max(14, currentFontSize + delta));
       const content = document.getElementById('reading-content');
-      if (content) {
-        content.style.fontSize = `${currentFontSize}px`;
-        content.style.lineHeight = '1.8';
-      }
+      if (content) content.style.fontSize = `${currentFontSize}px`;
     }
 
-    // Render Chapter Content with Dual-View
     function renderChapter() {
       const chap = chapters[currentChapterIndex];
       document.getElementById('chapter-title').innerText = chap.title;
@@ -379,9 +297,8 @@
       chap.paragraphs.forEach((p, idx) => {
         const pEl = document.createElement('div');
         pEl.id = `para-${idx}`;
-        pEl.className = "py-1 cursor-pointer transition-colors duration-150 rounded";
-        
-        // Highlight terms from glossary
+        pEl.className = "py-1 cursor-pointer rounded";
+
         let thText = p.th;
         Object.values(glossary).forEach(name => {
           if (name.trim()) {
@@ -392,157 +309,119 @@
 
         pEl.innerHTML = `
           <div class="paragraph-th" onclick="toggleDualView(${idx})">${thText}</div>
-          <div id="dual-src-${idx}" class="hidden mt-1.5 p-2.5 rounded text-sm opacity-70 bg-black/5 dark:bg-white/5 font-mono border-l-2 border-amber-500">
-            ${p.src || 'ไม่มีข้อความต้นฉบับ'}
+          <div id="dual-src-${idx}" class="hidden mt-1.5 p-2 rounded text-xs opacity-70 bg-black/5 dark:bg-white/5 font-mono border-l-2 border-amber-500">
+            ${p.src || ''}
           </div>
         `;
         container.appendChild(pEl);
       });
     }
 
-    // Toggle Source Language
     function toggleDualView(idx) {
       const el = document.getElementById(`dual-src-${idx}`);
       if (el) el.classList.toggle('hidden');
     }
 
-    // Modal Helpers
     function openImportModal() { document.getElementById('import-modal').classList.remove('hidden'); }
     function closeImportModal() { document.getElementById('import-modal').classList.add('hidden'); }
     function toggleGlossaryModal() { document.getElementById('glossary-modal').classList.toggle('hidden'); }
     function openSettingsModal() { document.getElementById('settings-modal').classList.toggle('hidden'); }
 
-    // Switch Import Tabs
-    function switchImportTab(tab) {
-      activeImportTab = tab;
-      const tabUrlBtn = document.getElementById('tab-url-btn');
-      const tabRawBtn = document.getElementById('tab-raw-btn');
-      const tabUrlContent = document.getElementById('tab-url-content');
-      const tabRawContent = document.getElementById('tab-raw-content');
-
-      if (tab === 'url') {
-        tabUrlBtn.className = "flex-1 py-2 bg-blue-600 text-white text-center transition";
-        tabRawBtn.className = "flex-1 py-2 bg-gray-100 text-gray-700 text-center transition hover:bg-gray-200";
-        tabUrlContent.classList.remove('hidden');
-        tabRawContent.classList.add('hidden');
-      } else {
-        tabRawBtn.className = "flex-1 py-2 bg-blue-600 text-white text-center transition";
-        tabUrlBtn.className = "flex-1 py-2 bg-gray-100 text-gray-700 text-center transition hover:bg-gray-200";
-        tabRawContent.classList.remove('hidden');
-        tabUrlContent.classList.add('hidden');
-      }
+    function toggleCustomModelInput() {
+      const sel = document.getElementById('gemini-model-select').value;
+      const box = document.getElementById('custom-model-box');
+      if (sel === 'custom') box.classList.remove('hidden');
+      else box.classList.add('hidden');
     }
 
-    // Fetch Web Content via Proxy
-    async function fetchWebContent() {
+    // MULTI-ENGINE SCRAPER ENGINE
+    async function scrapeNovelPage(url) {
+      // 1. Try Jina AI Reader Engine (Best for bypassing bot-shields & returns clean Markdown)
+      try {
+        const jinaUrl = `https://r.jina.ai/${url}`;
+        const res = await fetch(jinaUrl);
+        if (res.ok) {
+          const md = await res.text();
+          if (md && md.length > 200) {
+            return parseMarkdownNovel(md);
+          }
+        }
+      } catch (e) {
+        console.warn("Jina Scraper failed, fallback to secondary proxy...");
+      }
+
+      // 2. Try AllOrigins with custom DOM extract
+      try {
+        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+        const res = await fetch(proxyUrl);
+        const data = await res.json();
+        if (data.contents) {
+          return parseHtmlNovel(data.contents);
+        }
+      } catch (e) {
+        console.warn("AllOrigins failed...");
+      }
+
+      throw new Error("ไม่สามารถดึงข้อมูลเว็บนี้ได้ เนื่องจากเว็บมีระบบป้องกันขั้นสูง");
+    }
+
+    function parseMarkdownNovel(md) {
+      const lines = md.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      // Filter out links and markdown junk
+      const textLines = lines.filter(l => !l.startsWith('[') && !l.startsWith('!') && !l.startsWith('http') && l.length > 10);
+      return textLines.slice(0, 40).join('\n\n');
+    }
+
+    function parseHtmlNovel(html) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+      doc.querySelectorAll('script, style, nav, header, footer, noscript, .ads').forEach(e => e.remove());
+      const paras = [];
+      doc.querySelectorAll('article p, .content p, #content, p').forEach(el => {
+        const t = el.innerText ? el.innerText.trim() : '';
+        if (t.length > 25) paras.push(t);
+      });
+      if (paras.length === 0) throw new Error("ไม่พบเนื้อหานิยายในหน้าเว็บนี้");
+      return paras.slice(0, 40).join('\n\n');
+    }
+
+    // AUTOMATIC SCRAPE & TRANSLATE IN 1-CLICK
+    async function autoScrapeAndTranslate() {
       const url = document.getElementById('import-url').value.trim();
       const statusBox = document.getElementById('import-status-box');
       const statusText = document.getElementById('import-status-text');
-      const fetchBtn = document.getElementById('fetch-btn');
+      const startBtn = document.getElementById('start-btn');
+      const btnText = document.getElementById('btn-text');
+      const spinner = document.getElementById('loading-spinner');
 
       if (!url) {
-        alert("กรุณาระบุ URL เว็บนิยาย");
+        alert("กรุณาวาง URL หน้านิยาย");
         return;
       }
 
       statusBox.classList.remove('hidden');
-      statusText.innerText = "กำลังดึงข้อมูลหน้าเว็บผ่าน Proxy...";
-      fetchBtn.disabled = true;
-      fetchBtn.innerText = "กำลังดึง...";
-
-      try {
-        // Use AllOrigins CORS Proxy to bypass browser CORS barrier
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-        const res = await fetch(proxyUrl);
-        const data = await res.json();
-        
-        if (!data.contents) throw new Error("ไม่พบเนื้อหาในหน้าเว็บดังกล่าว");
-
-        // Parse HTML DOM to extract only novel content
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(data.contents, 'text/html');
-
-        // Remove script, style, comments
-        doc.querySelectorAll('script, style, nav, header, footer, noscript').forEach(e => e.remove());
-
-        // Extract paragraphs
-        let paragraphs = [];
-        const contentContainers = doc.querySelectorAll('article, .content, .chapter-content, #content, p');
-        
-        if (contentContainers.length > 0) {
-          contentContainers.forEach(el => {
-            const txt = el.innerText ? el.innerText.trim() : '';
-            if (txt.length > 20) paragraphs.push(txt);
-          });
-        }
-
-        if (paragraphs.length === 0) {
-          paragraphs = [doc.body.innerText.substring(0, 3000)];
-        }
-
-        fetchedRawContent = paragraphs.slice(0, 15).join("\n\n");
-        statusText.innerText = `ดึงข้อมูลสำเร็จ! พบเนื้อหาประมาณ ${fetchedRawContent.length} ตัวอักษร พร้อมกดแปลแล้ว`;
-        statusBox.className = "mt-3 p-3 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-lg text-xs";
-      } catch (err) {
-        console.error(err);
-        statusText.innerText = "ไม่สามารถดึงผ่าน URL ได้โดยตรง (เว็บอาจติดระบบป้องกัน) แนะนำให้ก๊อปปี้ข้อความมาวางที่แท็บ 'วางข้อความดิบ'";
-        statusBox.className = "mt-3 p-3 bg-red-50 text-red-800 border border-red-200 rounded-lg text-xs";
-      } finally {
-        fetchBtn.disabled = false;
-        fetchBtn.innerText = "ดึงข้อความ";
-      }
-    }
-
-    // Execute Translation Pipeline
-    async function executeTranslation() {
-      let rawText = "";
-      if (activeImportTab === 'url') {
-        if (!fetchedRawContent) {
-          // If user didn't hit fetch button, auto trigger
-          await fetchWebContent();
-        }
-        rawText = fetchedRawContent;
-      } else {
-        rawText = document.getElementById('import-raw-text').value.trim();
-      }
-
-      if (!rawText) {
-        alert("กรุณาดึงข้อมูลจาก URL หรือวางข้อความก่อนกดแปล");
-        return;
-      }
-
-      const apiKey = localStorage.getItem('gemini_api_key') || "";
-      const model = localStorage.getItem('gemini_model') || "gemini-2.5-flash";
-      const style = localStorage.getItem('translation_style') || "wuxia";
-
-      const btnText = document.getElementById('btn-text');
-      const spinner = document.getElementById('loading-spinner');
-      const execBtn = document.getElementById('execute-btn');
-
-      btnText.innerText = "กำลังแปลภาษา...";
+      statusText.innerText = "กำลังดึงเนื้อหาจากเว็บนิยาย...";
+      startBtn.disabled = true;
       spinner.classList.remove('hidden');
-      execBtn.disabled = true;
+      btnText.innerText = "กำลังประมวลผล...";
 
       try {
-        let translatedParagraphs = [];
+        const rawContent = await scrapeNovelPage(url);
+        statusText.innerText = `ดึงเนื้อหาสำเร็จ (${rawContent.length} ตัวอักษร) กำลังส่งแปลผ่าน Gemini AI...`;
 
-        if (apiKey) {
-          // Call Real Google Gemini API
-          translatedParagraphs = await callGeminiAPI(rawText, apiKey, model, style);
-        } else {
-          // Fallback Simulation for instant testing without API Key
-          await new Promise(r => setTimeout(r, 1200));
-          const lines = rawText.split('\n').filter(l => l.trim().length > 0).slice(0, 6);
-          translatedParagraphs = lines.map(line => ({
-            th: `[แปลตัวอย่าง]: ${line.substring(0, 80)}... (ใส่ API Key ในการตั้งค่าเพื่อเปิดระบบแปลจริงแบบสละสลวย)`,
-            src: line
-          }));
+        const apiKey = localStorage.getItem('gemini_api_key') || "";
+        let model = localStorage.getItem('gemini_model') || "gemini-2.5-flash";
+        if (model === 'custom') model = localStorage.getItem('gemini_custom_model') || "gemini-2.5-flash";
+        const style = localStorage.getItem('translation_style') || "wuxia";
+
+        if (!apiKey) {
+          throw new Error("ยังไม่ได้ใส่ API Key กรุณาไปที่เมนู 'ตั้งค่า' (ไอคอนฟันเฟือง) ก่อน");
         }
 
-        // Push as new chapter
+        const translatedParagraphs = await callGeminiAPI(rawContent, apiKey, model, style);
+
         chapters.push({
-          id: chapters.length + 1,
-          title: `ตอนที่ ${chapters.length + 1}: เนื้อหาที่นำเข้า`,
+          title: `ตอนที่ ${chapters.length + 1}`,
           paragraphs: translatedParagraphs
         });
 
@@ -550,35 +429,37 @@
         renderChapter();
         closeImportModal();
       } catch (err) {
-        alert("เกิดข้อผิดพลาดในการแปล: " + err.message);
+        statusText.innerText = "เกิดข้อผิดพลาด: " + err.message;
+        statusBox.className = "p-3 bg-red-50 text-red-700 border border-red-200 rounded-lg text-xs leading-relaxed";
       } finally {
-        btnText.innerText = "เริ่มแปลภาษาทันที";
+        startBtn.disabled = false;
         spinner.classList.add('hidden');
-        execBtn.disabled = false;
+        btnText.innerText = "ดึงและแปลทันที";
       }
     }
 
-    // Gemini API Request Builder
+    // GEMINI TRANSLATION API CALL
     async function callGeminiAPI(text, key, model, style) {
       const glossaryContext = Object.entries(glossary).map(([k, v]) => `${k} = ${v}`).join(", ");
       
-      const systemInstruction = `คุณคือนักแปลนิยายมืออาชีพ แปลข้อความต่อไปนี้เป็นภาษาไทยให้อ่านลื่นไหล สละสลวย ได้อารมณ์ตามสไตล์ "${style}"
+      const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลข้อความด้านล่างนี้เป็นภาษาไทยให้อ่านลื่นไหล สละสลวย ได้อารมณ์ตามสไตล์ "${style}"
 สำคัญมาก:
 1. หากพบคำศัพท์เหล่านี้ ให้แปลตามที่กำหนดอย่างเคร่งครัด: [${glossaryContext}]
-2. ตอบกลับเป็นรูปแบบ JSON Array ของ Object เท่านั้น: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ไม่ต้องใส่ Markdown ครอบ`;
+2. ตอบกลับเป็นรูปแบบ JSON Array ของ Object เท่านั้น: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ไม่ต้องใส่โค้ด Markdown ครอบ`;
 
       const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ parts: [{ text: text.substring(0, 4000) }] }],
-          systemInstruction: { parts: [{ text: systemInstruction }] }
+          contents: [
+            { role: "user", parts: [{ text: `${prompt}\n\nข้อความที่ต้องแปล:\n${text.substring(0, 5000)}` }] }
+          ]
         })
       });
 
       const resData = await response.json();
       if (!response.ok) {
-        throw new Error(resData.error?.message || "ไม่สามารถเชื่อมต่อ Gemini API ได้");
+        throw new Error(resData.error?.message || "เชื่อมต่อ Gemini API ไม่สำเร็จ");
       }
 
       let aiText = resData.candidates[0].content.parts[0].text;
@@ -586,7 +467,7 @@
       return JSON.parse(aiText);
     }
 
-    // Glossary Functions
+    // Glossary Handlers
     function renderGlossaryList() {
       const list = document.getElementById('glossary-list');
       list.innerHTML = "";
@@ -620,10 +501,11 @@
       renderChapter();
     }
 
-    // Settings Store
+    // Settings
     function saveSettings() {
       localStorage.setItem('gemini_api_key', document.getElementById('gemini-api-key').value.trim());
       localStorage.setItem('gemini_model', document.getElementById('gemini-model-select').value);
+      localStorage.setItem('gemini_custom_model', document.getElementById('custom-model-name').value.trim());
       localStorage.setItem('translation_style', document.getElementById('style-select').value);
       openSettingsModal();
       alert("บันทึกการตั้งค่าเรียบร้อยแล้ว");
@@ -633,18 +515,22 @@
       if (localStorage.getItem('gemini_api_key')) {
         document.getElementById('gemini-api-key').value = localStorage.getItem('gemini_api_key');
       }
+      if (localStorage.getItem('gemini_model')) {
+        document.getElementById('gemini-model-select').value = localStorage.getItem('gemini_model');
+        toggleCustomModelInput();
+      }
+      if (localStorage.getItem('gemini_custom_model')) {
+        document.getElementById('custom-model-name').value = localStorage.getItem('gemini_custom_model');
+      }
     }
 
-    // TTS Web Speech Engine
+    // TTS
     let ttsIndex = 0;
     let isTTSPlaying = false;
     let synth = window.speechSynthesis;
 
     function startTTS() {
-      if (!synth) {
-        alert("เบราว์เซอร์นี้ไม่รองรับระบบอ่านออกเสียง");
-        return;
-      }
+      if (!synth) return alert("อุปกรณ์นี้ไม่รองรับระบบอ่านออกเสียง");
       stopTTS();
       ttsIndex = 0;
       isTTSPlaying = true;
@@ -654,10 +540,7 @@
 
     function playNextTTSParagraph() {
       const chap = chapters[currentChapterIndex];
-      if (ttsIndex >= chap.paragraphs.length || !isTTSPlaying) {
-        stopTTS();
-        return;
-      }
+      if (ttsIndex >= chap.paragraphs.length || !isTTSPlaying) return stopTTS();
 
       document.querySelectorAll('.reading-highlight').forEach(el => el.classList.remove('reading-highlight'));
       const activeEl = document.getElementById(`para-${ttsIndex}`);
@@ -666,16 +549,9 @@
         activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
       }
 
-      const text = chap.paragraphs[ttsIndex].th;
-      const utter = new SpeechSynthesisUtterance(text);
+      const utter = new SpeechSynthesisUtterance(chap.paragraphs[ttsIndex].th);
       utter.lang = 'th-TH';
-      utter.rate = 1.0;
-
-      utter.onend = () => {
-        ttsIndex++;
-        playNextTTSParagraph();
-      };
-
+      utter.onend = () => { ttsIndex++; playNextTTSParagraph(); };
       utter.onerror = () => stopTTS();
       synth.speak(utter);
     }
@@ -697,7 +573,6 @@
       document.querySelectorAll('.reading-highlight').forEach(el => el.classList.remove('reading-highlight'));
     }
 
-    // Export .TXT
     function exportTxt() {
       const chap = chapters[currentChapterIndex];
       let content = `${chap.title}\n\n`;
@@ -721,7 +596,7 @@
         currentChapterIndex++;
         renderChapter();
       } else {
-        alert("ยังไม่มีตอนถัดไป กดปุ่ม 'นำเข้า/แปล' เพื่อเพิ่มตอนใหม่ได้เลย");
+        openImportModal();
       }
     }
   </script>
