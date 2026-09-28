@@ -54,6 +54,8 @@
     body.theme-dark .btn:hover { background-color: rgba(255,255,255,0.08); }
     .btn-primary { background: #2563eb !important; color: #fff !important; border: none !important; }
     .btn-primary:hover { background: #1d4ed8 !important; }
+    .btn-secondary { background: rgba(0,0,0,0.06); }
+    body.theme-dark .btn-secondary { background: rgba(255,255,255,0.1); }
     .btn-danger { background: #dc2626 !important; color: #fff !important; border: none !important; }
 
     #prefetch-badge {
@@ -140,7 +142,7 @@
     }
     .modal-overlay.active { display: flex !important; }
     .modal-box {
-      width: 100%; max-width: 460px; border-radius: 12px;
+      width: 100%; max-width: 470px; border-radius: 12px;
       padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
       background-color: #fff; color: #1e293b;
     }
@@ -210,7 +212,6 @@
       <button class="btn" onclick="prevChapter()">← ตอนก่อนหน้า</button>
       
       <div style="display: flex; gap: 6px;">
-        <!-- Cancel Retry Button (appears during retry loops) -->
         <button class="btn btn-danger" id="cancel-retry-btn" style="display: none;" onclick="abortCurrentRetry()">
           หยุดลองใหม่
         </button>
@@ -267,7 +268,7 @@
     </div>
   </div>
 
-  <!-- MODAL 3: SETTINGS -->
+  <!-- MODAL 3: SETTINGS (WITH LIVE API MODEL FETCHER) -->
   <div class="modal-overlay" id="settings-modal">
     <div class="modal-box">
       <div class="modal-head">
@@ -277,14 +278,20 @@
 
       <div class="form-group">
         <label class="form-label">Google Gemini API Key</label>
-        <input type="password" id="gemini-key" class="form-input" placeholder="AIzaSy...">
+        <div style="display: flex; gap: 6px;">
+          <input type="password" id="gemini-key" class="form-input" placeholder="AIzaSy..." style="flex: 1;">
+          <button class="btn btn-secondary" id="fetch-models-btn" onclick="fetchLiveModels()" style="white-space: nowrap;">
+            ตรวจเช็กโมเดล
+          </button>
+        </div>
+        <div id="fetch-status-text" style="font-size: 11px; margin-top: 4px; display: none;"></div>
       </div>
 
       <div class="form-group">
         <label class="form-label">โมเดล AI ตัวหลัก (Primary Model)</label>
         <select id="gemini-primary-model" class="form-input">
-          <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash-Lite (แนะนำ / สปีดเร็ว ประหยัด Token)</option>
-          <option value="gemini-3.8-flash">Gemini 3.8 Flash (เรือธง / สำนวนสละสลวยที่สุด)</option>
+          <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash-Lite (แนะนำ / สปีดเร็ว)</option>
+          <option value="gemini-3.8-flash">Gemini 3.8 Flash (เรือธง / สำนวนสละสลวย)</option>
           <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
         </select>
       </div>
@@ -293,7 +300,7 @@
         <label class="form-label">โมเดลสำรองเมื่อคิวแน่น (Backup Model)</label>
         <select id="gemini-backup-model" class="form-input">
           <option value="none">(ไม่ใช้โมเดลสำรอง - ใช้เฉพาะตัวหลัก)</option>
-          <option value="gemini-3.8-flash" selected>Gemini 3.8 Flash (สำรองคุณภาพสูง)</option>
+          <option value="gemini-3.8-flash" selected>Gemini 3.8 Flash</option>
           <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
           <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite</option>
         </select>
@@ -352,7 +359,7 @@
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
           { th: "แตะที่ย่อหน้านี้ เพื่อดูข้อความภาษาจีนต้นฉบับเด้งลงมาใต้ย่อหน้าทันที", src: "轻触本段落，即可在下方展开中文原文对比阅读" },
-          { th: "ระบบสลับโมเดลไปมา (Ping-Pong) และ Auto-Retry ทุกๆ 5 วิตามลิมิตที่ตั้งไว้พร้อมทำงาน", src: "交替模型切换与每5秒重试机制已就绪" }
+          { th: "ไปที่เมนู 'ตั้งค่า' แล้วกดปุ่ม 'ตรวจเช็กโมเดล' เพื่อดึงรายชื่อโมเดลล่าสุดจาก Google API ได้ทันที", src: "可在设置页面一键获取可用的模型列表" }
         ]
       }
     ];
@@ -458,8 +465,11 @@
 
       openModal('glossary-modal');
       setTimeout(() => {
-        if (isSelectedChinese) document.getElementById('gloss-tgt').focus();
-        else document.getElementById('gloss-src').focus();
+        if (isSelectedChinese) {
+          document.getElementById('gloss-tgt').focus();
+        } else {
+          document.getElementById('gloss-src').focus();
+        }
       }, 150);
     }
 
@@ -579,7 +589,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       return parsedResult;
     }
 
-    // ==================== PING-PONG AUTO-RETRY ENGINE (EVERY 5 SECONDS) ====================
+    // PING-PONG AUTO-RETRY ENGINE
     async function translateTextWithPingPong(rawText, onStatusUpdate = null) {
       retryAbortRequested = false;
 
@@ -609,12 +619,10 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
             throw err;
           }
 
-          // สลับโมเดลไปมา (Ping-Pong) หากมีการตั้งค่าตัวสำรองไว้
           if (hasBackup) {
             activeModel = (activeModel === primaryModel) ? backupModel : primaryModel;
           }
 
-          // นับถอยหลัง 5 วินาที
           for (let sec = 5; sec > 0; sec--) {
             if (retryAbortRequested) throw new Error("ผู้ใช้ยกเลิกการส่งซ้ำ");
             if (onStatusUpdate) {
@@ -627,7 +635,6 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // ABORT TRIGGER
     function abortCurrentRetry() {
       retryAbortRequested = true;
       document.getElementById('cancel-retry-btn').style.display = 'none';
@@ -817,6 +824,90 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       renderChapter();
     }
 
+    // ==================== LIVE MODEL FETCHER ====================
+    async function fetchLiveModels() {
+      const key = document.getElementById('gemini-key').value.trim();
+      const statusText = document.getElementById('fetch-status-text');
+      const fetchBtn = document.getElementById('fetch-models-btn');
+
+      if (!key) {
+        alert("กรุณากรอก API Key ก่อนกดตรวจเช็กโมเดล");
+        return;
+      }
+
+      fetchBtn.disabled = true;
+      fetchBtn.innerText = "กำลังตรวจเช็ก...";
+      statusText.style.display = "block";
+      statusText.style.color = "#2563eb";
+      statusText.innerText = "กำลังเชื่อมต่อไปยัง Google API...";
+
+      try {
+        const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
+        const data = await res.json();
+
+        if (!res.ok) {
+          throw new Error(data.error?.message || "ไม่สามารถดึงรายชื่อโมเดลได้");
+        }
+
+        if (!data.models || !Array.isArray(data.models)) {
+          throw new Error("ไม่พบข้อมูลโมเดลในบัญชีนี้");
+        }
+
+        // กรองเฉพาะโมเดลที่รองรับ generateContent และเป็นตระกูล gemini
+        const availableModels = data.models
+          .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
+          .map(m => m.name.replace(/^models\//, ''))
+          .filter(name => name.toLowerCase().includes("gemini"));
+
+        if (availableModels.length === 0) {
+          throw new Error("ไม่พบโมเดล Gemini ที่พร้อมใช้งาน");
+        }
+
+        // บันทึกลงแคช
+        localStorage.setItem('nov_cached_models', JSON.stringify(availableModels));
+
+        // อัปเดต Dropdown ทั้ง Primary และ Backup
+        populateModelDropdowns(availableModels);
+
+        statusText.style.color = "#16a34a";
+        statusText.innerText = `✓ ตรวจพบโมเดลพร้อมใช้งาน ${availableModels.length} รุ่น (อัปเดตลงตัวเลือกแล้ว)`;
+      } catch (err) {
+        statusText.style.color = "#dc2626";
+        statusText.innerText = "เกิดข้อผิดพลาด: " + err.message;
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.innerText = "ตรวจเช็กโมเดล";
+      }
+    }
+
+    function populateModelDropdowns(modelsList) {
+      const primarySelect = document.getElementById('gemini-primary-model');
+      const backupSelect = document.getElementById('gemini-backup-model');
+
+      const savedPrimary = localStorage.getItem('nov_primary_model') || primarySelect.value;
+      const savedBackup = localStorage.getItem('nov_backup_model') || backupSelect.value;
+
+      // อัปเดตตัวหลัก
+      primarySelect.innerHTML = "";
+      modelsList.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.innerText = m;
+        if (m === savedPrimary) opt.selected = true;
+        primarySelect.appendChild(opt);
+      });
+
+      // อัปเดตตัวสำรอง
+      backupSelect.innerHTML = `<option value="none">(ไม่ใช้โมเดลสำรอง - ใช้เฉพาะตัวหลัก)</option>`;
+      modelsList.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m;
+        opt.innerText = m;
+        if (m === savedBackup) opt.selected = true;
+        backupSelect.appendChild(opt);
+      });
+    }
+
     // SETTINGS MANAGEMENT
     function saveSettings() {
       localStorage.setItem('nov_gemini_key', document.getElementById('gemini-key').value.trim());
@@ -832,6 +923,15 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       if (localStorage.getItem('nov_gemini_key')) {
         document.getElementById('gemini-key').value = localStorage.getItem('nov_gemini_key');
       }
+
+      // โหลดโมเดลที่เคยตรวจพบจากแคชก่อน
+      try {
+        const cached = JSON.parse(localStorage.getItem('nov_cached_models') || '[]');
+        if (Array.isArray(cached) && cached.length > 0) {
+          populateModelDropdowns(cached);
+        }
+      } catch(e) {}
+
       if (localStorage.getItem('nov_primary_model')) {
         document.getElementById('gemini-primary-model').value = localStorage.getItem('nov_primary_model');
       }
