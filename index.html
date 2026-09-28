@@ -54,6 +54,7 @@
     body.theme-dark .btn:hover { background-color: rgba(255,255,255,0.08); }
     .btn-primary { background: #2563eb !important; color: #fff !important; border: none !important; }
     .btn-primary:hover { background: #1d4ed8 !important; }
+    .btn-danger { background: #dc2626 !important; color: #fff !important; border: none !important; }
 
     #prefetch-badge {
       display: none; font-size: 10px; padding: 2px 7px; border-radius: 999px;
@@ -90,7 +91,6 @@
       background-color: rgba(255,255,255,0.02);
     }
 
-    /* ACCORDION SOURCE TEXT */
     .para-src {
       display: none; margin-top: 6px; padding: 8px 12px;
       border-radius: 6px; font-size: 14px; opacity: 0.85;
@@ -103,7 +103,7 @@
     .chap-nav {
       margin-top: 30px; padding-top: 18px;
       border-top: 1px solid rgba(0,0,0,0.08);
-      display: flex; justify-content: space-between; align-items: center;
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
     }
     body.theme-dark .chap-nav { border-top-color: rgba(255,255,255,0.1); }
 
@@ -117,7 +117,7 @@
     body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
     @media (min-width: 768px) { .mobile-dock { display: none; } }
 
-    /* BOTTOM FLOATING ACTION BAR FOR SELECTED WORD */
+    /* SELECTION BAR */
     #selection-bar {
       display: none; position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
       z-index: 45; width: calc(100% - 24px); max-width: 440px;
@@ -140,7 +140,7 @@
     }
     .modal-overlay.active { display: flex !important; }
     .modal-box {
-      width: 100%; max-width: 440px; border-radius: 12px;
+      width: 100%; max-width: 460px; border-radius: 12px;
       padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
       background-color: #fff; color: #1e293b;
     }
@@ -208,9 +208,16 @@
     <!-- Chapter Navigation -->
     <div class="chap-nav">
       <button class="btn" onclick="prevChapter()">← ตอนก่อนหน้า</button>
-      <button class="btn btn-primary" id="next-chap-btn" onclick="handleNextChapterClick()">
-        <span id="next-btn-text">ตอนถัดไป →</span>
-      </button>
+      
+      <div style="display: flex; gap: 6px;">
+        <!-- Cancel Retry Button (appears during retry loops) -->
+        <button class="btn btn-danger" id="cancel-retry-btn" style="display: none;" onclick="abortCurrentRetry()">
+          หยุดลองใหม่
+        </button>
+        <button class="btn btn-primary" id="next-chap-btn" onclick="handleNextChapterClick()">
+          <span id="next-btn-text">ตอนถัดไป →</span>
+        </button>
+      </div>
     </div>
   </main>
 
@@ -235,7 +242,7 @@
       </div>
       <div class="status-msg" id="import-status"></div>
       <div style="display: flex; gap: 8px; margin-top: 14px;">
-        <button class="btn" style="flex: 1;" onclick="closeModal('import-modal')">ยกเลิก</button>
+        <button class="btn" style="flex: 1;" onclick="handleImportCancel()">ยกเลิก</button>
         <button class="btn btn-primary" style="flex: 2;" id="start-btn" onclick="startTranslateFirst()">
           <span id="start-btn-text">เริ่มแปลตอนนี้</span>
         </button>
@@ -274,7 +281,33 @@
       </div>
 
       <div class="form-group">
-        <label class="form-label">แนวเรื่อง / สไตล์สำนวนนิยาย (Genre Preset)</label>
+        <label class="form-label">โมเดล AI ตัวหลัก (Primary Model)</label>
+        <select id="gemini-primary-model" class="form-input">
+          <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash-Lite (แนะนำ / สปีดเร็ว ประหยัด Token)</option>
+          <option value="gemini-3.8-flash">Gemini 3.8 Flash (เรือธง / สำนวนสละสลวยที่สุด)</option>
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">โมเดลสำรองเมื่อคิวแน่น (Backup Model)</label>
+        <select id="gemini-backup-model" class="form-input">
+          <option value="none">(ไม่ใช้โมเดลสำรอง - ใช้เฉพาะตัวหลัก)</option>
+          <option value="gemini-3.8-flash" selected>Gemini 3.8 Flash (สำรองคุณภาพสูง)</option>
+          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+          <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite</option>
+        </select>
+        <p style="font-size: 10px; opacity: 0.6; margin-top: 3px;">*เมื่อเซิร์ฟเวอร์หนาแน่น ระบบจะสลับไปมาระหว่างตัวหลักและตัวสำรอง</p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">ลิมิตส่งซ้ำเมื่อเซิร์ฟเวอร์หนาแน่น (รอบ)</label>
+        <input type="number" id="retry-limit" class="form-input" min="1" max="50" value="10" placeholder="10">
+        <p style="font-size: 10px; opacity: 0.6; margin-top: 3px;">*เว้นระยะรอส่งซ้ำทุกๆ 5 วินาที จนกว่าจะถึงลิมิต หรือกดยกเลิกเอง</p>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">แนวเรื่อง / สไตล์สำนวนนิยาย (Genre)</label>
         <select id="novel-genre" class="form-input">
           <option value="xianxia" selected>เซียนเซีย / เทพเซียนบำเพ็ญเพียร (เน้นศัพท์เต๋า ระดับลมปราณ สรรพนามข้า-เจ้า)</option>
           <option value="wuxia">กำลังภายใน / ยุทธภพ (สำนวนคลาสสิก ยุทธจักร จอมยุทธ์ ท่องใต้หล้า)</option>
@@ -282,15 +315,6 @@
           <option value="scifi">ไซไฟ / ยุคอวกาศ (ศัพท์ดาราศาสตร์ ฟิสิกส์ เทคโนโลยีอนาคต)</option>
           <option value="horror">สยองขวัญ / ระทึกขวัญเอาชีวิตรอด (บรรยากาศกดดัน เยือกเย็น ชวนระแวง)</option>
           <option value="modern_romance">ปัจจุบัน / สืบสวน / โรแมนติก (บทสนทนาเป็นธรรมชาติ ไหลลื่น)</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label class="form-label">โมเดล AI (Active Model)</label>
-        <select id="gemini-model" class="form-input">
-          <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash-Lite (แนะนำ / สปีดเร็ว ประหยัด Token)</option>
-          <option value="gemini-3.8-flash">Gemini 3.8 Flash (เรือธง / สำนวนสละสลวยที่สุด)</option>
-          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
         </select>
       </div>
 
@@ -310,6 +334,9 @@
     let isPrefetching = false;
     let lastChapterContext = "";
 
+    // Cancellation Token for Retries
+    let retryAbortRequested = false;
+
     // Selection Buffer
     let selectedWordBuffer = "";
     let isSelectedChinese = false;
@@ -325,7 +352,7 @@
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
           { th: "แตะที่ย่อหน้านี้ เพื่อดูข้อความภาษาจีนต้นฉบับเด้งลงมาใต้ย่อหน้าทันที", src: "轻触本段落，即可在下方展开中文原文对比阅读" },
-          { th: "มีระบบป้องกันเซิร์ฟเวอร์หนาแน่น (High Demand Auto-Retry) อัตโนมัติในทุกจุด", src: "全自动高负载重试与模型降级保护机制已启用" }
+          { th: "ระบบสลับโมเดลไปมา (Ping-Pong) และ Auto-Retry ทุกๆ 5 วิตามลิมิตที่ตั้งไว้พร้อมทำงาน", src: "交替模型切换与每5秒重试机制已就绪" }
         ]
       }
     ];
@@ -390,7 +417,7 @@
       }
     }
 
-    // MONITOR SELECTION & AUTO-DETECT LANGUAGE
+    // SELECTION MONITOR
     function setupSelectionMonitor() {
       const checkSelection = () => {
         const sel = window.getSelection();
@@ -431,11 +458,8 @@
 
       openModal('glossary-modal');
       setTimeout(() => {
-        if (isSelectedChinese) {
-          document.getElementById('gloss-tgt').focus();
-        } else {
-          document.getElementById('gloss-src').focus();
-        }
+        if (isSelectedChinese) document.getElementById('gloss-tgt').focus();
+        else document.getElementById('gloss-src').focus();
       }, 150);
     }
 
@@ -506,7 +530,6 @@
       }
     }
 
-    // BASE TRANSLATION CALL
     async function executeApiCall(rawText, modelToUse) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
@@ -556,17 +579,24 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       return parsedResult;
     }
 
-    // ==================== AUTO-RETRY & FALLBACK PIPELINE ====================
-    async function translateTextWithRetry(rawText, onStatusUpdate = null, maxRetries = 3) {
-      let currentModel = (localStorage.getItem('nov_gemini_model') || "gemini-3.5-flash-lite").trim();
-      let delay = 2000;
+    // ==================== PING-PONG AUTO-RETRY ENGINE (EVERY 5 SECONDS) ====================
+    async function translateTextWithPingPong(rawText, onStatusUpdate = null) {
+      retryAbortRequested = false;
 
-      // Fallback hierarchy
-      const fallbackModels = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-3.8-flash"];
+      const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
+      const backupModel = (localStorage.getItem('nov_backup_model') || "none").trim();
+      const maxRetries = parseInt(localStorage.getItem('nov_retry_limit') || "10", 10);
 
-      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      const hasBackup = backupModel !== "none" && backupModel !== primaryModel;
+      let activeModel = primaryModel;
+
+      for (let attempt = 1; attempt <= maxRetries; attempt++) {
+        if (retryAbortRequested) {
+          throw new Error("ผู้ใช้ยกเลิกการส่งซ้ำ");
+        }
+
         try {
-          return await executeApiCall(rawText, currentModel);
+          return await executeApiCall(rawText, activeModel);
         } catch (err) {
           const errMsg = (err.message || "").toLowerCase();
           const isHighDemand = errMsg.includes("high demand") || 
@@ -575,31 +605,44 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
                                errMsg.includes("429") ||
                                errMsg.includes("overloaded");
 
-          if (!isHighDemand || attempt === maxRetries) {
+          if (!isHighDemand || attempt === maxRetries || retryAbortRequested) {
             throw err;
           }
 
-          // สลับโมเดลสำรองเมื่อลองครั้งที่ 2 เป็นต้นไป
-          if (attempt >= 1) {
-            const nextModel = fallbackModels.find(m => m !== currentModel) || "gemini-2.5-flash";
-            currentModel = nextModel;
-            if (onStatusUpdate) {
-              onStatusUpdate(`เซิร์ฟเวอร์หนาแน่น กำลังสลับไปใช้โมเดลสำรอง (${currentModel}) ใน ${delay/1000} วิ...`);
-            }
-          } else {
-            if (onStatusUpdate) {
-              onStatusUpdate(`เซิร์ฟเวอร์หนาแน่น กำลังลองใหม่รอบที่ ${attempt + 1}/${maxRetries} ใน ${delay/1000} วิ...`);
-            }
+          // สลับโมเดลไปมา (Ping-Pong) หากมีการตั้งค่าตัวสำรองไว้
+          if (hasBackup) {
+            activeModel = (activeModel === primaryModel) ? backupModel : primaryModel;
           }
 
-          console.warn(`High Demand encountered. Retrying in ${delay}ms with model ${currentModel}...`);
-          await new Promise(r => setTimeout(r, delay));
-          delay *= 2; // Exponential backoff (2s -> 4s -> 8s)
+          // นับถอยหลัง 5 วินาที
+          for (let sec = 5; sec > 0; sec--) {
+            if (retryAbortRequested) throw new Error("ผู้ใช้ยกเลิกการส่งซ้ำ");
+            if (onStatusUpdate) {
+              const modelLabel = hasBackup ? `กำลังสลับใช้: ${activeModel}` : `โมเดล: ${activeModel}`;
+              onStatusUpdate(`เซิร์ฟเวอร์หนาแน่น! ลองใหม่รอบที่ ${attempt}/${maxRetries} (${modelLabel}) ใน ${sec} วิ...`);
+            }
+            await new Promise(r => setTimeout(r, 1000));
+          }
         }
       }
     }
 
-    // START FIRST CHAPTER (WITH RETRY STATUS NOTIFICATION)
+    // ABORT TRIGGER
+    function abortCurrentRetry() {
+      retryAbortRequested = true;
+      document.getElementById('cancel-retry-btn').style.display = 'none';
+      const btnText = document.getElementById('next-btn-text');
+      if (btnText) btnText.innerText = "ตอนถัดไป →";
+      const startBtnText = document.getElementById('start-btn-text');
+      if (startBtnText) startBtnText.innerText = "เริ่มแปลตอนนี้";
+    }
+
+    function handleImportCancel() {
+      abortCurrentRetry();
+      closeModal('import-modal');
+    }
+
+    // START FIRST CHAPTER
     async function startTranslateFirst() {
       const url = document.getElementById('import-url').value.trim();
       if (!url) return alert("กรุณาใส่ URL หน้านิยาย");
@@ -623,8 +666,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
 
         status.innerText = "กำลังแปลเนื้อหาผ่าน AI...";
 
-        // เรียกใช้ฟังก์ชันแปลพร้อมส่ง callback อัปเดตสถานะ Retry
-        const paragraphs = await translateTextWithRetry(text, (msg) => {
+        const paragraphs = await translateTextWithPingPong(text, (msg) => {
           status.style.background = '#fffbeb';
           status.style.color = '#b45309';
           status.innerText = msg;
@@ -649,14 +691,13 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // PREFETCH (WITH SILENT BACKGROUND AUTO-RETRY)
+    // PREFETCH
     async function triggerPrefetch(url) {
       if (isPrefetching || !url) return;
       isPrefetching = true;
       try {
         const { text, nextUrl } = await scrapePage(url);
-        // Prefetch with auto-retry
-        const paragraphs = await translateTextWithRetry(text, null, 2);
+        const paragraphs = await translateTextWithPingPong(text, null);
         prefetchedData = {
           title: `ตอนที่ ${chapters.length + 1}`,
           paragraphs: paragraphs,
@@ -671,7 +712,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // NEXT CHAPTER CLICK (WITH ON-THE-FLY RETRY)
+    // NEXT CHAPTER CLICK
     async function handleNextChapterClick() {
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
@@ -698,16 +739,20 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
 
       if (nextUrlCalculated) {
         const btnText = document.getElementById('next-btn-text');
+        const nextBtn = document.getElementById('next-chap-btn');
+        const cancelBtn = document.getElementById('cancel-retry-btn');
+        
         btnText.innerText = "กำลังแปลตอนถัดไป...";
-        document.getElementById('next-chap-btn').disabled = true;
+        nextBtn.disabled = true;
+        cancelBtn.style.display = 'inline-flex';
 
         try {
           currentUrl = nextUrlCalculated;
           const { text, nextUrl } = await scrapePage(currentUrl);
           nextUrlCalculated = nextUrl;
 
-          const paragraphs = await translateTextWithRetry(text, (msg) => {
-            btnText.innerText = msg.substring(0, 28) + "...";
+          const paragraphs = await translateTextWithPingPong(text, (msg) => {
+            btnText.innerText = msg.substring(0, 30) + "...";
           });
 
           chapters.push({
@@ -719,12 +764,15 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
 
           if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
         } catch (err) {
-          alert("ไม่สามารถดึงตอนถัดไปได้: " + err.message);
-          document.getElementById('import-url').value = nextUrlCalculated;
-          openModal('import-modal');
+          if (!retryAbortRequested) {
+            alert("ไม่สามารถดึงตอนถัดไปได้: " + err.message);
+            document.getElementById('import-url').value = nextUrlCalculated;
+            openModal('import-modal');
+          }
         } finally {
           btnText.innerText = "ตอนถัดไป →";
-          document.getElementById('next-chap-btn').disabled = false;
+          nextBtn.disabled = false;
+          cancelBtn.style.display = 'none';
         }
       } else {
         openModal('import-modal');
@@ -769,10 +817,12 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       renderChapter();
     }
 
-    // SETTINGS
+    // SETTINGS MANAGEMENT
     function saveSettings() {
       localStorage.setItem('nov_gemini_key', document.getElementById('gemini-key').value.trim());
-      localStorage.setItem('nov_gemini_model', document.getElementById('gemini-model').value);
+      localStorage.setItem('nov_primary_model', document.getElementById('gemini-primary-model').value);
+      localStorage.setItem('nov_backup_model', document.getElementById('gemini-backup-model').value);
+      localStorage.setItem('nov_retry_limit', document.getElementById('retry-limit').value || "10");
       localStorage.setItem('nov_genre', document.getElementById('novel-genre').value);
       closeModal('settings-modal');
       alert("บันทึกการตั้งค่าเรียบร้อยแล้ว");
@@ -782,8 +832,14 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       if (localStorage.getItem('nov_gemini_key')) {
         document.getElementById('gemini-key').value = localStorage.getItem('nov_gemini_key');
       }
-      if (localStorage.getItem('nov_gemini_model')) {
-        document.getElementById('gemini-model').value = localStorage.getItem('nov_gemini_model');
+      if (localStorage.getItem('nov_primary_model')) {
+        document.getElementById('gemini-primary-model').value = localStorage.getItem('nov_primary_model');
+      }
+      if (localStorage.getItem('nov_backup_model')) {
+        document.getElementById('gemini-backup-model').value = localStorage.getItem('nov_backup_model');
+      }
+      if (localStorage.getItem('nov_retry_limit')) {
+        document.getElementById('retry-limit').value = localStorage.getItem('nov_retry_limit');
       }
       if (localStorage.getItem('nov_genre')) {
         document.getElementById('novel-genre').value = localStorage.getItem('nov_genre');
