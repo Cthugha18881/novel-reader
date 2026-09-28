@@ -205,7 +205,6 @@
     body.theme-dark .book-title { color: #60a5fa; }
     .book-meta { font-size: 11px; opacity: 0.65; margin-top: 2px; }
 
-    /* BATCH TRANSLATE PANEL IN BOOK CARD */
     .batch-bar {
       display: flex; align-items: center; gap: 6px; padding: 6px 14px;
       background: rgba(0,0,0,0.02); border-top: 1px dashed rgba(0,0,0,0.08);
@@ -227,7 +226,6 @@
     .chap-subitem:hover { background-color: rgba(37,99,235,0.1); color: #2563eb; }
     .chap-subitem.active { font-weight: 600; color: #2563eb; background-color: rgba(37,99,235,0.08); }
 
-    /* PROGRESS BAR */
     .progress-box {
       display: none; margin: 10px 0; padding: 10px; border-radius: 8px;
       background: #eff6ff; color: #1e40af; font-size: 12px;
@@ -316,7 +314,7 @@
     <button class="btn" onclick="openModal('glossary-modal')">คลังศัพท์</button>
   </nav>
 
-  <!-- MODAL: BOOKSHELF (WITH BATCH PRE-TRANSLATE) -->
+  <!-- MODAL: BOOKSHELF -->
   <div class="modal-overlay" id="bookshelf-modal">
     <div class="modal-box">
       <div class="modal-head">
@@ -334,7 +332,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 330px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แปลล่วงหน้าเก็บไว้ในเครื่อง จะช่วยให้อ่านต่อเนื่องได้แม้ออฟไลน์</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ระบบแกะลิงก์ตอนถัดไปจากปุ่มจริง ป้องกัน URL กระโดดข้ามและ Error 404</p>
     </div>
   </div>
 
@@ -518,6 +516,16 @@
       });
     }
 
+    // ฟังก์ชันลบเฉพาะบทที่เสีย (เช่น บท 404)
+    function dbDeleteSpecificChapter(chapId) {
+      return new Promise((resolve) => {
+        if (!db) return resolve();
+        const tx = db.transaction('chapters', 'readwrite');
+        tx.objectStore('chapters').delete(chapId);
+        tx.oncomplete = () => resolve();
+      });
+    }
+
     // ==================== APP STATE ====================
     let currentTheme = 'sepia';
     let currentFontSize = 18;
@@ -545,9 +553,8 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับแปลล่วงหน้าเก็บลงชั้นหนังสือ", src: "欢迎来到 NovelTranslate" },
-          { th: "เปิดหน้า 'ชั้นหนังสือ' แล้วระบุจำนวนบทที่ต้องการแปลล่วงหน้า ระบบจะดาวน์โหลดและแปลเก็บเข้าเครื่องให้อัตโนมัติ", src: "在书架中输入预翻译章节数，即可批量离线保存" },
-          { th: "คุณสามารถคลิกที่ชื่อเรื่องหรือชื่อตอนเพื่อแก้ไขชื่อได้ตามต้องการ", src: "支持随时自定义编辑书名及章节名" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับแก้ไขปัญหาระบบลิงก์กระโดดข้าม", src: "欢迎来到 NovelTranslate" },
+          { th: "ระบบเปลี่ยนมาใช้วิธีดึง URL จากปุ่ม 'บทถัดไป (下一章)' ของจริงจากหน้าเว็บโดยตรง ไม่ใช้การบวกเลขเดาเองอีกต่อไป", src: "已全面改用真实下一页链接提取机制，彻底解决404跳章问题" }
         ]
       }
     ];
@@ -732,7 +739,7 @@
       }, 150);
     }
 
-    // ==================== BOOKSHELF WITH BATCH PRE-TRANSLATE ====================
+    // ==================== BOOKSHELF UI (WITH DAMAGED CHAPTER REMOVER) ====================
     async function openBookshelfModal() {
       const listContainer = document.getElementById('bookshelf-list');
       listContainer.innerHTML = '<div style="text-align:center; padding:15px; opacity:0.6;">กำลังเปิดคลังหนังสือ...</div>';
@@ -751,8 +758,19 @@
         const itemBox = document.createElement('div');
         itemBox.className = 'book-item-container';
 
-        const bookChaps = await dbGetChaptersByBook(b.bookId);
+        let bookChaps = await dbGetChaptersByBook(b.bookId);
         bookChaps.sort((x, y) => x.order - y.order);
+
+        // ตรวจจับและลบตอน 404 เสียหายออกอัตโนมัติ
+        const validChaps = [];
+        for (const ch of bookChaps) {
+          if (ch.title.includes('404') || ch.title.includes('หน้าเว็บไม่พบ')) {
+            await dbDeleteSpecificChapter(ch.id);
+          } else {
+            validChaps.push(ch);
+          }
+        }
+        bookChaps = validChaps;
 
         let chapsHtml = '';
         bookChaps.forEach((ch, cIdx) => {
@@ -773,7 +791,6 @@
             </div>
             <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบ</button>
           </div>
-          <!-- BATCH TRANSLATE CONTROLS -->
           <div class="batch-bar">
             <span>แปลล่วงหน้า</span>
             <input type="number" id="batch-input-${b.bookId}" class="form-input" style="width: 60px; padding: 3px 6px; font-size: 12px;" min="1" max="50" value="5">
@@ -844,16 +861,14 @@
       const count = parseInt(input.value || "5", 10);
       if (isNaN(count) || count < 1) return alert("กรุณาระบุจำนวนบทที่ถูกต้อง (อย่างน้อย 1 บท)");
 
-      // ดึงตอนล่าสุดของเรื่องนี้
-      const bookChaps = await dbGetChaptersByBook(bookId);
+      let bookChaps = await dbGetChaptersByBook(bookId);
       bookChaps.sort((a, b) => a.order - b.order);
       if (bookChaps.length === 0) return alert("ไม่พบบทตั้งต้นของนิยายเรื่องนี้");
 
       const lastChap = bookChaps[bookChaps.length - 1];
       let targetUrl = lastChap.nextUrl;
-      if (!targetUrl) return alert("ไม่พบ URL ตอนถัดไปสำหรับเรื่องนี้");
+      if (!targetUrl) return alert("ไม่พบ URL ตอนถัดไปสำหรับเรื่องนี้ (อาจถึงบทล่าสุดแล้ว)");
 
-      // UI Progress Box
       isBatchRunning = true;
       batchCancelRequested = false;
       const progressBox = document.getElementById('batch-progress-box');
@@ -868,7 +883,7 @@
           break;
         }
 
-        progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${targetUrl.substring(targetUrl.lastIndexOf('/'))})`;
+        progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}...`;
 
         try {
           const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(targetUrl);
@@ -892,7 +907,6 @@
           await dbSaveChapter(newChap);
           successCount++;
 
-          // อัปเดต Book Record
           await dbSaveBook({
             bookId: bookId,
             title: result.bookTitle || currentBookTitle,
@@ -905,17 +919,16 @@
 
           targetUrl = nextUrl;
           if (!targetUrl) {
-            progressDesc.innerText = `แปลจนถึงบทสุดท้ายของนิยายแล้ว (${successCount} ตอน)`;
+            progressDesc.innerText = `แปลจนถึงบทล่าสุดของนิยายแล้ว (${successCount} ตอน)`;
             break;
           }
 
-          // หน่วงเวลา 2.5 วินาทีระหว่างบท ป้องกัน Rate Limit
           if (i < count && !batchCancelRequested) {
-            progressDesc.innerText = `บันทึกบทที่ ${i} แล้ว กำลังพักระบบ 2.5 วิก่อนเริ่มบทถัดไป...`;
+            progressDesc.innerText = `บันทึก "${chapTitle}" สำเร็จ พักระบบ 2.5 วิก่อนเริ่มบทถัดไป...`;
             await new Promise(r => setTimeout(r, 2500));
           }
         } catch (err) {
-          progressDesc.innerText = `เกิดข้อผิดพลาดในตอนที่ ${i}: ${err.message}`;
+          progressDesc.innerText = `หยุดที่ตอนที่ ${i}: ${err.message}`;
           break;
         }
       }
@@ -936,87 +949,123 @@
       }
     }
 
-    // ==================== SMART SCRAPER ENGINE ====================
+    // ==================== ACCURATE SCRAPER (EXTRACTS REAL "下一章" BUTTON) ====================
     async function scrapePage(url) {
       let rawText = "";
       let rawChapTitle = "";
       let rawBookTitle = "";
+      let realNextUrl = null;
 
+      // 1. ดึง HTML ผ่าน Allorigins เพื่อแกะปุ่ม "บทถัดไป (下一章)" ของจริง
       try {
-        const res = await fetch(`https://r.jina.ai/${url}`);
-        if (res.ok) {
-          const md = await res.text();
-          const lines = md.split('\n').map(l => l.trim());
-
-          const titleLine = lines.find(l => l.startsWith('Title:'));
-          if (titleLine) {
-            const cleanTitle = titleLine.replace('Title:', '').trim();
-            const parts = cleanTitle.split(/[-_]/);
-            if (parts.length >= 2) {
-              rawBookTitle = parts[0].trim();
-              rawChapTitle = parts[1].trim();
-            } else {
-              rawChapTitle = cleanTitle.replace('-69书吧', '').trim();
-            }
-          }
-
-          const filteredLines = lines.filter(l => {
-            if (!l || l.length < 3) return false;
-            if (l.startsWith('Title:') || l.startsWith('URL Source:') || l.startsWith('Published Time:') || l.startsWith('Markdown Content:')) return false;
-            if (l.startsWith('!') || l.startsWith('[') || l.startsWith('http')) return false;
-            if (!rawChapTitle && (l.includes('第') && l.includes('章'))) {
-              rawChapTitle = l;
-              return false;
-            }
-            return true;
-          });
-          
-          rawText = filteredLines.join('\n\n');
-        }
-      } catch (e) {}
-
-      if (!rawText || rawText.length < 50) {
         const pRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
         const pData = await pRes.json();
         if (pData.contents) {
           const parser = new DOMParser();
           const doc = parser.parseFromString(pData.contents, 'text/html');
 
+          // ตรวจจับหน้า 404 จากหัวข้อเว็บ
+          const docTitle = doc.querySelector('title')?.innerText || "";
+          if (docTitle.includes('404') || docTitle.includes('不存在') || docTitle.includes('Not Found')) {
+            throw new Error("หน้าเว็บไม่พบ (404 Not Found) อาจถึงบทล่าสุดแล้ว");
+          }
+
+          // ค้นหาปุ่ม "บทถัดไป (下一章)"
+          doc.querySelectorAll('a').forEach(a => {
+            const txt = (a.innerText || "").trim();
+            if (txt.includes('下一章') || txt.includes('下一页') || txt.includes('下一篇')) {
+              const href = a.getAttribute('href');
+              if (href && !href.startsWith('javascript:') && !href.includes('index')) {
+                // แปลงเป็น Full URL
+                try {
+                  realNextUrl = new URL(href, url).href;
+                } catch(e) {
+                  realNextUrl = href;
+                }
+              }
+            }
+          });
+
+          // หาชื่อตอน
           const h1 = doc.querySelector('h1, .hide-720, .txtnav h1');
           if (h1 && h1.innerText.trim()) rawChapTitle = h1.innerText.trim();
 
+          // หาชื่อเรื่อง
           const breadcrumb = doc.querySelector('.bread, .con_top, .nav');
           if (breadcrumb) {
             const links = breadcrumb.querySelectorAll('a');
             if (links.length >= 2) rawBookTitle = links[1].innerText.trim();
           }
 
+          // สกัดเนื้อหา
           doc.querySelectorAll('script, style, nav, header, footer, noscript, .ads, ins, iframe, .bottem2').forEach(e => e.remove());
-
           const paras = [];
           doc.querySelectorAll('article p, .content p, #content, .txtnav, p').forEach(el => {
             const t = el.innerText ? el.innerText.trim() : '';
-            if (t.length > 3 && !t.includes('69书吧') && !t.includes('www.69shuba.com')) paras.push(t);
+            if (t.length > 5 && !t.includes('69书吧') && !t.includes('www.69shuba.com')) paras.push(t);
           });
           rawText = paras.join('\n\n');
         }
+      } catch (e) {
+        if (e.message && e.message.includes('404')) throw e;
       }
 
-      if (!rawText || rawText.length < 30) throw new Error("ไม่สามารถดึงข้อความจากเว็บนี้ได้");
+      // 2. ถ้า Allorigins ดึงเนื้อหาไม่สมบูรณ์ ให้ลองผ่าน Jina Reader เสริม
+      if (!rawText || rawText.length < 50) {
+        try {
+          const res = await fetch(`https://r.jina.ai/${url}`);
+          if (res.ok) {
+            const md = await res.text();
+            if (md.includes('404') && md.length < 300) throw new Error("หน้าเว็บไม่พบ (404 Not Found)");
 
-      let nextUrl = null;
-      const numMatch = url.match(/^(.*?)(\d+)(\.html?|\/)?$/);
-      if (numMatch) {
-        const prefix = numMatch[1];
-        const num = numMatch[2];
-        const suffix = numMatch[3] || '';
-        const nextNum = (parseInt(num, 10) + 1).toString();
-        nextUrl = prefix + nextNum + suffix;
+            const lines = md.split('\n').map(l => l.trim());
+
+            // หาลิงก์ถัดไปจาก Markdown หากยังไม่ได้
+            if (!realNextUrl) {
+              const nextLinkLine = lines.find(l => l.includes('下一章') && l.includes('http'));
+              if (nextLinkLine) {
+                const match = nextLinkLine.match(/\((https?:\/\/[^\)]+)\)/);
+                if (match) realNextUrl = match[1];
+              }
+            }
+
+            const titleLine = lines.find(l => l.startsWith('Title:'));
+            if (titleLine && !rawChapTitle) {
+              const cleanTitle = titleLine.replace('Title:', '').trim();
+              const parts = cleanTitle.split(/[-_]/);
+              if (parts.length >= 2) {
+                rawBookTitle = parts[0].trim();
+                rawChapTitle = parts[1].trim();
+              } else {
+                rawChapTitle = cleanTitle.replace('-69书吧', '').trim();
+              }
+            }
+
+            const filteredLines = lines.filter(l => {
+              if (!l || l.length < 3) return false;
+              if (l.startsWith('Title:') || l.startsWith('URL Source:') || l.startsWith('Published Time:') || l.startsWith('Markdown Content:')) return false;
+              if (l.startsWith('!') || l.startsWith('[') || l.startsWith('http')) return false;
+              if (!rawChapTitle && (l.includes('第') && l.includes('章'))) {
+                rawChapTitle = l;
+                return false;
+              }
+              return true;
+            });
+            rawText = filteredLines.join('\n\n');
+          }
+        } catch(e) {
+          if (e.message && e.message.includes('404')) throw e;
+        }
+      }
+
+      // ป้องกันข้อความ 404 หลุดไปแปล
+      if (!rawText || rawText.length < 40 || rawText.includes('404 Not Found') || rawText.includes('页面不存在')) {
+        throw new Error("ไม่พบเนื้อหาในหน้านี้ (อาจถึงตอนจบ หรือ URL สิ้นสุดแล้ว)");
       }
 
       return {
         text: rawText,
-        nextUrl: nextUrl,
+        nextUrl: realNextUrl, // ส่ง URL ของปุ่ม "下一章" ของจริง
         rawChapTitle: rawChapTitle || "บทนิยาย",
         rawBookTitle: rawBookTitle || ""
       };
@@ -1053,7 +1102,7 @@
       }
     }
 
-    // ==================== ROBUST JSON TRANSLATE CALL ====================
+    // ROBUST JSON TRANSLATE CALL
     async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "") {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
@@ -1214,7 +1263,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       status.style.display = 'block';
       status.style.background = '#eff6ff';
       status.style.color = '#1e40af';
-      status.innerText = "กำลังดึงเนื้อหาและตรวจหาชื่อตอน...";
+      status.innerText = "กำลังดึงเนื้อหาและตรวจหาปุ่มตอนถัดไป...";
       startBtn.disabled = true;
       btnText.innerText = "กำลังทำงาน...";
 
@@ -1226,7 +1275,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(url);
         nextUrlCalculated = nextUrl;
 
-        status.innerText = `พบ "${rawChapTitle}" กำลังแปลชื่อและเนื้อหาผ่าน AI...`;
+        status.innerText = `พบ "${rawChapTitle}" กำลังแปลผ่าน AI...`;
 
         const result = await translateTextWithPingPong(text, (msg) => {
           status.style.background = '#fffbeb';
@@ -1296,7 +1345,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         };
         document.getElementById('prefetch-badge').style.display = 'inline-block';
       } catch(e) {
-        console.warn("Background prefetch failed after retries:", e);
+        console.warn("Background prefetch failed:", e);
       } finally {
         isPrefetching = false;
       }
