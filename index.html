@@ -197,7 +197,6 @@
     </div>
     
     <div class="header-actions">
-      <!-- Desktop Theme & Font Size Controls -->
       <div class="desktop-controls">
         <button class="btn" onclick="adjustFontSize(-1)" title="ลดขนาดตัวอักษร">A-</button>
         <button class="btn" onclick="adjustFontSize(1)" title="เพิ่มขนาดตัวอักษร">A+</button>
@@ -260,7 +259,7 @@
     <button class="btn" onclick="openModal('glossary-modal')">คลังศัพท์</button>
   </nav>
 
-  <!-- MODAL: BOOKSHELF (ชั้นหนังสือในเครื่อง) -->
+  <!-- MODAL: BOOKSHELF -->
   <div class="modal-overlay" id="bookshelf-modal">
     <div class="modal-box">
       <div class="modal-head">
@@ -476,8 +475,9 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับติดตั้งชั้นหนังสือในเครื่อง", src: "欢迎来到 NovelTranslate" },
-          { th: "ทุกตอนที่คุณแปลจะถูกบันทึกไว้ในเครื่องอัตโนมัติ กดปุ่ม 'ชั้นหนังสือ' เพื่อเปิดดูตอนเก่าได้ทันทีโดยไม่ต้องต่อเน็ต", src: "所有章节均保存在本地数据库中，随时支持离线阅读" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
+          { th: "ระบบได้รับการอัปเกรดแยกย่อหน้าสวยงาม และเสริมเกราะป้องกัน JSON พังเรียบร้อยแล้ว", src: "已升级严格段落拆分与坚固的 JSON 解析保护机制" },
+          { th: "แตะที่ย่อหน้านี้ เพื่อดูข้อความภาษาจีนต้นฉบับเด้งลงมาใต้ย่อหน้าทันที", src: "轻触本段落，即可在下方展开中文原文对比阅读" }
         ]
       }
     ];
@@ -489,7 +489,6 @@
       loadSettings();
       setupSelectionMonitor();
       
-      // ฟื้นฟูนวนิยายเล่มล่าสุด
       const lastBookId = localStorage.getItem('nov_last_book_id');
       if (lastBookId) {
         await loadBookFromDB(lastBookId);
@@ -545,7 +544,6 @@
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
-      // บันทึกตำแหน่งล่าสุด
       if (currentBookId !== "default_novel") {
         dbSaveBook({
           bookId: currentBookId,
@@ -733,7 +731,6 @@
     }
 
     function extractBookIdFromUrl(url) {
-      // ตัวอย่าง: https://www.69shuba.com/txt/88724/40711443 -> bookId: 69shuba_88724
       const m = url.match(/txt\/(\d+)\//);
       if (m) return 'book_' + m[1];
       return 'book_' + btoa(url.split('?')[0]).substring(0, 16);
@@ -764,6 +761,7 @@
       }
     }
 
+    // ==================== ROBUST JSON TRANSLATE CALL ====================
     async function executeApiCall(rawText, modelToUse) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
@@ -777,14 +775,15 @@
 
 ${genreRule}
 
-กฎเหล็กเรื่องการจัดย่อหน้าและโครงสร้าง:
+กฎเหล็กเรื่องการจัดย่อหน้าและโครงสร้าง (สำคัญสูงสุด):
 1. ห้ามรวบย่อหน้ารวมกันเป็นก้อนเดียวเด็ดขาด
 2. แยกย่อหน้าแปลให้ตรงกับต้นฉบับแบบ 1 ต่อ 1
 3. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
 4. ล็อกสรรพนามของตัวละครให้สอดคล้องกัน ห้ามสลับไปมา
-${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${lastChapterContext}"` : ''}
+5. ในบทสนทนา ให้ใช้เครื่องหมายอัญประกาศ ' หรือ “ ” ห้ามใช้เครื่องหมาย " ซ้ำซ้อน เพื่อไม่ให้ JSON เสียหาย
+${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${lastChapterContext}"` : ''}
 
-รูปแบบผลลัพธ์: ตอบกลับเฉพาะ JSON Array: [{"th": "คำแปลไทยของย่อหน้านั้น", "src": "ข้อความจีนของย่อหน้านั้น"}] ห้ามใส่ Markdown ห้ามมีคำอธิบายอื่น`;
+ผลลัพธ์ต้องเป็น JSON Array เท่านั้น: [{"th": "คำแปลไทยของย่อหน้านั้น", "src": "ข้อความจีนของย่อหน้านั้น"}]`;
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${key}`;
       
@@ -792,7 +791,10 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาที่ต้องแปล:\n${rawText}` }] }]
+          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาที่ต้องแปล:\n${rawText}` }] }],
+          generationConfig: {
+            response_mime_type: "application/json"
+          }
         })
       });
 
@@ -801,16 +803,31 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
         throw new Error(data.error?.message || `HTTP ${res.status}: ยิง API ไม่สำเร็จ`);
       }
 
-      let outText = data.candidates[0].content.parts[0].text;
-      const jsonMatch = outText.match(/\[\s*\{[\s\S]*\}\s*\]/);
-      if (jsonMatch) outText = jsonMatch[0];
-      else outText = outText.replace(/```json/g, '').replace(/```/g, '').trim();
-
-      const parsedResult = JSON.parse(outText);
+      let outText = data.candidates[0].content.parts[0].text.trim();
+      
+      // Safe JSON Parser & Repair
+      let parsedResult;
+      try {
+        parsedResult = JSON.parse(outText);
+      } catch (e) {
+        let cleaned = outText.replace(/,\s*([\]}])/g, '$1');
+        if (!cleaned.endsWith(']')) cleaned += ']';
+        try {
+          parsedResult = JSON.parse(cleaned);
+        } catch (e2) {
+          parsedResult = [];
+          const regex = /\{\s*"th"\s*:\s*"(.*?)"\s*,\s*"src"\s*:\s*"(.*?)"\s*\}/gs;
+          let match;
+          while ((match = regex.exec(outText)) !== null) {
+            parsedResult.push({ th: match[1], src: match[2] });
+          }
+          if (parsedResult.length === 0) throw new Error("โครงสร้าง JSON จาก AI ผิดพลาด ไม่สามารถแกะข้อความได้");
+        }
+      }
 
       const formattedResult = [];
       parsedResult.forEach(item => {
-        if (item.th && item.th.length > 350 && item.th.includes('”')) {
+        if (item.th && item.th.length > 350 && (item.th.includes('”') || item.th.includes('"'))) {
           const subParas = item.th.split(/(?<=[”」\n])\s*/);
           subParas.forEach(sub => {
             if (sub.trim()) formattedResult.push({ th: sub.trim(), src: item.src || "" });
@@ -920,7 +937,6 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
           status.innerText = msg;
         });
 
-        // ดึงชื่อเรื่องโดยประมาณ
         currentBookTitle = `นิยาย ${currentBookId.replace('book_', '')}`;
 
         const newChapter = {
@@ -936,7 +952,6 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
         chapters = [newChapter];
         currentChapterIndex = 0;
 
-        // บันทึกลง IndexedDB
         await dbSaveChapter(newChapter);
         await dbSaveBook({
           bookId: currentBookId,
@@ -989,14 +1004,12 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
 
     // NEXT CHAPTER CLICK
     async function handleNextChapterClick() {
-      // 1. ถ้ามีตอนที่เคยเปิดไว้อยู่แล้ว
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
         renderChapter();
         return;
       }
 
-      // 2. ถ้า Prefetch เตรียมไว้แล้ว
       if (prefetchedData) {
         const nextChap = prefetchedData;
         chapters.push(nextChap);
@@ -1005,7 +1018,6 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
         prefetchedData = null;
         document.getElementById('prefetch-badge').style.display = 'none';
 
-        // บันทึกตอนที่ Prefetch ลง IndexedDB ทันที
         await dbSaveChapter(nextChap);
         currentChapterIndex = chapters.length - 1;
         renderChapter();
@@ -1014,7 +1026,6 @@ ${lastChapterContext ? `5. บริบทตอนก่อนหน้า: "${
         return;
       }
 
-      // 3. ถ้าไม่มีแคช ให้แปลสด
       if (nextUrlCalculated) {
         const btnText = document.getElementById('next-btn-text');
         const nextBtn = document.getElementById('next-chap-btn');
