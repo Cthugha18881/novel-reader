@@ -78,7 +78,21 @@
       border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 12px; margin-bottom: 20px;
     }
     body.theme-dark .chapter-toolbar { border-bottom-color: rgba(255,255,255,0.1); }
-    .book-heading { font-size: 12px; opacity: 0.65; font-weight: 600; text-transform: uppercase; margin-bottom: 2px; }
+    
+    /* EDITABLE TITLES */
+    .editable-title-wrap {
+      display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+      border-radius: 4px; padding: 2px 4px; margin-left: -4px;
+      transition: background-color 0.15s ease;
+    }
+    .editable-title-wrap:hover { background-color: rgba(0,0,0,0.04); }
+    body.theme-dark .editable-title-wrap:hover { background-color: rgba(255,255,255,0.06); }
+    
+    .edit-icon { font-size: 11px; opacity: 0; transition: opacity 0.15s ease; color: #2563eb; }
+    body.theme-dark .edit-icon { color: #60a5fa; }
+    .editable-title-wrap:hover .edit-icon { opacity: 0.8; }
+
+    .book-heading { font-size: 12px; opacity: 0.7; font-weight: 600; text-transform: uppercase; }
     .chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; line-height: 1.3; }
 
     /* READING PARAGRAPHS */
@@ -245,11 +259,21 @@
   <!-- MAIN READING CANVAS -->
   <main>
     <div class="chapter-toolbar">
-      <div>
-        <div class="book-heading" id="display-book-title">ชื่อนิยาย</div>
-        <h1 class="chap-heading" id="display-chap-title">ยินดีต้อนรับ</h1>
+      <div style="flex: 1; padding-right: 12px;">
+        <!-- Editable Book Title -->
+        <div class="editable-title-wrap" onclick="promptEditBookTitle()" title="คลิกเพื่อแก้ไขชื่อเรื่อง">
+          <span class="book-heading" id="display-book-title">ชื่อนิยาย</span>
+          <span class="edit-icon">✎ แก้ไข</span>
+        </div>
+        <!-- Editable Chapter Title -->
+        <div>
+          <div class="editable-title-wrap" onclick="promptEditChapterTitle()" title="คลิกเพื่อแก้ไขชื่อตอน">
+            <h1 class="chap-heading" id="display-chap-title">ยินดีต้อนรับ</h1>
+            <span class="edit-icon">✎ แก้ไข</span>
+          </div>
+        </div>
       </div>
-      <button class="btn" onclick="exportTxt()" style="font-size: 11px;">.TXT</button>
+      <button class="btn" onclick="exportTxt()" style="font-size: 11px; shrink: 0;">.TXT</button>
     </div>
 
     <!-- Reading Paragraphs -->
@@ -495,9 +519,9 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับดึงชื่อเรื่องและชื่อตอนตรงตามต้นฉบับ", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบจะตรวจจับชื่อตอนจริง (เช่น 第810章 ...) และชื่อเรื่องภาษาจีน พร้อมแปลเป็นภาษาไทยให้อัตโนมัติ", src: "已支持自动提取与翻译真实的章节名及小说名称" },
-          { th: "ในหน้า 'ชั้นหนังสือ' สามารถแตะที่ชื่อเรื่องเพื่อกางดูรายชื่อตอนทั้งหมดที่เคยแปลไว้และเลือกอ่านได้ทันที", src: "书架支持展开章节列表，随时切换阅读" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับแก้ไขชื่อเรื่องและชื่อตอนได้อิสระ", src: "欢迎来到 NovelTranslate" },
+          { th: "คุณสามารถคลิกที่ 'ชื่อเรื่อง' หรือ 'ชื่อตอน' ด้านบนเพื่อพิมพ์แก้ไขชื่อตามต้องการได้ทันที", src: "可随时点击章节标题或小说名称进行个性化修改" },
+          { th: "ชื่อที่แก้ไขจะถูกบันทึกอัปเดตลงชั้นหนังสือและไฟล์ .TXT อัตโนมัติ", src: "修改后的标题将实时同步至本地数据库与TXT导出文件" }
         ]
       }
     ];
@@ -579,6 +603,50 @@
       }
     }
 
+    // ==================== MANUAL EDIT TITLES ====================
+    async function promptEditBookTitle() {
+      const newTitle = prompt("แก้ไขชื่อเรื่อง:", currentBookTitle);
+      if (newTitle && newTitle.trim()) {
+        currentBookTitle = newTitle.trim();
+        document.getElementById('display-book-title').innerText = currentBookTitle;
+        
+        if (currentBookId !== "default_novel") {
+          const chap = chapters[currentChapterIndex];
+          await dbSaveBook({
+            bookId: currentBookId,
+            title: currentBookTitle,
+            lastChapterIndex: currentChapterIndex,
+            lastChapterTitle: chap.title,
+            totalChapters: chapters.length,
+            lastUrl: currentUrl,
+            updatedAt: Date.now()
+          });
+        }
+      }
+    }
+
+    async function promptEditChapterTitle() {
+      const chap = chapters[currentChapterIndex];
+      const newTitle = prompt("แก้ไขชื่อตอน:", chap.title);
+      if (newTitle && newTitle.trim()) {
+        chap.title = newTitle.trim();
+        document.getElementById('display-chap-title').innerText = chap.title;
+        
+        if (currentBookId !== "default_novel") {
+          await dbSaveChapter(chap);
+          await dbSaveBook({
+            bookId: currentBookId,
+            title: currentBookTitle,
+            lastChapterIndex: currentChapterIndex,
+            lastChapterTitle: chap.title,
+            totalChapters: chapters.length,
+            lastUrl: currentUrl,
+            updatedAt: Date.now()
+          });
+        }
+      }
+    }
+
     function toggleParagraphSrc(idx) {
       const selection = window.getSelection();
       if (selection && selection.toString().trim().length > 0) return;
@@ -657,7 +725,6 @@
         const itemBox = document.createElement('div');
         itemBox.className = 'book-item-container';
 
-        // ดึงรายการตอนของนิยายเล่มนี้
         const bookChaps = await dbGetChaptersByBook(b.bookId);
         bookChaps.sort((x, y) => x.order - y.order);
 
@@ -737,18 +804,15 @@
       let rawChapTitle = "";
       let rawBookTitle = "";
 
-      // 1. ลองผ่าน Jina Reader
       try {
         const res = await fetch(`https://r.jina.ai/${url}`);
         if (res.ok) {
           const md = await res.text();
           const lines = md.split('\n').map(l => l.trim());
 
-          // หาชื่อตอนและชื่อเรื่องจาก Metadata ของ Jina
           const titleLine = lines.find(l => l.startsWith('Title:'));
           if (titleLine) {
             const cleanTitle = titleLine.replace('Title:', '').trim();
-            // ตัวอย่าง: 苟在初圣魔门当人材-第810章 老龙母！？-69书吧
             const parts = cleanTitle.split(/[-_]/);
             if (parts.length >= 2) {
               rawBookTitle = parts[0].trim();
@@ -762,7 +826,6 @@
             if (!l || l.length < 3) return false;
             if (l.startsWith('Title:') || l.startsWith('URL Source:') || l.startsWith('Published Time:') || l.startsWith('Markdown Content:')) return false;
             if (l.startsWith('!') || l.startsWith('[') || l.startsWith('http')) return false;
-            // ดักจับชื่อตอนถ้าอยู่ต้นบรรทัด
             if (!rawChapTitle && (l.includes('第') && l.includes('章'))) {
               rawChapTitle = l;
               return false;
@@ -774,7 +837,6 @@
         }
       } catch (e) {}
 
-      // 2. ลองผ่าน Allorigins
       if (!rawText || rawText.length < 50) {
         const pRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
         const pData = await pRes.json();
@@ -782,11 +844,9 @@
           const parser = new DOMParser();
           const doc = parser.parseFromString(pData.contents, 'text/html');
 
-          // หาชื่อตอนจาก h1 หรือ .hide-720
           const h1 = doc.querySelector('h1, .hide-720, .txtnav h1');
           if (h1 && h1.innerText.trim()) rawChapTitle = h1.innerText.trim();
 
-          // หาชื่อเรื่องจาก Breadcrumbs
           const breadcrumb = doc.querySelector('.bread, .con_top, .nav');
           if (breadcrumb) {
             const links = breadcrumb.querySelectorAll('a');
@@ -908,7 +968,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
       let outText = data.candidates[0].content.parts[0].text.trim();
       
-      // Safe JSON Parser
       let parsedResult;
       try {
         parsedResult = JSON.parse(outText);
@@ -917,7 +976,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         parsedResult = JSON.parse(cleaned);
       }
 
-      // รองรับทั้งแบบโครงสร้างใหม่และแบบ Array เก่า
       let paragraphs = Array.isArray(parsedResult) ? parsedResult : (parsedResult.paragraphs || []);
       let translatedChapTitle = parsedResult.translatedChapterTitle || rawChapTitle;
       let translatedBookTitle = parsedResult.translatedBookTitle || rawBookTitle;
