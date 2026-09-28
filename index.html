@@ -57,6 +57,7 @@
     .btn-secondary { background: rgba(0,0,0,0.06); }
     body.theme-dark .btn-secondary { background: rgba(255,255,255,0.1); }
     .btn-danger { background: #dc2626 !important; color: #fff !important; border: none !important; }
+    .btn-success { background: #16a34a !important; color: #fff !important; border: none !important; }
 
     .desktop-controls { display: none; align-items: center; gap: 4px; }
     @media (min-width: 768px) { .desktop-controls { display: flex; } }
@@ -214,23 +215,38 @@
 
     .book-chapters-list {
       display: none; border-top: 1px solid rgba(0,0,0,0.06);
-      max-height: 170px; overflow-y: auto; background: rgba(0,0,0,0.02);
+      max-height: 190px; overflow-y: auto; background: rgba(0,0,0,0.02);
       padding: 4px 0;
     }
     body.theme-dark .book-chapters-list { border-top-color: rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); }
     .chap-subitem {
-      padding: 6px 14px; font-size: 12px; cursor: pointer;
+      padding: 6px 14px; font-size: 12px;
       display: flex; justify-content: space-between; align-items: center;
       transition: background 0.1s ease;
     }
-    .chap-subitem:hover { background-color: rgba(37,99,235,0.1); color: #2563eb; }
+    .chap-subitem:hover { background-color: rgba(37,99,235,0.08); }
     .chap-subitem.active { font-weight: 600; color: #2563eb; background-color: rgba(37,99,235,0.08); }
-
-    .progress-box {
-      display: none; margin: 10px 0; padding: 10px; border-radius: 8px;
-      background: #eff6ff; color: #1e40af; font-size: 12px;
+    .chap-name-btn {
+      flex: 1; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px;
     }
-    body.theme-dark .progress-box { background: rgba(37,99,235,0.15); color: #93c5fd; }
+    .chap-action-btn {
+      padding: 2px 6px; font-size: 10px; border-radius: 4px; border: none; cursor: pointer;
+    }
+
+    /* PROGRESS BOX (DEFAULT / SUCCESS) */
+    .progress-box {
+      display: none; margin: 10px 0; padding: 10px 12px; border-radius: 8px;
+      background: #eff6ff; color: #1e40af; font-size: 12px; transition: all 0.2s ease;
+      border: 1px solid #bfdbfe;
+    }
+    body.theme-dark .progress-box { background: rgba(37,99,235,0.15); color: #93c5fd; border-color: rgba(37,99,235,0.3); }
+
+    .progress-box.success {
+      background: #f0fdf4 !important; color: #166534 !important; border-color: #bbf7d0 !important;
+    }
+    body.theme-dark .progress-box.success {
+      background: rgba(34,197,94,0.15) !important; color: #86efac !important; border-color: rgba(34,197,94,0.3) !important;
+    }
   </style>
 </head>
 <body class="theme-sepia" id="app-body">
@@ -322,16 +338,17 @@
         <button class="modal-close" onclick="closeModal('bookshelf-modal')">✕</button>
       </div>
 
+      <!-- Batch Progress Status Box (With Success / Close State) -->
       <div class="progress-box" id="batch-progress-box">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <b id="batch-progress-title">กำลังแปลล่วงหน้า...</b>
-          <button class="btn btn-danger" style="padding: 2px 8px; font-size: 10px;" onclick="cancelBatchTranslate()">หยุดแปล</button>
+          <button class="btn btn-danger" id="batch-action-btn" style="padding: 2px 8px; font-size: 10px;" onclick="handleBatchActionClick()">หยุดแปล</button>
         </div>
         <div id="batch-progress-desc">เตรียมคิว...</div>
       </div>
 
       <div id="bookshelf-list" style="max-height: 330px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ระบบสแกนหาปุ่มบทถัดไปจากหน้าเดิมโดยตรง รองรับทุกเว็บนิยาย</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แตะที่ชื่อเรื่องเพื่อกางดูตอน และสามารถกดลบตอนเก่าทีละบทได้อิสระ</p>
     </div>
   </div>
 
@@ -551,8 +568,8 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับ Universal Link Scanner", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบจะแกะหาปุ่ม 'ตอนถัดไป' จากหน้าเว็บเดิมโดยตรง ทำให้ใช้งานได้กับทุกเว็บนิยาย ไม่ผูกติดกับสารบัญอีกต่อไป", src: "已全面适配通用页面内下一章抓取，支持各类小说网站" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับจัดการบททีละตอนและแจ้งเตือนสถานะสำเร็จ", src: "欢迎来到 NovelTranslate" },
+          { th: "ในหน้า 'ชั้นหนังสือ' คุณสามารถกดลบตอนเก่าทีละบทได้แล้ว และเมื่อแปลล่วงหน้าเสร็จจะขึ้นแถบสีเขียวพร้อมปุ่มปิด", src: "支持单章删除及翻译完成状态提示" }
         ]
       }
     ];
@@ -737,7 +754,7 @@
       }, 150);
     }
 
-    // ==================== BOOKSHELF UI ====================
+    // ==================== BOOKSHELF UI WITH INDIVIDUAL CHAPTER DELETE ====================
     async function openBookshelfModal() {
       const listContainer = document.getElementById('bookshelf-list');
       listContainer.innerHTML = '<div style="text-align:center; padding:15px; opacity:0.6;">กำลังเปิดคลังหนังสือ...</div>';
@@ -763,9 +780,14 @@
         bookChaps.forEach((ch, cIdx) => {
           const isActive = (b.bookId === currentBookId && cIdx === currentChapterIndex) ? 'active' : '';
           chapsHtml += `
-            <div class="chap-subitem ${isActive}" onclick="jumpToChapterFromShelf('${b.bookId}', ${cIdx})">
-              <span>📖 ${ch.title}</span>
-              <span style="font-size:10px; opacity:0.5;">อ่าน</span>
+            <div class="chap-subitem ${isActive}">
+              <div class="chap-name-btn" onclick="jumpToChapterFromShelf('${b.bookId}', ${cIdx})">
+                📖 ${ch.title}
+              </div>
+              <div style="display:flex; gap:6px; align-items:center;">
+                <button class="chap-action-btn" style="background:rgba(37,99,235,0.1); color:#2563eb;" onclick="jumpToChapterFromShelf('${b.bookId}', ${cIdx})">อ่าน</button>
+                <button class="chap-action-btn" style="background:rgba(220,38,38,0.1); color:#dc2626;" onclick="deleteSingleChapter(event, '${b.bookId}', '${ch.id}', '${ch.title}')" title="ลบบทนี้">✕ ลบ</button>
+              </div>
             </div>
           `;
         });
@@ -776,7 +798,7 @@
               <div class="book-title">📚 ${b.title || 'นิยายเรื่องใหม่'} <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนทั้งหมด)</span></div>
               <div class="book-meta">อ่านค้างไว้: <b>${b.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${bookChaps.length} ตอนที่บันทึกไว้</div>
             </div>
-            <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบ</button>
+            <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบทั้งเรื่อง</button>
           </div>
           <div class="batch-bar">
             <span>แปลล่วงหน้า</span>
@@ -802,6 +824,47 @@
       if (list) {
         list.style.display = (list.style.display === 'block') ? 'none' : 'block';
       }
+    }
+
+    // ฟังก์ชันลบตอนเฉพาะบท
+    async function deleteSingleChapter(e, bookId, chapId, chapTitle) {
+      e.stopPropagation();
+      if (!confirm(`ต้องการลบ "${chapTitle}" ออกจากเครื่องใช่หรือไม่?`)) return;
+
+      await dbDeleteSpecificChapter(chapId);
+
+      // โหลดและอัปเดตข้อมูลของหนังสือนั้นใหม่
+      const remainingChaps = await dbGetChaptersByBook(bookId);
+      remainingChaps.sort((x, y) => x.order - y.order);
+
+      const books = await dbGetAllBooks();
+      const targetBook = books.find(b => b.bookId === bookId);
+
+      if (targetBook) {
+        if (remainingChaps.length > 0) {
+          const lastChap = remainingChaps[remainingChaps.length - 1];
+          await dbSaveBook({
+            ...targetBook,
+            totalChapters: remainingChaps.length,
+            lastChapterTitle: lastChap.title,
+            lastChapterIndex: Math.min(targetBook.lastChapterIndex || 0, remainingChaps.length - 1)
+          });
+        } else {
+          await dbSaveBook({
+            ...targetBook,
+            totalChapters: 0,
+            lastChapterTitle: "ไม่มีตอน",
+            lastChapterIndex: 0
+          });
+        }
+      }
+
+      // ถ้ากำลังเปิดอ่านเรื่องนี้อยู่ ให้อัปเดตวิวปัจจุบันด้วย
+      if (currentBookId === bookId) {
+        await loadBookFromDB(bookId);
+      }
+
+      openBookshelfModal();
     }
 
     async function fixBookNextUrl(bookId) {
@@ -858,15 +921,11 @@
     }
 
     // ==================== UNIVERSAL NEXT LINK EXTRACTOR ====================
-    // สแกนหา URL ตอนถัดไปจากโครงสร้างหน้าเว็บตรงๆ โดยไม่ต้องพึ่งพาสารบัญ
     function extractNextUrlFromHtml(html, baseUrl) {
       if (!html) return null;
 
-      // 1. ค้นหาผ่านคำสากลในแท็ก <a> (下一章, 下一页, 下一节, Next Chapter)
-      // ตัวอย่าง: <a href="40711453.html">下一章</a> หรือ <a class="next" href="...">下一章</a>
       const nextKeywords = ['下一章', '下一页', '下一篇', '下一節', '下一节', 'next chapter', 'next'];
       for (const kw of nextKeywords) {
-        // ใช้ Regex ค้นหาแท็ก <a> ที่ห่อหุ้มคำนี้
         const reg = new RegExp(`<a[^>]+href=["']([^"']+)["'][^>]*>[\\s\\S]*?${kw}[\\s\\S]*?<\\/a>`, 'i');
         const match = html.match(reg);
         if (match && match[1]) {
@@ -881,7 +940,6 @@
         }
       }
 
-      // 2. ค้นหาตัวแปร JavaScript ที่พบบ่อยในเว็บนิยาย (เช่น var nextpage = "...", url_next = "...")
       const jsPatterns = [
         /(?:nextpage|url_next|next_page|nextPageUrl)\s*=\s*['"]([^'"]+)['"]/i,
         /var\s+preview_page\s*=\s*['"][^'"]*['"];\s*var\s+next_page\s*=\s*['"]([^'"]+)['"]/i
@@ -900,7 +958,6 @@
         }
       }
 
-      // 3. ค้นหาใน Markdown syntax ที่ Jina แปลงมา: [下一章](url)
       const mdMatch = html.match(/\[(?:下一章|下一页|下一节|下一篇)\]\((https?:\/\/[^\)]+)\)/i);
       if (mdMatch && mdMatch[1]) {
         return mdMatch[1].trim();
@@ -916,7 +973,6 @@
       let rawBookTitle = "";
       let realNextUrl = null;
 
-      // 1. ดึง HTML ผ่าน Corsproxy สำรอง เพื่อให้ได้ HTML ดิบทั้งหน้ามาแกะปุ่ม
       const proxyList = [
         `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
         `https://corsproxy.io/?${encodeURIComponent(url)}`
@@ -935,7 +991,6 @@
             }
 
             if (html && html.length > 200) {
-              // สแกนหาปุ่ม Next Chapter จาก HTML เต็มๆ
               realNextUrl = extractNextUrlFromHtml(html, url);
 
               const parser = new DOMParser();
@@ -946,11 +1001,9 @@
                 throw new Error("หน้าเว็บไม่พบ (404 Not Found)");
               }
 
-              // ค้นหาชื่อตอน
               const h1 = doc.querySelector('h1, .hide-720, .txtnav h1, .readTitle');
               if (h1 && h1.innerText.trim()) rawChapTitle = h1.innerText.trim();
 
-              // ค้นหาชื่อเรื่อง
               const breadcrumb = doc.querySelector('.bread, .con_top, .nav, .crumbs');
               if (breadcrumb) {
                 const links = breadcrumb.querySelectorAll('a');
@@ -966,7 +1019,7 @@
 
               if (paras.length > 0) {
                 rawText = paras.join('\n\n');
-                break; // ดึงเนื้อหาสำเร็จ
+                break;
               }
             }
           }
@@ -975,7 +1028,6 @@
         }
       }
 
-      // 2. ถ้า Proxy แรกเนื้อหาไม่พอ ลองผ่าน Jina Reader
       if (!rawText || rawText.length < 50) {
         try {
           const res = await fetch(`https://r.jina.ai/${url}`);
@@ -1287,7 +1339,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         const chapTitle = result.chapterTitle || rawChapTitle || "ตอนที่ 1";
 
         const newChapter = {
-          id: `${currentBookId}_chap_1`,
+          id: `${currentBookId}_chap_${Date.now()}`,
           bookId: currentBookId,
           order: 1,
           title: chapTitle,
@@ -1335,7 +1387,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${chapters.length + 1}`;
 
         prefetchedData = {
-          id: `${currentBookId}_chap_${chapters.length + 1}`,
+          id: `${currentBookId}_chap_${Date.now()}`,
           bookId: currentBookId,
           order: chapters.length + 1,
           title: chapTitle,
@@ -1396,7 +1448,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
           const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${chapters.length + 1}`;
 
           const newChap = {
-            id: `${currentBookId}_chap_${chapters.length + 1}`,
+            id: `${currentBookId}_chap_${Date.now()}`,
             bookId: currentBookId,
             order: chapters.length + 1,
             title: chapTitle,
@@ -1435,7 +1487,19 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // ==================== BATCH PRE-TRANSLATE WORKER (IN-PAGE CHAINING) ====================
+    // ==================== BATCH PRE-TRANSLATE WITH SUCCESS STATUS ====================
+    let isBatchComplete = false;
+
+    function handleBatchActionClick() {
+      if (isBatchComplete) {
+        // ถ้าแปลเสร็จแล้ว กดยุบปิดแถบแจ้งเตือน
+        document.getElementById('batch-progress-box').style.display = 'none';
+      } else {
+        // ถ้ากำลังแปลอยู่ กดเพื่อสั่งหยุด
+        cancelBatchTranslate();
+      }
+    }
+
     async function startBatchTranslateForBook(bookId) {
       if (isBatchRunning) {
         alert("กำลังมีกระบวนการแปลล่วงหน้าทำงานอยู่ กรุณารอหรือกดยกเลิกก่อน");
@@ -1453,7 +1517,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       const lastChap = bookChaps[bookChaps.length - 1];
       let targetUrl = lastChap.nextUrl;
 
-      // ถ้าในบทล่าสุดไม่มี URL ถัดไป ให้ผู้ใช้วางเอง 1 ครั้ง
       if (!targetUrl || targetUrl.includes('404')) {
         const inputUrl = prompt(`ไม่พบ URL ตอนถัดไปสำหรับ "${lastChap.title}"\nกรุณาวาง URL ของตอนถัดไปโดยตรง:`, "");
         if (!inputUrl || !inputUrl.trim()) return;
@@ -1464,10 +1527,19 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
       isBatchRunning = true;
       batchCancelRequested = false;
+      isBatchComplete = false;
 
       const progressBox = document.getElementById('batch-progress-box');
+      const progressTitle = document.getElementById('batch-progress-title');
       const progressDesc = document.getElementById('batch-progress-desc');
+      const actionBtn = document.getElementById('batch-action-btn');
+
+      // รีเซ็ตสไตล์เป็นสีน้ำเงิน (กำลังแปล)
+      progressBox.className = 'progress-box';
       progressBox.style.display = 'block';
+      progressTitle.innerText = "กำลังแปลล่วงหน้า...";
+      actionBtn.className = 'btn btn-danger';
+      actionBtn.innerText = "หยุดแปล";
 
       let successCount = 0;
 
@@ -1489,7 +1561,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
           const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${bookChaps.length + i}`;
 
           const newChap = {
-            id: `${bookId}_chap_${bookChaps.length + i}`,
+            id: `${bookId}_chap_${Date.now()}_${i}`,
             bookId: bookId,
             order: bookChaps.length + i,
             title: chapTitle,
@@ -1511,10 +1583,9 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             updatedAt: Date.now()
           });
 
-          // ใช้ nextUrl ที่สแกนได้จากปุ่มในหน้านั้นเป็นก้าวต่อไป
           targetUrl = nextUrl;
           if (!targetUrl) {
-            progressDesc.innerText = `ไม่พบบทถัดไปในหน้านี้แล้ว แปลสำเร็จ ${successCount} ตอน`;
+            progressDesc.innerText = `แปลจนถึงบทล่าสุดของเว็บแล้ว (สำเร็จ ${successCount} ตอน)`;
             break;
           }
 
@@ -1529,12 +1600,25 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
 
       isBatchRunning = false;
-      setTimeout(() => {
-        openBookshelfModal();
-        if (currentBookId === bookId) {
-          loadBookFromDB(bookId, currentChapterIndex);
-        }
-      }, 1500);
+
+      // ตรวจสอบสถานะเมื่อทำงานจบ
+      if (successCount > 0 && !batchCancelRequested) {
+        isBatchComplete = true;
+        progressBox.className = 'progress-box success'; // เปลี่ยนเป็นสีเขียว
+        progressTitle.innerText = "✓ แปลล่วงหน้าเสร็จสมบูรณ์!";
+        progressDesc.innerText = `บันทึกเนื้อหาเรียบร้อยแล้วทั้งหมด ${successCount} ตอน พร้อมให้อ่านแบบออฟไลน์`;
+        actionBtn.className = 'btn btn-secondary'; // เปลี่ยนเป็นปุ่มปิด
+        actionBtn.innerText = "ปิดการแจ้งเตือน";
+      } else if (batchCancelRequested) {
+        actionBtn.className = 'btn btn-secondary';
+        actionBtn.innerText = "ปิดการแจ้งเตือน";
+        isBatchComplete = true;
+      }
+
+      openBookshelfModal();
+      if (currentBookId === bookId) {
+        loadBookFromDB(bookId, currentChapterIndex);
+      }
     }
 
     function cancelBatchTranslate() {
