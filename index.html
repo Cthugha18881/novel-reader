@@ -23,7 +23,7 @@
     body.theme-light { background-color: #f8fafc; color: #1e293b; }
     body.theme-dark  { background-color: #0d1117; color: #e6edf3; }
 
-    /* HEADER (CLEANED - NO REDUNDANT CHAPTER TITLE) */
+    /* HEADER */
     header {
       position: sticky; top: 0; z-index: 40;
       display: flex; align-items: center; justify-content: space-between;
@@ -77,36 +77,47 @@
 
     /* READING PARAGRAPHS */
     #reading-content { line-height: 1.85; user-select: text; }
-    .para-item {
-      padding: 6px 8px; border-radius: 6px; margin-bottom: 4px;
-      transition: background-color 0.2s, box-shadow 0.2s;
-    }
-    /* HIGHLIGHT EFFECT OVER PARAGRAPH WHEN FOCUSED */
-    .para-item.active-inspect {
-      background-color: rgba(245, 158, 11, 0.12) !important;
-      outline: 1.5px dashed #f59e0b;
-    }
-    body.theme-dark .para-item.active-inspect {
-      background-color: rgba(245, 158, 11, 0.18) !important;
-    }
+    .para-item { padding: 4px 6px; border-radius: 6px; margin-bottom: 6px; }
 
     .para-th { font-size: inherit; }
     .para-th span.term {
       font-weight: 600; color: #2563eb;
       background-color: rgba(37,99,235,0.08);
-      padding: 1px 4px; border-radius: 3px;
-      border-bottom: 1.5px solid #2563eb;
+      padding: 1px 4px; border-radius: 4px;
+      border: 1px solid rgba(37,99,235,0.3);
       cursor: pointer;
     }
-    body.theme-dark .para-th span.term { color: #60a5fa; background-color: rgba(96,165,250,0.12); border-bottom-color: #60a5fa; }
+    body.theme-dark .para-th span.term {
+      color: #60a5fa; background-color: rgba(96,165,250,0.12);
+      border-color: rgba(96,165,250,0.3);
+    }
 
+    /* SOURCE ORIGINAL BOX (CHINESE WORDS) */
     .para-src {
       display: none; margin-top: 6px; padding: 8px 12px;
-      border-radius: 6px; font-size: 13px; opacity: 0.8;
-      background: rgba(0,0,0,0.04); border-left: 3px solid #f59e0b;
-      font-family: monospace; line-height: 1.6;
+      border-radius: 6px; font-size: 14px; opacity: 0.9;
+      background: rgba(0,0,0,0.03); border-left: 3px solid #f59e0b;
+      line-height: 1.8; letter-spacing: 0.5px;
     }
-    body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
+    body.theme-dark .para-src { background: rgba(255,255,255,0.04); }
+
+    /* INDIVIDUAL WORD BADGE (แยกคำจีนเป็นชิ้นๆ) */
+    .c-word {
+      display: inline-block; padding: 0 2px; margin: 0 1px;
+      border-radius: 3px; cursor: pointer; border: 1px solid transparent;
+      transition: all 0.15s ease;
+    }
+    .c-word:hover {
+      background-color: rgba(245, 158, 11, 0.2);
+      border-color: #f59e0b;
+    }
+    /* SELECTED WORD HIGHLIGHT (กรอบจางๆ เรืองแสงรอบคำที่เลือก) */
+    .c-word.word-active {
+      background-color: rgba(245, 158, 11, 0.25) !important;
+      border-color: #d97706 !important;
+      box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.35);
+      font-weight: 600;
+    }
 
     /* CHAPTER NAVIGATION */
     .chap-nav {
@@ -126,7 +137,7 @@
     body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
     @media (min-width: 768px) { .mobile-dock { display: none; } }
 
-    /* BOTTOM FLOATING BAR FOR WORD ADDITION (NO BROWSER COLLISION) */
+    /* BOTTOM FLOATING BAR FOR WORD ADDITION */
     #selection-bar {
       display: none; position: fixed; bottom: 65px; left: 50%; transform: translateX(-50%);
       z-index: 45; width: calc(100% - 32px); max-width: 440px;
@@ -139,7 +150,7 @@
 
     .sel-info { display: flex; flex-direction: column; overflow: hidden; max-width: 60%; }
     .sel-tag { font-size: 10px; opacity: 0.6; text-transform: uppercase; font-weight: 600; }
-    .sel-text { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #38bdf8; }
+    .sel-text { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #fbbf24; }
 
     /* MODAL WINDOWS */
     .modal-overlay {
@@ -176,7 +187,7 @@
 </head>
 <body class="theme-sepia" id="app-body">
 
-  <!-- TOP HEADER (CLEANED) -->
+  <!-- TOP HEADER -->
   <header>
     <div class="brand-box">
       <div class="brand-icon">N</div>
@@ -190,14 +201,14 @@
     </div>
   </header>
 
-  <!-- BOTTOM SELECTION BAR -->
+  <!-- BOTTOM FLOATING ACTION BAR FOR SELECTED WORD -->
   <div id="selection-bar">
     <div class="sel-info">
-      <span class="sel-tag">คำที่เลือก</span>
+      <span class="sel-tag">คำที่เลือกแตะ</span>
       <span class="sel-text" id="sel-preview-text">...</span>
     </div>
     <div style="display: flex; gap: 6px;">
-      <button class="btn" style="color:#fff; border-color:rgba(255,255,255,0.2);" onclick="dismissSelectionBar()">ยกเลิก</button>
+      <button class="btn" style="color:#fff; border-color:rgba(255,255,255,0.2);" onclick="clearWordSelection()">ยกเลิก</button>
       <button class="btn btn-primary" onclick="confirmAddGlossaryFromBar()">+ เพิ่มลงคลัง</button>
     </div>
   </div>
@@ -270,7 +281,7 @@
         <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปล (เช่น หลินตง)" style="flex: 1;">
         <button class="btn btn-primary" onclick="addGlossary()">เพิ่ม</button>
       </div>
-      <p style="font-size: 11px; opacity: 0.6; margin-bottom: 8px;">*แตะที่ย่อหน้าเพื่อกางดูต้นฉบับ หรือลากคลุมคำเพื่อเพิ่มเข้าคลังทันที</p>
+      <p style="font-size: 11px; opacity: 0.6; margin-bottom: 8px;">*แตะที่คำภาษาจีนในต้นฉบับเพื่อดึงคำมาเพิ่มเข้าคลังได้ทันทีในคลิกเดียว</p>
       <div id="glossary-list" style="max-height: 200px; overflow-y: auto; font-size: 13px;"></div>
     </div>
   </div>
@@ -326,7 +337,7 @@
     let showAllSource = false;
     let lastChapterContext = "";
 
-    let capturedSelectionText = "";
+    let activeSelectedWord = "";
 
     let glossary = {};
     try {
@@ -337,9 +348,9 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "Welcome to NovelTranslate" },
-          { th: "1. แตะที่ย่อหน้าใดก็ได้ จะมีกรอบสีส้มจางๆ ไฮไลต์จับคู่ระหว่างคำแปลไทยและต้นฉบับทันที", src: "Tap any paragraph to see inspect highlight." },
-          { th: "2. เมื่อลากคลุมคำหรือแตะค้าง แถบเครื่องมือจะขึ้นด้านล่าง ไม่ชนกับเมนูของเบราว์เซอร์อีกต่อไป", src: "Bottom bar prevents UI overlap." }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
+          { th: "1. แตะที่ย่อหน้าเพื่อกางดูภาษาจีน หรือกดปุ่ม 'แสดงต้นฉบับ' ด้านบน", src: "点击段落即可查看原文" },
+          { th: "2. ในภาษาต้นฉบับ ข้อความถูกแยกเป็นคำๆ ไว้แล้ว แตะที่คำใดก็ได้จะมีกรอบจางๆ ล้อมรอบคำนั้นทันที", src: "点击任何中文词语都会高亮" }
         ]
       }
     ];
@@ -350,7 +361,6 @@
       loadSettings();
       renderChapter();
       renderGlossary();
-      setupSelectionMonitor();
     });
 
     // THEME & FONT
@@ -390,7 +400,81 @@
     function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-    // RENDER CONTENT WITH HIGHLIGHT MAPPING
+    // CHINESE WORD SEGMENTATION (แยกคำภาษาจีนด้วย Intl.Segmenter)
+    function segmentChineseText(text) {
+      if (!text) return "";
+      
+      // ตรวจสอบว่าเบราว์เซอร์รองรับ Intl.Segmenter สำหรับตัดคำจีนหรือไม่
+      if (window.Intl && Intl.Segmenter) {
+        try {
+          const segmenter = new Intl.Segmenter('zh-CN', { granularity: 'word' });
+          const segments = segmenter.segment(text);
+          let html = "";
+          for (let seg of segments) {
+            const w = seg.segment;
+            // ถ้าเป็นเครื่องหมายวรรคตอนหรือเว้นวรรค ไม่ต้องห่อ
+            if (/^[\s\p{P}]+$/u.test(w)) {
+              html += w;
+            } else {
+              html += `<span class="c-word" onclick="handleWordClick(event, '${escapeQuotes(w)}')">${w}</span>`;
+            }
+          }
+          return html;
+        } catch(e) {}
+      }
+
+      // Fallback: หากเบราว์เซอร์เก่าไม่รองรับ ให้แยกตามตัวอักษร
+      return text.split('').map(char => {
+        if (/[\u4e00-\u9fa5]/.test(char)) {
+          return `<span class="c-word" onclick="handleWordClick(event, '${escapeQuotes(char)}')">${char}</span>`;
+        }
+        return char;
+      }).join('');
+    }
+
+    function escapeQuotes(str) {
+      return str.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    }
+
+    // แตะที่คำจีน: ไฮไลต์กรอบจางๆ รอบคำ และเปิดแถบลอยด้านล่างทันที
+    function handleWordClick(event, word) {
+      event.stopPropagation(); // ไม่ให้ย่อหน้ายุบหรือขยาย
+
+      // ปลดกรอบไฮไลต์คำเดิม
+      document.querySelectorAll('.c-word.word-active').forEach(el => el.classList.remove('word-active'));
+
+      // ใส่กรอบไฮไลต์คำที่แตะ
+      event.target.classList.add('word-active');
+
+      activeSelectedWord = word;
+
+      // แสดงแถบด้านล่าง
+      const bar = document.getElementById('selection-bar');
+      const preview = document.getElementById('sel-preview-text');
+      preview.innerText = word;
+      bar.style.display = 'flex';
+    }
+
+    function clearWordSelection() {
+      document.querySelectorAll('.c-word.word-active').forEach(el => el.classList.remove('word-active'));
+      document.getElementById('selection-bar').style.display = 'none';
+      activeSelectedWord = "";
+    }
+
+    function confirmAddGlossaryFromBar() {
+      if (!activeSelectedWord) return;
+      document.getElementById('selection-bar').style.display = 'none';
+
+      document.getElementById('gloss-src').value = activeSelectedWord;
+      document.getElementById('gloss-tgt').value = "";
+
+      openModal('glossary-modal');
+      setTimeout(() => {
+        document.getElementById('gloss-tgt').focus();
+      }, 150);
+    }
+
+    // RENDER CONTENT WITH WORD-LEVEL HIGHLIGHTING
     function renderChapter() {
       const chap = chapters[currentChapterIndex];
       document.getElementById('display-chap-title').innerText = chap.title;
@@ -404,17 +488,21 @@
         pEl.className = 'para-item';
         pEl.id = `para-box-${idx}`;
 
+        // จัดรูปแบบคำแปลภาษาไทย + ไฮไลต์คำในคลังศัพท์
         let thText = String(p.th || "");
         Object.values(glossary).forEach(name => {
           if (name && typeof name === 'string' && name.trim()) {
             const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            thText = thText.replace(new RegExp(`(${escaped})`, 'g'), '<span class="term">$1</span>');
+            thText = thText.replace(new RegExp(`(${escaped})`, 'g'), '<span class="term" title="คำเฉพาะในคลัง">$1</span>');
           }
         });
 
+        // ตัดคำภาษาจีนรายคำ
+        const segmentedSrc = segmentChineseText(p.src || '');
+
         pEl.innerHTML = `
-          <div class="para-th" onclick="inspectParagraph(${idx})">${thText}</div>
-          <div class="para-src" id="src-${idx}" style="display: ${showAllSource ? 'block' : 'none'};">${p.src || ''}</div>
+          <div class="para-th" onclick="toggleParagraphSrc(${idx})">${thText}</div>
+          <div class="para-src" id="src-${idx}" style="display: ${showAllSource ? 'block' : 'none'};">${segmentedSrc}</div>
         `;
         container.appendChild(pEl);
       });
@@ -422,63 +510,12 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // แตะที่ย่อหน้าเพื่อกางดูต้นฉบับและทำกรอบไฮไลต์คู่ทันที
-    function inspectParagraph(idx) {
-      document.querySelectorAll('.para-item').forEach(el => el.classList.remove('active-inspect'));
-      const targetBox = document.getElementById(`para-box-${idx}`);
+    function toggleParagraphSrc(idx) {
+      if (showAllSource) return;
       const srcEl = document.getElementById(`src-${idx}`);
-
-      if (targetBox) {
-        targetBox.classList.add('active-inspect');
-        if (!showAllSource && srcEl) {
-          srcEl.style.display = (srcEl.style.display === 'block') ? 'none' : 'block';
-        }
+      if (srcEl) {
+        srcEl.style.display = (srcEl.style.display === 'block') ? 'none' : 'block';
       }
-    }
-
-    // MONITOR SELECTION & SHOW BOTTOM BAR
-    function setupSelectionMonitor() {
-      const bar = document.getElementById('selection-bar');
-      const preview = document.getElementById('sel-preview-text');
-
-      const checkSelection = () => {
-        const selection = window.getSelection();
-        const text = selection ? selection.toString().trim() : "";
-
-        if (text && text.length >= 1 && text.length <= 40) {
-          capturedSelectionText = text;
-          preview.innerText = text;
-          bar.style.display = 'flex';
-        }
-      };
-
-      document.addEventListener('mouseup', () => setTimeout(checkSelection, 50));
-      document.addEventListener('touchend', () => setTimeout(checkSelection, 100));
-    }
-
-    function dismissSelectionBar() {
-      document.getElementById('selection-bar').style.display = 'none';
-      if (window.getSelection) window.getSelection().removeAllRanges();
-    }
-
-    function confirmAddGlossaryFromBar() {
-      const bar = document.getElementById('selection-bar');
-      bar.style.display = 'none';
-
-      const isChinese = /[\u4e00-\u9fa5]/.test(capturedSelectionText);
-      if (isChinese) {
-        document.getElementById('gloss-src').value = capturedSelectionText;
-        document.getElementById('gloss-tgt').value = "";
-      } else {
-        document.getElementById('gloss-src').value = "";
-        document.getElementById('gloss-tgt').value = capturedSelectionText;
-      }
-
-      openModal('glossary-modal');
-      setTimeout(() => {
-        if (isChinese) document.getElementById('gloss-tgt').focus();
-        else document.getElementById('gloss-src').focus();
-      }, 150);
     }
 
     // SCRAPER ENGINE
