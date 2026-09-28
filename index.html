@@ -79,7 +79,6 @@
     }
     body.theme-dark .chapter-toolbar { border-bottom-color: rgba(255,255,255,0.1); }
     
-    /* EDITABLE TITLES */
     .editable-title-wrap {
       display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
       border-radius: 4px; padding: 2px 4px; margin-left: -4px;
@@ -164,7 +163,7 @@
     }
     .modal-overlay.active { display: flex !important; }
     .modal-box {
-      width: 100%; max-width: 490px; border-radius: 12px;
+      width: 100%; max-width: 500px; border-radius: 12px;
       padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
       background-color: #fff; color: #1e293b;
     }
@@ -191,9 +190,10 @@
     /* ENHANCED BOOKSHELF STYLES */
     .book-item-container {
       border: 1px solid rgba(0,0,0,0.08); border-radius: 8px;
-      margin-bottom: 10px; overflow: hidden; background: rgba(0,0,0,0.01);
+      margin-bottom: 12px; overflow: hidden; background: rgba(0,0,0,0.01);
     }
     body.theme-dark .book-item-container { border-color: rgba(255,255,255,0.1); background: rgba(255,255,255,0.02); }
+    
     .book-card-header {
       display: flex; justify-content: space-between; align-items: center;
       padding: 10px 14px; cursor: pointer;
@@ -204,6 +204,14 @@
     .book-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #2563eb; }
     body.theme-dark .book-title { color: #60a5fa; }
     .book-meta { font-size: 11px; opacity: 0.65; margin-top: 2px; }
+
+    /* BATCH TRANSLATE PANEL IN BOOK CARD */
+    .batch-bar {
+      display: flex; align-items: center; gap: 6px; padding: 6px 14px;
+      background: rgba(0,0,0,0.02); border-top: 1px dashed rgba(0,0,0,0.08);
+      font-size: 12px;
+    }
+    body.theme-dark .batch-bar { background: rgba(255,255,255,0.03); border-top-color: rgba(255,255,255,0.08); }
 
     .book-chapters-list {
       display: none; border-top: 1px solid rgba(0,0,0,0.06);
@@ -218,6 +226,13 @@
     }
     .chap-subitem:hover { background-color: rgba(37,99,235,0.1); color: #2563eb; }
     .chap-subitem.active { font-weight: 600; color: #2563eb; background-color: rgba(37,99,235,0.08); }
+
+    /* PROGRESS BAR */
+    .progress-box {
+      display: none; margin: 10px 0; padding: 10px; border-radius: 8px;
+      background: #eff6ff; color: #1e40af; font-size: 12px;
+    }
+    body.theme-dark .progress-box { background: rgba(37,99,235,0.15); color: #93c5fd; }
   </style>
 </head>
 <body class="theme-sepia" id="app-body">
@@ -260,12 +275,10 @@
   <main>
     <div class="chapter-toolbar">
       <div style="flex: 1; padding-right: 12px;">
-        <!-- Editable Book Title -->
         <div class="editable-title-wrap" onclick="promptEditBookTitle()" title="คลิกเพื่อแก้ไขชื่อเรื่อง">
           <span class="book-heading" id="display-book-title">ชื่อนิยาย</span>
           <span class="edit-icon">✎ แก้ไข</span>
         </div>
-        <!-- Editable Chapter Title -->
         <div>
           <div class="editable-title-wrap" onclick="promptEditChapterTitle()" title="คลิกเพื่อแก้ไขชื่อตอน">
             <h1 class="chap-heading" id="display-chap-title">ยินดีต้อนรับ</h1>
@@ -303,15 +316,25 @@
     <button class="btn" onclick="openModal('glossary-modal')">คลังศัพท์</button>
   </nav>
 
-  <!-- MODAL: BOOKSHELF -->
+  <!-- MODAL: BOOKSHELF (WITH BATCH PRE-TRANSLATE) -->
   <div class="modal-overlay" id="bookshelf-modal">
     <div class="modal-box">
       <div class="modal-head">
         <div class="modal-title">ชั้นหนังสือของฉัน (ในเครื่อง)</div>
         <button class="modal-close" onclick="closeModal('bookshelf-modal')">✕</button>
       </div>
+
+      <!-- Batch Progress Status Box -->
+      <div class="progress-box" id="batch-progress-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <b id="batch-progress-title">กำลังแปลล่วงหน้า...</b>
+          <button class="btn btn-danger" style="padding: 2px 8px; font-size: 10px;" onclick="cancelBatchTranslate()">หยุดแปล</button>
+        </div>
+        <div id="batch-progress-desc">เตรียมคิว...</div>
+      </div>
+
       <div id="bookshelf-list" style="max-height: 330px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แตะที่ชื่อเรื่องเพื่อกางดูและเลือกอ่านตอนที่แปลเก็บไว้แล้วได้ทันที</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แปลล่วงหน้าเก็บไว้ในเครื่อง จะช่วยให้อ่านต่อเนื่องได้แม้ออฟไลน์</p>
     </div>
   </div>
 
@@ -507,6 +530,9 @@
     let currentBookTitle = "NovelTranslate";
 
     let retryAbortRequested = false;
+    let batchCancelRequested = false;
+    let isBatchRunning = false;
+
     let selectedWordBuffer = "";
     let isSelectedChinese = false;
 
@@ -519,9 +545,9 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับแก้ไขชื่อเรื่องและชื่อตอนได้อิสระ", src: "欢迎来到 NovelTranslate" },
-          { th: "คุณสามารถคลิกที่ 'ชื่อเรื่อง' หรือ 'ชื่อตอน' ด้านบนเพื่อพิมพ์แก้ไขชื่อตามต้องการได้ทันที", src: "可随时点击章节标题或小说名称进行个性化修改" },
-          { th: "ชื่อที่แก้ไขจะถูกบันทึกอัปเดตลงชั้นหนังสือและไฟล์ .TXT อัตโนมัติ", src: "修改后的标题将实时同步至本地数据库与TXT导出文件" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับแปลล่วงหน้าเก็บลงชั้นหนังสือ", src: "欢迎来到 NovelTranslate" },
+          { th: "เปิดหน้า 'ชั้นหนังสือ' แล้วระบุจำนวนบทที่ต้องการแปลล่วงหน้า ระบบจะดาวน์โหลดและแปลเก็บเข้าเครื่องให้อัตโนมัติ", src: "在书架中输入预翻译章节数，即可批量离线保存" },
+          { th: "คุณสามารถคลิกที่ชื่อเรื่องหรือชื่อตอนเพื่อแก้ไขชื่อได้ตามต้องการ", src: "支持随时自定义编辑书名及章节名" }
         ]
       }
     ];
@@ -603,7 +629,7 @@
       }
     }
 
-    // ==================== MANUAL EDIT TITLES ====================
+    // MANUAL EDIT TITLES
     async function promptEditBookTitle() {
       const newTitle = prompt("แก้ไขชื่อเรื่อง:", currentBookTitle);
       if (newTitle && newTitle.trim()) {
@@ -706,7 +732,7 @@
       }, 150);
     }
 
-    // ==================== ENHANCED ACCORDION BOOKSHELF UI ====================
+    // ==================== BOOKSHELF WITH BATCH PRE-TRANSLATE ====================
     async function openBookshelfModal() {
       const listContainer = document.getElementById('bookshelf-list');
       listContainer.innerHTML = '<div style="text-align:center; padding:15px; opacity:0.6;">กำลังเปิดคลังหนังสือ...</div>';
@@ -746,6 +772,15 @@
               <div class="book-meta">อ่านค้างไว้: <b>${b.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${bookChaps.length} ตอนที่บันทึกไว้</div>
             </div>
             <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบ</button>
+          </div>
+          <!-- BATCH TRANSLATE CONTROLS -->
+          <div class="batch-bar">
+            <span>แปลล่วงหน้า</span>
+            <input type="number" id="batch-input-${b.bookId}" class="form-input" style="width: 60px; padding: 3px 6px; font-size: 12px;" min="1" max="50" value="5">
+            <span>บท</span>
+            <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px; margin-left: auto;" onclick="startBatchTranslateForBook('${b.bookId}')">
+              ⚡ เริ่มแปลล่วงหน้า
+            </button>
           </div>
           <div class="book-chapters-list" id="shelf-chaps-${b.bookId}">
             ${chapsHtml || '<div style="padding:8px 14px; font-size:11px; opacity:0.5;">ไม่มีตอน</div>'}
@@ -798,7 +833,110 @@
       openBookshelfModal();
     }
 
-    // ==================== SMART TITLE & CHAPTER SCRAPER ====================
+    // ==================== BATCH PRE-TRANSLATE WORKER ====================
+    async function startBatchTranslateForBook(bookId) {
+      if (isBatchRunning) {
+        alert("กำลังมีกระบวนการแปลล่วงหน้าทำงานอยู่ กรุณารอหรือกดยกเลิกก่อน");
+        return;
+      }
+
+      const input = document.getElementById(`batch-input-${bookId}`);
+      const count = parseInt(input.value || "5", 10);
+      if (isNaN(count) || count < 1) return alert("กรุณาระบุจำนวนบทที่ถูกต้อง (อย่างน้อย 1 บท)");
+
+      // ดึงตอนล่าสุดของเรื่องนี้
+      const bookChaps = await dbGetChaptersByBook(bookId);
+      bookChaps.sort((a, b) => a.order - b.order);
+      if (bookChaps.length === 0) return alert("ไม่พบบทตั้งต้นของนิยายเรื่องนี้");
+
+      const lastChap = bookChaps[bookChaps.length - 1];
+      let targetUrl = lastChap.nextUrl;
+      if (!targetUrl) return alert("ไม่พบ URL ตอนถัดไปสำหรับเรื่องนี้");
+
+      // UI Progress Box
+      isBatchRunning = true;
+      batchCancelRequested = false;
+      const progressBox = document.getElementById('batch-progress-box');
+      const progressDesc = document.getElementById('batch-progress-desc');
+      progressBox.style.display = 'block';
+
+      let successCount = 0;
+
+      for (let i = 1; i <= count; i++) {
+        if (batchCancelRequested) {
+          progressDesc.innerText = `หยุดการแปลตามคำสั่งแล้ว (แปลเสร็จสิ้น ${successCount} ตอน)`;
+          break;
+        }
+
+        progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${targetUrl.substring(targetUrl.lastIndexOf('/'))})`;
+
+        try {
+          const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(targetUrl);
+          
+          const result = await translateTextWithPingPong(text, (msg) => {
+            progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 32)}...`;
+          }, rawChapTitle, rawBookTitle);
+
+          const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${bookChaps.length + i}`;
+
+          const newChap = {
+            id: `${bookId}_chap_${bookChaps.length + i}`,
+            bookId: bookId,
+            order: bookChaps.length + i,
+            title: chapTitle,
+            paragraphs: result.paragraphs,
+            sourceUrl: targetUrl,
+            nextUrl: nextUrl
+          };
+
+          await dbSaveChapter(newChap);
+          successCount++;
+
+          // อัปเดต Book Record
+          await dbSaveBook({
+            bookId: bookId,
+            title: result.bookTitle || currentBookTitle,
+            lastChapterIndex: (bookId === currentBookId) ? currentChapterIndex : bookChaps.length + i - 1,
+            lastChapterTitle: newChap.title,
+            totalChapters: bookChaps.length + i,
+            lastUrl: targetUrl,
+            updatedAt: Date.now()
+          });
+
+          targetUrl = nextUrl;
+          if (!targetUrl) {
+            progressDesc.innerText = `แปลจนถึงบทสุดท้ายของนิยายแล้ว (${successCount} ตอน)`;
+            break;
+          }
+
+          // หน่วงเวลา 2.5 วินาทีระหว่างบท ป้องกัน Rate Limit
+          if (i < count && !batchCancelRequested) {
+            progressDesc.innerText = `บันทึกบทที่ ${i} แล้ว กำลังพักระบบ 2.5 วิก่อนเริ่มบทถัดไป...`;
+            await new Promise(r => setTimeout(r, 2500));
+          }
+        } catch (err) {
+          progressDesc.innerText = `เกิดข้อผิดพลาดในตอนที่ ${i}: ${err.message}`;
+          break;
+        }
+      }
+
+      isBatchRunning = false;
+      setTimeout(() => {
+        openBookshelfModal();
+        if (currentBookId === bookId) {
+          loadBookFromDB(bookId, currentChapterIndex);
+        }
+      }, 1500);
+    }
+
+    function cancelBatchTranslate() {
+      if (isBatchRunning) {
+        batchCancelRequested = true;
+        document.getElementById('batch-progress-desc').innerText = "กำลังสั่งหยุด...";
+      }
+    }
+
+    // ==================== SMART SCRAPER ENGINE ====================
     async function scrapePage(url) {
       let rawText = "";
       let rawChapTitle = "";
@@ -915,7 +1053,7 @@
       }
     }
 
-    // ==================== ROBUST JSON TRANSLATE CALL WITH TITLE TRANSLATION ====================
+    // ==================== ROBUST JSON TRANSLATE CALL ====================
     async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "") {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
