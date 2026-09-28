@@ -74,10 +74,30 @@
     body.theme-dark .chapter-toolbar { border-bottom-color: rgba(255,255,255,0.1); }
     .chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; }
 
-    /* READING PARAGRAPHS (CLEAN - NO HIGHLIGHT) */
+    /* READING PARAGRAPHS */
     #reading-content { line-height: 1.85; user-select: text; }
-    .para-item { padding: 4px 0; margin-bottom: 8px; }
-    .para-th { font-size: inherit; }
+    .para-item {
+      padding: 5px 6px; margin-bottom: 6px; border-radius: 6px;
+      transition: background-color 0.15s ease;
+    }
+    .para-th {
+      font-size: inherit; cursor: pointer;
+    }
+    .para-th:hover {
+      background-color: rgba(0,0,0,0.02);
+    }
+    body.theme-dark .para-th:hover {
+      background-color: rgba(255,255,255,0.02);
+    }
+
+    /* ACCORDION SOURCE TEXT */
+    .para-src {
+      display: none; margin-top: 6px; padding: 8px 12px;
+      border-radius: 6px; font-size: 14px; opacity: 0.85;
+      background: rgba(0,0,0,0.04); border-left: 3px solid #f59e0b;
+      font-family: monospace; line-height: 1.6; user-select: text;
+    }
+    body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
 
     /* CHAPTER NAVIGATION */
     .chap-nav {
@@ -97,26 +117,20 @@
     body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
     @media (min-width: 768px) { .mobile-dock { display: none; } }
 
-    /* BOTTOM FLOATING BAR FOR TRANSLATION MAPPING (เด้งเวลาลากคลุมคำไทย) */
-    #mapping-bar {
+    /* BOTTOM FLOATING ACTION BAR FOR SELECTED WORD */
+    #selection-bar {
       display: none; position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
-      z-index: 45; width: calc(100% - 24px); max-width: 520px;
+      z-index: 45; width: calc(100% - 24px); max-width: 440px;
       background: #1e293b; color: #fff; padding: 10px 14px; border-radius: 10px;
-      box-shadow: 0 10px 25px rgba(0,0,0,0.35); flex-direction: column; gap: 6px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.35); align-items: center; justify-content: space-between;
       animation: slideUp 0.15s ease-out;
     }
-    @media (min-width: 768px) { #mapping-bar { bottom: 20px; } }
+    @media (min-width: 768px) { #selection-bar { bottom: 20px; } }
     @keyframes slideUp { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
 
-    .map-header { display: flex; justify-content: space-between; align-items: center; }
-    .map-tag { font-size: 10px; opacity: 0.6; text-transform: uppercase; font-weight: 600; }
-    .map-selected { font-size: 13px; font-weight: 600; color: #38bdf8; }
-    .map-source-box {
-      font-size: 12px; opacity: 0.85; background: rgba(255,255,255,0.08);
-      padding: 6px 8px; border-radius: 6px; line-height: 1.4;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-      font-family: monospace;
-    }
+    .sel-info { display: flex; flex-direction: column; overflow: hidden; max-width: 65%; }
+    .sel-tag { font-size: 10px; opacity: 0.6; text-transform: uppercase; font-weight: 600; }
+    .sel-text { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #38bdf8; }
 
     /* MODAL WINDOWS */
     .modal-overlay {
@@ -167,20 +181,15 @@
     </div>
   </header>
 
-  <!-- BOTTOM MAPPING BAR (เด้งขึ้นมาบอกว่าคำไทยแปลมาจากจีนคำไหน) -->
-  <div id="mapping-bar">
-    <div class="map-header">
-      <div style="display: flex; align-items: baseline; gap: 6px; overflow: hidden; max-width: 60%;">
-        <span class="map-tag">คำไทย:</span>
-        <span class="map-selected" id="map-th-word">...</span>
-      </div>
-      <div style="display: flex; gap: 6px;">
-        <button class="btn" style="color:#fff; border-color:rgba(255,255,255,0.2); padding: 4px 8px;" onclick="dismissMappingBar()">ปิด</button>
-        <button class="btn btn-primary" style="padding: 4px 10px;" onclick="addFromMappingBar()">+ เพิ่มลงคลัง</button>
-      </div>
+  <!-- BOTTOM FLOATING ACTION BAR FOR SELECTED WORD -->
+  <div id="selection-bar">
+    <div class="sel-info">
+      <span class="sel-tag" id="sel-tag-label">คำที่เลือก</span>
+      <span class="sel-text" id="sel-preview-text">...</span>
     </div>
-    <div class="map-source-box" id="map-zh-source">
-      ต้นฉบับ: ...
+    <div style="display: flex; gap: 6px;">
+      <button class="btn" style="color:#fff; border-color:rgba(255,255,255,0.2); padding: 4px 8px;" onclick="dismissSelectionBar()">ปิด</button>
+      <button class="btn btn-primary" style="padding: 4px 10px;" onclick="addFromSelectionBar()">+ เพิ่มลงคลัง</button>
     </div>
   </div>
 
@@ -246,7 +255,7 @@
         <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปลไทย" style="flex: 1;">
         <button class="btn btn-primary" onclick="addGlossary()">เพิ่ม</button>
       </div>
-      <p style="font-size: 11px; opacity: 0.6; margin-bottom: 8px;">*ลากคลุมคำแปลไทยในเนื้อเรื่อง เพื่อดูภาษาจีนต้นฉบับและกดเพิ่มได้ทันที</p>
+      <p style="font-size: 11px; opacity: 0.6; margin-bottom: 8px;">*ลากคลุมคำไทยหรือจีนในเนื้อเรื่อง จะดึงคำมาใส่ช่องให้อัตโนมัติ</p>
       <div id="glossary-list" style="max-height: 200px; overflow-y: auto; font-size: 13px;"></div>
     </div>
   </div>
@@ -301,9 +310,9 @@
     let isPrefetching = false;
     let lastChapterContext = "";
 
-    // Mapping Buffer
-    let bufferThWord = "";
-    let bufferZhSource = "";
+    // Selection Buffer
+    let selectedWordBuffer = "";
+    let isSelectedChinese = false;
 
     let glossary = {};
     try {
@@ -314,9 +323,9 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับเรียบง่าย", src: "欢迎来到 NovelTranslate" },
-          { th: "ลองใช้เมาส์ลากคลุม หรือดับเบิลคลิกที่คำแปลภาษาไทยคำไหนก็ได้", src: "请尝试在译文上选中任意词语" },
-          { th: "แถบด้านล่างจะเด้งขึ้นมาบอกทันทีว่าประโยคนี้แปลมาจากภาษาจีนคำว่าอะไร พร้อมปุ่มกดเพิ่มลงคลังศัพท์ได้ทันที", src: "底部浮条会立即显示对应的中文原文，并支持一键添加词库" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
+          { th: "แตะที่ย่อหน้านี้ เพื่อดูข้อความภาษาจีนต้นฉบับเด้งลงมาใต้ย่อหน้าทันที", src: "轻触本段落，即可在下方展开中文原文对比阅读" },
+          { th: "ลองลากคลุมคำไทยหรือจีน แถบด้านล่างจะเปิดขึ้นมาเพื่อให้กดเพิ่มลงคลังศัพท์ได้ทันที", src: "选中文本后底部弹条会自动识别中英文并填入词库" }
         ]
       }
     ];
@@ -327,7 +336,7 @@
       loadSettings();
       renderChapter();
       renderGlossary();
-      setupThaiSelectionListener();
+      setupSelectionMonitor();
     });
 
     // THEME & FONT
@@ -347,7 +356,7 @@
     function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-    // RENDER CONTENT (CLEAN THAI TEXT)
+    // RENDER CONTENT WITH ACCORDION SOURCE
     function renderChapter() {
       const chap = chapters[currentChapterIndex];
       document.getElementById('display-chap-title').innerText = chap.title;
@@ -359,42 +368,47 @@
       chap.paragraphs.forEach((p, idx) => {
         const pEl = document.createElement('div');
         pEl.className = 'para-item';
-        pEl.dataset.idx = idx;
+        pEl.id = `para-box-${idx}`;
 
-        pEl.innerHTML = `<div class="para-th">${p.th || ""}</div>`;
+        pEl.innerHTML = `
+          <div class="para-th" onclick="toggleParagraphSrc(${idx})">${p.th || ""}</div>
+          <div class="para-src" id="src-${idx}">${p.src || "ไม่มีข้อความต้นฉบับ"}</div>
+        `;
         container.appendChild(pEl);
       });
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // LISTENER FOR THAI TEXT SELECTION
-    function setupThaiSelectionListener() {
+    // แตะที่ย่อหน้าเพื่อกางดูต้นฉบับภาษาจีน
+    function toggleParagraphSrc(idx) {
+      // ป้องกันการกางออกเวลากำลังลากคลุมข้อความ
+      const selection = window.getSelection();
+      if (selection && selection.toString().trim().length > 0) return;
+
+      const srcEl = document.getElementById(`src-${idx}`);
+      if (srcEl) {
+        srcEl.style.display = (srcEl.style.display === 'block') ? 'none' : 'block';
+      }
+    }
+
+    // MONITOR SELECTION & AUTO-DETECT LANGUAGE
+    function setupSelectionMonitor() {
       const checkSelection = () => {
         const sel = window.getSelection();
         const text = sel ? sel.toString().trim() : "";
 
-        if (text && text.length >= 1 && text.length <= 50) {
-          // Find which paragraph element contains this selection
-          let node = sel.anchorNode;
-          while (node && !node.classList?.contains('para-item')) {
-            node = node.parentNode;
-          }
+        if (text && text.length >= 1 && text.length <= 40) {
+          selectedWordBuffer = text;
+          // ตรวจสอบว่ามีตัวอักษรจีนหรือไม่
+          isSelectedChinese = /[\u4e00-\u9fa5]/.test(text);
 
-          if (node && node.dataset && node.dataset.idx !== undefined) {
-            const idx = parseInt(node.dataset.idx, 10);
-            const chap = chapters[currentChapterIndex];
-            const p = chap.paragraphs[idx];
+          const tag = document.getElementById('sel-tag-label');
+          const preview = document.getElementById('sel-preview-text');
 
-            if (p) {
-              bufferThWord = text;
-              bufferZhSource = p.src || "ไม่พบข้อความต้นฉบับ";
-
-              document.getElementById('map-th-word').innerText = bufferThWord;
-              document.getElementById('map-zh-source').innerText = "ต้นฉบับ: " + bufferZhSource;
-              document.getElementById('mapping-bar').style.display = 'flex';
-            }
-          }
+          tag.innerText = isSelectedChinese ? "คำจีนที่เลือก:" : "คำไทยที่เลือก:";
+          preview.innerText = text;
+          document.getElementById('selection-bar').style.display = 'flex';
         }
       };
 
@@ -402,21 +416,32 @@
       document.addEventListener('touchend', () => setTimeout(checkSelection, 100));
     }
 
-    function dismissMappingBar() {
-      document.getElementById('mapping-bar').style.display = 'none';
+    function dismissSelectionBar() {
+      document.getElementById('selection-bar').style.display = 'none';
       if (window.getSelection) window.getSelection().removeAllRanges();
     }
 
-    function addFromMappingBar() {
-      document.getElementById('mapping-bar').style.display = 'none';
-      
-      // ดึงคำไทยและต้นฉบับใส่ช่อง Glossary อัตโนมัติ
-      document.getElementById('gloss-tgt').value = bufferThWord;
-      document.getElementById('gloss-src').value = bufferZhSource;
+    // เพิ่มลงคลัง: ดึงเฉพาะคำที่เลือก อีกช่องปล่อยว่าง 100%
+    function addFromSelectionBar() {
+      document.getElementById('selection-bar').style.display = 'none';
+
+      if (isSelectedChinese) {
+        // เลือกภาษาจีน: คำเดิมใส่คำที่เลือก, คำแปลปล่อยว่างให้กรอกเอง
+        document.getElementById('gloss-src').value = selectedWordBuffer;
+        document.getElementById('gloss-tgt').value = "";
+      } else {
+        // เลือกภาษาไทย: คำแปลใส่คำที่เลือก, คำเดิมปล่อยว่างให้กรอกเอง
+        document.getElementById('gloss-src').value = "";
+        document.getElementById('gloss-tgt').value = selectedWordBuffer;
+      }
 
       openModal('glossary-modal');
       setTimeout(() => {
-        document.getElementById('gloss-src').focus();
+        if (isSelectedChinese) {
+          document.getElementById('gloss-tgt').focus();
+        } else {
+          document.getElementById('gloss-src').focus();
+        }
       }, 150);
     }
 
