@@ -9,7 +9,6 @@
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
 
   <style>
-    /* RESET & BASE STYLES (No CDN Dependency) */
     * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
     body {
       font-family: 'Sarabun', sans-serif;
@@ -40,11 +39,11 @@
       font-weight: 600; font-size: 15px; display: flex; align-items: center; justify-content: center;
     }
     .brand-title { font-family: 'Kanit', sans-serif; font-weight: 600; font-size: 15px; line-height: 1.2; }
-    .brand-sub { font-size: 11px; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 130px; }
+    .brand-sub { font-size: 11px; opacity: 0.6; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 120px; }
 
     .header-actions { display: flex; align-items: center; gap: 6px; }
     .btn {
-      padding: 6px 12px; font-size: 13px; font-weight: 500;
+      padding: 6px 10px; font-size: 12px; font-weight: 500;
       border-radius: 6px; border: 1px solid rgba(0,0,0,0.12);
       background: transparent; color: inherit; cursor: pointer;
       display: inline-flex; align-items: center; justify-content: center; gap: 4px;
@@ -55,43 +54,42 @@
     body.theme-dark .btn:hover { background-color: rgba(255,255,255,0.08); }
     .btn-primary { background: #2563eb !important; color: #fff !important; border: none !important; }
     .btn-primary:hover { background: #1d4ed8 !important; }
+    .btn-active { background: rgba(37,99,235,0.15) !important; border-color: #2563eb !important; color: #2563eb !important; font-weight: 600; }
 
-    /* PREFETCH BADGE */
     #prefetch-badge {
-      display: none; font-size: 10px; padding: 3px 8px; border-radius: 999px;
+      display: none; font-size: 10px; padding: 2px 6px; border-radius: 999px;
       background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
     }
-    body.theme-dark #prefetch-badge { background: #064e3b; color: #a7f3d0; border-color: #047857; }
 
     /* MAIN READING CANVAS */
     main {
       flex: 1; width: 100%; max-width: 720px; margin: 0 auto;
-      padding: 20px 16px 100px 16px;
+      padding: 18px 16px 100px 16px;
     }
     @media (min-width: 768px) { main { padding-bottom: 40px; } }
 
-    .chapter-header {
-      display: flex; justify-content: space-between; align-items: flex-end;
-      border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 10px; margin-bottom: 18px;
+    .chapter-toolbar {
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 8px; margin-bottom: 16px;
     }
-    body.theme-dark .chapter-header { border-bottom-color: rgba(255,255,255,0.1); }
-    .chap-heading { font-family: 'Kanit', sans-serif; font-size: 20px; font-weight: 600; }
+    body.theme-dark .chapter-toolbar { border-bottom-color: rgba(255,255,255,0.1); }
+    .chap-heading { font-family: 'Kanit', sans-serif; font-size: 19px; font-weight: 600; }
 
     /* READING PARAGRAPHS */
     #reading-content { line-height: 1.85; user-select: text; }
-    .para-item { padding: 4px 0; cursor: pointer; border-radius: 4px; }
+    .para-item { padding: 5px 0; border-radius: 4px; }
     .para-th { font-size: inherit; }
-    .para-th span.term { font-weight: 600; color: #2563eb; }
+    .para-th span.term { font-weight: 600; color: #2563eb; text-decoration: underline dotted; }
     body.theme-dark .para-th span.term { color: #60a5fa; }
     .para-src {
-      display: none; margin-top: 6px; padding: 8px 10px;
+      display: none; margin-top: 6px; padding: 6px 10px;
       border-radius: 4px; font-size: 13px; opacity: 0.75;
       background: rgba(0,0,0,0.04); border-left: 3px solid #f59e0b;
       font-family: monospace;
     }
     body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
 
-    /* BOTTOM NAV FOR CHAPTERS */
+    /* CHAPTER NAVIGATION */
     .chap-nav {
       margin-top: 30px; padding-top: 18px;
       border-top: 1px solid rgba(0,0,0,0.08);
@@ -109,10 +107,22 @@
     body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
     @media (min-width: 768px) { .mobile-dock { display: none; } }
 
-    /* MODAL WINDOWS (CRITICAL: HIDDEN BY DEFAULT) */
+    /* POPUP ACTION FOR SELECTED TEXT */
+    #text-selection-popup {
+      display: none; position: absolute; z-index: 60;
+      background: #1e293b; color: #fff; padding: 4px 8px; border-radius: 6px;
+      font-size: 11px; font-weight: 600; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      cursor: pointer; transform: translate(-50%, -100%); margin-top: -8px;
+      white-space: nowrap;
+    }
+    #text-selection-popup::after {
+      content: ''; position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%);
+      border-width: 4px 4px 0 4px; border-style: solid; border-color: #1e293b transparent transparent transparent;
+    }
+
+    /* MODAL WINDOWS */
     .modal-overlay {
-      display: none; /* MUST BE HIDDEN */
-      position: fixed; inset: 0; z-index: 50;
+      display: none; position: fixed; inset: 0; z-index: 50;
       background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
       align-items: center; justify-content: center; padding: 16px;
     }
@@ -141,14 +151,6 @@
       display: none; padding: 8px 10px; border-radius: 6px; font-size: 12px;
       margin-top: 8px; line-height: 1.4;
     }
-
-    /* LOADER SPINNER */
-    .spinner {
-      display: inline-block; width: 14px; height: 14px;
-      border: 2px solid #fff; border-top-color: transparent;
-      border-radius: 50%; animation: spin 0.6s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body class="theme-sepia" id="app-body">
@@ -170,13 +172,21 @@
     </div>
   </header>
 
+  <!-- QUICK SELECTION POPUP -->
+  <div id="text-selection-popup" onclick="quickAddGlossary()">+ เพิ่มลงคลังศัพท์</div>
+
   <!-- MAIN READING CANVAS -->
   <main>
-    <div class="chapter-header">
+    <div class="chapter-toolbar">
       <div>
         <h1 class="chap-heading" id="display-chap-title">ยินดีต้อนรับ</h1>
       </div>
-      <button class="btn" onclick="exportTxt()" style="font-size: 11px;">บันทึก .TXT</button>
+      <div style="display: flex; gap: 6px;">
+        <button class="btn" id="toggle-all-src-btn" onclick="toggleAllSourceTexts()" title="สลับแสดงต้นฉบับทั้งหน้า">
+          แสดงต้นฉบับ
+        </button>
+        <button class="btn" onclick="exportTxt()" style="font-size: 11px;">.TXT</button>
+      </div>
     </div>
 
     <!-- Reading Paragraphs -->
@@ -196,6 +206,7 @@
     <button class="btn" onclick="adjustFontSize(-1)">A-</button>
     <button class="btn" id="mobile-theme-btn" onclick="cycleTheme()">ถนอมสายตา</button>
     <button class="btn" onclick="adjustFontSize(1)">A+</button>
+    <button class="btn" onclick="toggleAllSourceTexts()" id="mobile-src-toggle-btn">ต้นฉบับ</button>
     <button class="btn" onclick="openModal('glossary-modal')">คลังศัพท์</button>
   </nav>
 
@@ -232,44 +243,63 @@
         <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปล (เช่น หลินตง)" style="flex: 1;">
         <button class="btn btn-primary" onclick="addGlossary()">เพิ่ม</button>
       </div>
-      <div id="glossary-list" style="max-height: 180px; overflow-y: auto; font-size: 13px;"></div>
+      <p style="font-size: 11px; opacity: 0.6; margin-bottom: 8px;">*ทริก: ลากคลุมคำหรือกดค้างที่ข้อความในหน้าอ่าน เพื่อเพิ่มศัพท์ได้ทันที</p>
+      <div id="glossary-list" style="max-height: 200px; overflow-y: auto; font-size: 13px;"></div>
     </div>
   </div>
 
-  <!-- MODAL 3: SETTINGS -->
+  <!-- MODAL 3: SETTINGS (GENRE / TONE PRESETS) -->
   <div class="modal-overlay" id="settings-modal">
     <div class="modal-box">
       <div class="modal-head">
-        <div class="modal-title">ตั้งค่า API</div>
+        <div class="modal-title">ตั้งค่าระบบและการแปล</div>
         <button class="modal-close" onclick="closeModal('settings-modal')">✕</button>
       </div>
+
       <div class="form-group">
         <label class="form-label">Google Gemini API Key</label>
         <input type="password" id="gemini-key" class="form-input" placeholder="AIzaSy...">
       </div>
+
+      <div class="form-group">
+        <label class="form-label">แนวเรื่อง / สไตล์สำนวนนิยาย (Genre Preset)</label>
+        <select id="novel-genre" class="form-input">
+          <option value="xianxia" selected>เซียนเซีย / เทพเซียนบำเพ็ญเพียร (เน้นศัพท์เต๋า ระดับลมปราณ สรรพนามข้า-เจ้า)</option>
+          <option value="wuxia">กำลังภายใน / ยุทธภพ (สำนวนคลาสสิก ยุทธจักร จอมยุทธ์ ท่องใต้หล้า)</option>
+          <option value="system_game">ระบบ / ดันเจี้ยน / เลเวลอัพ (กระชับ ทันสมัย หน้าต่างสเตตัสทับศัพท์)</option>
+          <option value="scifi">ไซไฟ / ยุคอวกาศ (ศัพท์ดาราศาสตร์ ฟิสิกส์ เทคโนโลยีอนาคต)</option>
+          <option value="horror">สยองขวัญ / ระทึกขวัญเอาชีวิตรอด (บรรยากาศกดดัน เยือกเย็น ชวนระแวง)</option>
+          <option value="modern_romance">ปัจจุบัน / สืบสวน / โรแมนติก (บทสนทนาเป็นธรรมชาติ ไหลลื่น)</option>
+        </select>
+      </div>
+
       <div class="form-group">
         <label class="form-label">โมเดล AI (Active Model)</label>
         <select id="gemini-model" class="form-input">
-          <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash-Lite (แนะนำ / สปีดเร็ว)</option>
-          <option value="gemini-3.8-flash">Gemini 3.8 Flash (เรือธง / สำนวนดี)</option>
+          <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash-Lite (แนะนำ / สปีดเร็ว ประหยัด Token)</option>
+          <option value="gemini-3.8-flash">Gemini 3.8 Flash (เรือธง / สำนวนสละสลวยที่สุด)</option>
           <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
         </select>
       </div>
+
       <div style="margin-top: 14px;">
         <button class="btn btn-primary" style="width: 100%;" onclick="saveSettings()">บันทึกการตั้งค่า</button>
       </div>
     </div>
   </div>
 
-  <!-- JAVASCRIPT APPLICATION LOGIC -->
   <script>
     // STATE
     let currentTheme = 'sepia';
     let currentFontSize = 18;
     let currentUrl = "";
     let nextUrlCalculated = "";
-    let prefetchedData = null; // Buffer: { title, paragraphs, nextUrl }
+    let prefetchedData = null;
     let isPrefetching = false;
+    let showAllSource = false;
+    let lastChapterContext = ""; // เก็บสรุปตอนก่อนหน้าเพื่อความต่อเนื่อง
+
+    let selectedWordBuffer = "";
 
     let glossary = {};
     try {
@@ -280,10 +310,10 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "Welcome to NovelTranslate" },
-          { th: "1. กดปุ่ม '+ วางลิงก์' ด้านบน แล้วใส่ URL หน้านิยาย (เช่น เว็บ 69shuba)", src: "Step 1" },
-          { th: "2. ระบบจะแปลบทให้อัตโนมัติ และคำนวณลิงก์ตอนถัดไปรอไว้ให้", src: "Step 2" },
-          { th: "3. เมื่ออ่านจบตอน กดปุ่ม 'ตอนถัดไป →' บทใหม่จะถูกดึงมาแปลทันที!", src: "Step 3" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับอัปเกรดสำนวนและความต่อเนื่อง", src: "Welcome to NovelTranslate" },
+          { th: "1. ไปที่เมนู 'ตั้งค่า' เพื่อเลือกสไตล์สำนวนนิยาย (เช่น เซียนเซีย, ไซไฟ, สยองขวัญ)", src: "Genre Setup" },
+          { th: "2. สามารถกดปุ่ม 'แสดงต้นฉบับ' ด้านบนเพื่อเปิดดูภาษาจีนใต้ทุกย่อหน้าพร้อมกันทั้งบทได้", src: "Toggle Source View" },
+          { th: "3. ลองลากคลุมคำหรือแตะค้างที่คำศัพท์จีน จะมีปุ่มลอยขึ้นมาให้กดเพิ่มลงคลังศัพท์ได้ทันที", src: "Quick Term Add" }
         ]
       }
     ];
@@ -294,6 +324,7 @@
       loadSettings();
       renderChapter();
       renderGlossary();
+      setupSelectionListener();
     });
 
     // THEME & FONT
@@ -308,6 +339,27 @@
     function adjustFontSize(delta) {
       currentFontSize = Math.min(26, Math.max(14, currentFontSize + delta));
       document.getElementById('reading-content').style.fontSize = currentFontSize + 'px';
+    }
+
+    // TOGGLE SOURCE TEXT GLOBALLY
+    function toggleAllSourceTexts() {
+      showAllSource = !showAllSource;
+      const btn = document.getElementById('toggle-all-src-btn');
+      const mobileBtn = document.getElementById('mobile-src-toggle-btn');
+      
+      if (showAllSource) {
+        btn.classList.add('btn-active');
+        btn.innerText = "ซ่อนต้นฉบับ";
+        if (mobileBtn) mobileBtn.classList.add('btn-active');
+      } else {
+        btn.classList.remove('btn-active');
+        btn.innerText = "แสดงต้นฉบับ";
+        if (mobileBtn) mobileBtn.classList.remove('btn-active');
+      }
+
+      document.querySelectorAll('.para-src').forEach(el => {
+        el.style.display = showAllSource ? 'block' : 'none';
+      });
     }
 
     // MODAL HANDLERS
@@ -338,7 +390,7 @@
 
         pEl.innerHTML = `
           <div class="para-th" onclick="toggleSrc(${idx})">${thText}</div>
-          <div class="para-src" id="src-${idx}">${p.src || ''}</div>
+          <div class="para-src" id="src-${idx}" style="display: ${showAllSource ? 'block' : 'none'};">${p.src || ''}</div>
         `;
         container.appendChild(pEl);
       });
@@ -351,9 +403,55 @@
       if (el) el.style.display = (el.style.display === 'block') ? 'none' : 'block';
     }
 
-    // SCRAPER ENGINE WITH NUMBER SEQUENCING
+    // SELECTION LISTENER (แตะค้าง / ลากคลุมคำ เพื่อเพิ่มศัพท์ทันที)
+    function setupSelectionListener() {
+      const popup = document.getElementById('text-selection-popup');
+
+      document.addEventListener('selectionchange', () => {
+        const selection = window.getSelection();
+        const text = selection.toString().trim();
+
+        if (text && text.length >= 1 && text.length <= 25) {
+          const range = selection.getRangeAt(0);
+          const rect = range.getBoundingClientRect();
+          if (rect.width > 0 && rect.height > 0) {
+            selectedWordBuffer = text;
+            popup.style.top = (rect.top + window.scrollY) + 'px';
+            popup.style.left = (rect.left + rect.width / 2) + 'px';
+            popup.style.display = 'block';
+            return;
+          }
+        }
+        popup.style.display = 'none';
+      });
+
+      document.addEventListener('mousedown', (e) => {
+        if (e.target !== popup) popup.style.display = 'none';
+      });
+    }
+
+    function quickAddGlossary() {
+      const popup = document.getElementById('text-selection-popup');
+      popup.style.display = 'none';
+      
+      const isChinese = /[\u4e00-\u9fa5]/.test(selectedWordBuffer);
+      if (isChinese) {
+        document.getElementById('gloss-src').value = selectedWordBuffer;
+        document.getElementById('gloss-tgt').value = "";
+      } else {
+        document.getElementById('gloss-src').value = "";
+        document.getElementById('gloss-tgt').value = selectedWordBuffer;
+      }
+      
+      openModal('glossary-modal');
+      setTimeout(() => {
+        if (isChinese) document.getElementById('gloss-tgt').focus();
+        else document.getElementById('gloss-src').focus();
+      }, 150);
+    }
+
+    // SCRAPER ENGINE
     async function scrapePage(url) {
-      // 1. Fetch via Jina AI
       let rawText = "";
       try {
         const res = await fetch(`https://r.jina.ai/${url}`);
@@ -364,7 +462,6 @@
         }
       } catch (e) {}
 
-      // 2. Fetch via Allorigins fallback
       if (!rawText || rawText.length < 50) {
         const pRes = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(url)}`);
         const pData = await pRes.json();
@@ -382,7 +479,6 @@
 
       if (!rawText || rawText.length < 30) throw new Error("ไม่สามารถดึงข้อความจากเว็บนี้ได้");
 
-      // 3. Smart Next URL Predictor (เช่น .../40711443 -> .../40711444)
       let nextUrl = null;
       const numMatch = url.match(/^(.*?)(\d+)(\.html?|\/)?$/);
       if (numMatch) {
@@ -396,24 +492,69 @@
       return { text: rawText, nextUrl: nextUrl };
     }
 
-    // GEMINI TRANSLATION
+    // GENRE-SPECIFIC SYSTEM PROMPT BUILDER
+    function getGenreInstruction(genre) {
+      switch (genre) {
+        case 'xianxia':
+          return `สไตล์สำนวน: "เทพเซียน / บำเพ็ญเพียร (Xianxia)"
+- ใช้สรรพนามโบราณ: "ข้า - เจ้า", "ผู้อาวุโส - ศิษย์น้อง/ผู้น้อย" เคร่งครัด ห้ามหลุดคำว่า "ฉัน/นาย/คุณ/ผม" เด็ดขาด
+- ศัพท์เฉพาะทางเต๋า: บำเพ็ญเพียร, ลมปราณ, แก่นทองคำ, ทัณฑ์สวรรค์, ตำหนัก, ยอดเขา, แดนลับ
+- น้ำเสียงขรึม โอ่อ่า เปี่ยมด้วยพลังแห่งฟ้าดิน`;
+
+        case 'wuxia':
+          return `สไตล์สำนวน: "กำลังภายใน / ยุทธภพ (Wuxia)"
+- บรรยากาศยุทธจักร: สำนัก, คัมภีร์ยุทธ, ลมปราณคุ้มกาย, กระบี่, ท่องยุทธภพ, เหล้าดี
+- สรรพนามคลาสสิก: "ข้า - ท่าน/เจ้า", "พี่ใหญ่ - น้องร่วมสาบาน" สละสลวย ลื่นไหล`;
+
+        case 'system_game':
+          return `สไตล์สำนวน: "ระบบ / ดันเจี้ยน / ผู้เล่น (System/Game)"
+- ข้อความแจ้งเตือนระบบ: ให้แปลกระชับ คมชัด เช่น [ติ๊ง! ตรวจพบภารกิจ], [เลเวลอัป]
+- ศัพท์เกมทับศัพท์หรือแปลให้เข้าใจง่าย สรรพนามทันสมัย เช่น "ฉัน - นาย" หรือสรรพนามตามบทบาท`;
+
+        case 'scifi':
+          return `สไตล์สำนวน: "ไซไฟ / มหากาพย์อวกาศ (Sci-Fi)"
+- ศัพท์วิทยาศาสตร์และอวกาศ: ยานรบ, รูหนอน, วาร์ป, คลื่นแม่เหล็ก, พันธุกรรม, ปัญญาประดิษฐ์
+- น้ำเสียงจริงจัง แม่นยำ ชัดเจน`;
+
+        case 'horror':
+          return `สไตล์สำนวน: "สยองขวัญ / เอาชีวิตรอด / ปริศนา (Horror)"
+- เน้นบรรยายบรรยากาศ: วังเวง, เย็นเยียบ, เสียงลมหายใจ, กลิ่นคาว, เงาตะคุ่ม
+- ใช้คำที่สร้างความกดดัน ชวนระแวง และตื่นตระหนก`;
+
+        default:
+          return `สไตล์สำนวน: "วรรณกรรมสากลทั่วไป"
+- บทสนทนาเป็นธรรมชาติ ไหลลื่น คมคาย สรรพนามเหมาะสมกับบริบทตัวละคร`;
+      }
+    }
+
+    // TRANSLATE WITH CONTEXT & GENRE
     async function translateText(rawText) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const model = (localStorage.getItem('nov_gemini_model') || "gemini-3.5-flash-lite").trim();
+      const genre = localStorage.getItem('nov_genre') || "xianxia";
 
       if (!key) throw new Error("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
 
       const termList = Object.entries(glossary).map(([k,v]) => `${k}=${v}`).join(", ");
-      const prompt = `คุณคือนักแปลนิยาย แปลข้อความต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย
-คำศัพท์เฉพาะ: [${termList}]
-ตอบกลับเฉพาะรูปแบบ JSON Array: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ไม่ต้องใส่คำอธิบายอื่น`;
+      const genreRule = getGenreInstruction(genre);
+
+      const prompt = `คุณคือนักแปลนิยายมืออาชีพชั้นครู แปลเนื้อหาต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น และคงอารมณ์วรรณกรรมสูงสุด
+
+${genreRule}
+
+กฎเหล็กเรื่องความต่อเนื่องและคำศัพท์:
+1. หากพบคำศัพท์เหล่านี้ ต้องแปลตามนี้ 100%: [${termList}]
+2. รักษาความต่อเนื่องของสรรพนามระหว่างตัวละครเดิม อย่าเปลี่ยนคำเรียกไปมา
+${lastChapterContext ? `3. บริบทจากท้ายตอนก่อนหน้า (เพื่อความต่อเนื่อง): "${lastChapterContext}"` : ''}
+
+ตอบกลับเฉพาะรูปแบบ JSON Array ของ Object เท่านั้น: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ห้ามใส่ Markdown ครอบ ห้ามมีคำเกริ่นนำ`;
 
       const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\n${rawText.substring(0, 4500)}` }] }]
+          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาที่ต้องแปล:\n${rawText.substring(0, 4800)}` }] }]
         })
       });
 
@@ -425,7 +566,15 @@
       if (jsonMatch) outText = jsonMatch[0];
       else outText = outText.replace(/```json/g, '').replace(/```/g, '').trim();
 
-      return JSON.parse(outText);
+      const parsedResult = JSON.parse(outText);
+
+      // บันทึกบริบท 2 ย่อหน้าสุดท้ายไว้ส่งต่อให้บทถัดไป
+      if (parsedResult.length > 0) {
+        const lastTwo = parsedResult.slice(-2).map(item => item.th).join(" ");
+        lastChapterContext = lastTwo.substring(0, 150);
+      }
+
+      return parsedResult;
     }
 
     // START FIRST CHAPTER
@@ -440,12 +589,13 @@
       status.style.display = 'block';
       status.style.background = '#eff6ff';
       status.style.color = '#1e40af';
-      status.innerText = "กำลังดึงเนื้อหาและแปลภาษา...";
+      status.innerText = "กำลังดึงเนื้อหาและแปลตามสำนวนที่เลือก...";
       startBtn.disabled = true;
       btnText.innerText = "กำลังทำงาน...";
 
       try {
         currentUrl = url;
+        lastChapterContext = ""; // รีเซ็ตบริบทเมื่อเริ่มเรื่อง/ลิงก์ใหม่
         const { text, nextUrl } = await scrapePage(url);
         nextUrlCalculated = nextUrl;
 
@@ -458,7 +608,6 @@
         renderChapter();
         closeModal('import-modal');
 
-        // Trigger Prefetch
         if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
       } catch (err) {
         status.style.background = '#fef2f2';
@@ -470,7 +619,7 @@
       }
     }
 
-    // PREFETCH
+    // PREFETCH NEXT CHAPTER IN BACKGROUND
     async function triggerPrefetch(url) {
       if (isPrefetching || !url) return;
       isPrefetching = true;
@@ -488,7 +637,7 @@
       finally { isPrefetching = false; }
     }
 
-    // NEXT CHAPTER CLICK (ONE TAP)
+    // NEXT CHAPTER CLICK
     async function handleNextChapterClick() {
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
@@ -496,7 +645,6 @@
         return;
       }
 
-      // If prefetched
       if (prefetchedData) {
         chapters.push({
           title: prefetchedData.title,
@@ -514,7 +662,6 @@
         return;
       }
 
-      // If not prefetched yet, fetch on-the-fly
       if (nextUrlCalculated) {
         const btnText = document.getElementById('next-btn-text');
         btnText.innerText = "กำลังแปลตอนถัดไป...";
@@ -554,13 +701,13 @@
       }
     }
 
-    // GLOSSARY
+    // GLOSSARY MANAGEMENT
     function renderGlossary() {
       const list = document.getElementById('glossary-list');
       list.innerHTML = "";
       Object.entries(glossary).forEach(([k,v]) => {
         const row = document.createElement('div');
-        row.style.cssText = "display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid rgba(0,0,0,0.05);";
+        row.style.cssText = "display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid rgba(0,0,0,0.05);";
         row.innerHTML = `<span><b>${k}</b> ➔ ${v}</span><a href="javascript:void(0)" onclick="delGloss('${k}')" style="color:red; font-weight:600; text-decoration:none;">ลบ</a>`;
         list.appendChild(row);
       });
@@ -589,6 +736,7 @@
     function saveSettings() {
       localStorage.setItem('nov_gemini_key', document.getElementById('gemini-key').value.trim());
       localStorage.setItem('nov_gemini_model', document.getElementById('gemini-model').value);
+      localStorage.setItem('nov_genre', document.getElementById('novel-genre').value);
       closeModal('settings-modal');
       alert("บันทึกการตั้งค่าเรียบร้อยแล้ว");
     }
@@ -599,6 +747,9 @@
       }
       if (localStorage.getItem('nov_gemini_model')) {
         document.getElementById('gemini-model').value = localStorage.getItem('nov_gemini_model');
+      }
+      if (localStorage.getItem('nov_genre')) {
+        document.getElementById('novel-genre').value = localStorage.getItem('nov_genre');
       }
     }
 
