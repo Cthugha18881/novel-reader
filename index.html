@@ -86,6 +86,186 @@
     </div>
   </header>
 
+  <!-- TTS Sticky Bar -->
+  <div id="tts-bar" class="hidden sticky top-[57px] z-30 bg-blue-600 text-white px-4 py-2 text-xs flex items-center justify-between shadow-md">
+    <div class="flex items-center gap-2 truncate">
+      <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+      <span id="tts-status">กำลังอ่านออกเสียง...</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="toggleTTSPlayback()" id="tts-play-btn" class="font-bold underline">หยุดชั่วคราว</button>
+      <button onclick="stopTTS()" class="opacity-80 hover:opacity-100 font-bold">ปิดเสียง</button>
+    </div>
+  </div>
+
+  <!-- Main Reading Canvas Area -->
+  <main class="flex-1 w-full max-w-2xl sm:max-w-3xl mx-auto px-4 sm:px-6 py-6 pb-28 md:pb-16">
+    <div class="mb-6 flex items-center justify-between border-b border-black/10 pb-3">
+      <div>
+        <span id="novel-name" class="text-xs uppercase tracking-wider font-semibold opacity-60">ชื่อเรื่อง</span>
+        <h2 id="chapter-title" class="font-kanit font-bold text-xl sm:text-2xl mt-0.5">ยินดีต้อนรับ</h2>
+      </div>
+      <div class="text-right">
+        <button onclick="exportTxt()" class="text-xs opacity-70 hover:opacity-100 flex items-center gap-1 underline">
+          บันทึก .TXT
+        </button>
+      </div>
+    </div>
+
+    <!-- Reading Content Container -->
+    <div id="reading-content" class="space-y-4 text-base sm:text-lg leading-relaxed select-text"></div>
+
+    <!-- Inline Loader for Automatic Next Chapter -->
+    <div id="chapter-loader" class="hidden py-8 flex flex-col items-center justify-center gap-2 text-sm opacity-80">
+      <svg class="animate-spin h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <span id="loader-status">กำลังโหลดและแปลตอนถัดไปอัตโนมัติ...</span>
+    </div>
+
+    <!-- Chapter Navigation -->
+    <div class="mt-10 pt-6 border-t border-black/10 flex items-center justify-between">
+      <button onclick="prevChapter()" class="px-4 py-2 rounded-lg border border-black/10 hover:bg-black/5 text-sm font-medium">
+        ← ตอนก่อนหน้า
+      </button>
+      <button onclick="handleNextChapterClick()" id="next-chap-btn" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium shadow flex items-center gap-1.5 transition">
+        <span id="next-btn-text">ตอนถัดไป →</span>
+      </button>
+    </div>
+  </main>
+
+  <!-- Mobile Bottom Dock -->
+  <nav class="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-inherit border-t border-black/10 backdrop-blur-lg bg-opacity-95 px-3 py-2 flex items-center justify-around shadow-lg">
+    <button onclick="adjustFontSize(-1)" class="p-2 rounded-full hover:bg-black/5 text-sm font-bold flex flex-col items-center">
+      <span>A-</span>
+      <span class="text-[10px] opacity-60">เล็กลง</span>
+    </button>
+    <button onclick="cycleTheme()" class="p-2 rounded-full hover:bg-black/5 flex flex-col items-center">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+      <span id="mobile-theme-label" class="text-[10px] opacity-60">ถนอมสายตา</span>
+    </button>
+    <button onclick="startTTS()" class="w-12 h-12 -mt-5 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg border-2 border-white">
+      <svg class="w-6 h-6 ml-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.536 8.464a5 5 0 010 7.072m2.828-9.9a9 9 0 010 12.728M5.586 15H4a1 1 0 01-1-1v-4a1 1 0 011-1h1.586l4.707-4.707C10.923 3.663 12 4.109 12 5v14c0 .891-1.077 1.337-1.707.707L5.586 15z"/></svg>
+    </button>
+    <button onclick="adjustFontSize(1)" class="p-2 rounded-full hover:bg-black/5 text-sm font-bold flex flex-col items-center">
+      <span>A+</span>
+      <span class="text-[10px] opacity-60">ใหญ่ขึ้น</span>
+    </button>
+    <button onclick="toggleGlossaryModal()" class="p-2 rounded-full hover:bg-black/5 flex flex-col items-center">
+      <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2สาเหตุที่กดแล้วระบบเปิดกล่องใส่ลิงก์เดิมขึ้นมา เป็นเพราะ **ตัวแปร `nextChapterUrl` มีค่าเป็น `null`** ครับ
+
+เมื่อระบบหาลิงก์ตอนถัดไปไม่เจอ เงื่อนไข Fallback ในโค้ดจึงสั่งให้เปิดกล่องใส่ลิงก์ขึ้นมาแทน และที่มันหาลิงก์ไม่เจอ มี **2 สาเหตุหลักทางเทคนิค**:
+
+1. **Jina AI แปลงหน้าเว็บเป็น Markdown:** ตอนที่ Jina ดึงหน้าเว็บมา ข้อความในหน้ามักจะมีลิงก์สไตล์ Markdown ติดมา เช่น `[下一章](https://...)` หรือ `[下一章](/txt/...)` แต่ในฟังก์ชันเดิม เราใช้ `parseMarkdownNovel` ตัดบรรทัดที่มีสัญลักษณ์ `[` ทิ้งทั้งหมด ทำให้ลิงก์ตอนถัดไปถูกลบหายไปด้วย
+2. **โครงสร้างของ 69shuba:** เว็บ 69shuba ใช้ URL สไตล์ลำดับเลข เช่น:
+   - ตอนปัจจุบัน: `.../txt/88724/40711443`
+   - ตอนถัดไปมักจะเป็นเลขรันต่อ เช่น `40711444` หรือลิงก์ที่เขียนว่า `下一章` ซึ่งมักจะเป็น Relative Link เช่น `/txt/88724/40711444` หรือ `40711444.htm` หากระบบแปลง URL ไม่สมบูรณ์ ตัวแปรจะกลายเป็นค่าว่างทันที
+
+---
+
+### วิธีแก้ปัญหาให้ทำงานได้แน่นอน (Smart Fallback + Link Detector)
+
+เราจะอัปเกรดระบบตรวจจับลิงก์ตอนถัดไปให้ฉลาดขึ้น 3 ชั้น:
+1. **Markdown Link Extractor:** ดักจับลิงก์ `[下一章](URL)` หรือ `[Next](URL)` จากผลลัพธ์ของ Jina โดยตรง
+2. **Numeric ID Prediction (สำรองกรณีหาปุ่มไม่เจอ):** ถ้าเป็นเว็บที่รหัสตอนรันเลขตามลำดับ (อย่าง 69shuba ที่ลงท้ายด้วย `.../40711443`) ถ้าระบบหาปุ่ม `下一章` ไม่เจอจริงๆ มันจะคาดเดาและรันเลขตอนถัดไปเป็น `40711444` ให้อัตโนมัติ
+3. **Manual Next URL Input:** ในกล่อง Pop-up จะเพิ่มช่องให้เห็นชัดเจนว่า **"ลิงก์ตอนถัดไปปัจจุบันคืออะไร"** เพื่อให้คุณเห็นและตรวจสอบได้ทันที
+
+---
+
+### โค้ดที่อัปเดตแก้ไขทั้งหมด (`index.html`)
+
+นำโค้ดด้านล่างนี้ไปวางทับใน `index.html` บน GitHub ได้เลยครับ:
+
+```html
+<!DOCTYPE html>
+<html lang="th" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>NovelTranslate AI</title>
+  
+  <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            sepia: {
+              50: '#fbf7ee',
+              100: '#f4ecd8',
+              200: '#e9dac1',
+              800: '#433422',
+              900: '#2b2114'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="[https://fonts.googleapis.com](https://fonts.googleapis.com)">
+  <link rel="preconnect" href="[https://fonts.gstatic.com](https://fonts.gstatic.com)" crossorigin>
+  <link href="[https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&family=Sarabun:wght@300;400;500;600&display=swap](https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&family=Sarabun:wght@300;400;500;600&display=swap)" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Sarabun', sans-serif; -webkit-tap-highlight-color: transparent; }
+    .font-kanit { font-family: 'Kanit', sans-serif; }
+    .theme-light { background-color: #f8fafc; color: #1e293b; }
+    .theme-sepia { background-color: #f4ecd8; color: #2b2114; }
+    .theme-dark { background-color: #0b0f17; color: #e2e8f0; }
+
+    .card-light { background-color: #ffffff; border-color: #e2e8f0; }
+    .card-sepia { background-color: #fbf7ee; border-color: #e9dac1; }
+    .card-dark { background-color: #151d2a; border-color: #1e293b; }
+
+    .reading-highlight {
+      background-color: rgba(59, 130, 246, 0.15);
+      border-left: 4px solid #3b82f6;
+      padding-left: 0.75rem;
+      border-radius: 0.25rem;
+      transition: all 0.2s ease;
+    }
+  </style>
+</head>
+<body id="app-body" class="theme-sepia min-h-screen flex flex-col transition-colors duration-200">
+
+  <!-- Top Navigation Bar -->
+  <header id="top-nav" class="sticky top-0 z-40 backdrop-blur-md bg-opacity-90 border-b border-black/5 px-4 py-3 flex items-center justify-between shadow-sm">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+        N
+      </div>
+      <div>
+        <h1 class="font-kanit font-semibold text-base leading-tight">NovelTranslate AI</h1>
+        <p id="chapter-title-nav" class="text-xs opacity-60 truncate max-w-[130px] sm:max-w-xs">ตอนปัจจุบัน</p>
+      </div>
+    </div>
+
+    <!-- Actions & Prefetch Status Badge -->
+    <div class="flex items-center gap-1.5 sm:gap-2">
+      <div id="prefetch-indicator" class="hidden text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-1 rounded-full font-medium flex items-center gap-1 border border-emerald-300 dark:border-emerald-800">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="hidden sm:inline">ตอนถัดไปพร้อมแล้ว</span>
+        <span class="sm:hidden">พร้อม</span>
+      </div>
+
+      <button onclick="openImportModal()" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium flex items-center gap-1 shadow transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        <span>วางลิงก์</span>
+      </button>
+
+      <button onclick="toggleGlossaryModal()" class="p-2 rounded-lg border border-black/10 hover:bg-black/5 transition" title="คลังศัพท์">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+      </button>
+
+      <button onclick="openSettingsModal()" class="p-2 rounded-lg border border-black/10 hover:bg-black/5 transition" title="ตั้งค่า API">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      </button>
+    </div>
+  </header>
+
   <!-- TTS Sticky Control Bar -->
   <div id="tts-bar" class="hidden sticky top-[57px] z-30 bg-blue-600 text-white px-4 py-2 text-xs flex items-center justify-between shadow-md">
     <div class="flex items-center gap-2 truncate">
@@ -163,8 +343,8 @@
     <div class="w-full max-w-lg rounded-2xl p-5 shadow-2xl card-light" id="import-modal-card">
       <div class="flex items-center justify-between border-b pb-3 mb-4">
         <div>
-          <h3 class="font-kanit font-bold text-lg">เริ่มต้นแปลตอนแรก</h3>
-          <p class="text-xs opacity-60">วาง URL หน้าเริ่มต้น ระบบจะดึงและหาปุ่มตอนถัดไปให้อัตโนมัติ</p>
+          <h3 class="font-kanit font-bold text-lg">นำเข้า URL หน้านิยาย</h3>
+          <p class="text-xs opacity-60">ใส่ URL หน้านิยายตอนที่ต้องการอ่าน</p>
         </div>
         <button onclick="closeImportModal()" class="p-1 rounded-full hover:bg-black/5 text-gray-500">✕</button>
       </div>
@@ -172,7 +352,7 @@
       <div class="space-y-3">
         <div>
           <label class="block text-xs font-semibold mb-1 opacity-80">URL หน้านิยาย</label>
-          <input type="url" id="import-url" placeholder="https://www.69shuba.com/txt/..." class="w-full text-sm px-3 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-black">
+          <input type="url" id="import-url" placeholder="[https://www.69shuba.com/txt/](https://www.69shuba.com/txt/)..." class="w-full text-sm px-3 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-black">
         </div>
 
         <div id="import-status-box" class="p-3 bg-gray-50 rounded-lg border text-xs text-gray-700 hidden leading-relaxed">
@@ -264,7 +444,7 @@
     let prefetchedChapter = null;
     let isPrefetching = false;
 
-    // Load & Sanitize Glossary ปลอดภัย 100%
+    // Load Glossary
     let glossary = {};
     try {
       const stored = JSON.parse(localStorage.getItem('novel_glossary') || '{}');
@@ -283,7 +463,7 @@
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "Welcome to NovelTranslate" },
           { th: "1. กดปุ่ม 'วางลิงก์' แล้วใส่ URL หน้านิยายตอนที่ต้องการอ่าน", src: "Setup Chapter URL" },
-          { th: "2. ระบบจะตรวจหาลิงก์ตอนถัดไป (Next Chapter) ให้อัตโนมัติ", src: "Auto Sniffer" },
+          { th: "2. ระบบจะตรวจหาลิงก์ตอนถัดไปให้อัตโนมัติ", src: "Auto Sniffer" },
           { th: "3. เมื่ออ่านจบ แค่กดปุ่ม 'ตอนถัดไป →' บทใหม่จะถูกแปลต่อเนื่องทันที!", src: "One-tap Next Chapter" }
         ]
       }
@@ -356,7 +536,13 @@
       if (el) el.classList.toggle('hidden');
     }
 
-    function openImportModal() { document.getElementById('import-modal').classList.remove('hidden'); }
+    function openImportModal(prefillUrl = "") {
+      const modal = document.getElementById('import-modal');
+      const input = document.getElementById('import-url');
+      if (prefillUrl) input.value = prefillUrl;
+      else if (nextChapterUrl) input.value = nextChapterUrl;
+      modal.classList.remove('hidden');
+    }
     function closeImportModal() { document.getElementById('import-modal').classList.add('hidden'); }
     function toggleGlossaryModal() { document.getElementById('glossary-modal').classList.toggle('hidden'); }
     function openSettingsModal() { document.getElementById('settings-modal').classList.toggle('hidden'); }
@@ -368,36 +554,48 @@
       else box.classList.add('hidden');
     }
 
-    // ==================== ADVANCED SCRAPER & NEXT CHAPTER SNIFFER ====================
+    // ==================== SMART SCRAPER & MULTI-STRATEGY LINK DETECTOR ====================
 
     async function scrapeNovelPageWithNextLink(url) {
       let rawText = "";
       let foundNextUrl = null;
 
+      // 1. Try Jina Reader
       try {
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
-        const res = await fetch(proxyUrl);
-        const data = await res.json();
-        if (data && data.contents) {
-          const parsed = parseHtmlWithNextLink(data.contents, url);
-          rawText = parsed.text;
-          foundNextUrl = parsed.nextUrl;
+        const jinaUrl = `https://r.jina.ai/${url}`;
+        const res = await fetch(jinaUrl);
+        if (res.ok) {
+          const md = await res.text();
+          if (md && md.length > 200) {
+            const parsed = parseMarkdownWithNextLink(md, url);
+            rawText = parsed.text;
+            foundNextUrl = parsed.nextUrl;
+          }
         }
       } catch (e) {
-        console.warn("AllOrigins HTML parse failed, falling back to Jina...");
+        console.warn("Jina Scraper failed, fallback to AllOrigins...");
       }
 
+      // 2. Try AllOrigins if Jina didn't get text or link
       if (!rawText || rawText.length < 100) {
         try {
-          const jinaUrl = `https://r.jina.ai/${url}`;
-          const res = await fetch(jinaUrl);
-          if (res.ok) {
-            const md = await res.text();
-            rawText = parseMarkdownNovel(md);
+          const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+          const res = await fetch(proxyUrl);
+          const data = await res.json();
+          if (data && data.contents) {
+            const parsed = parseHtmlWithNextLink(data.contents, url);
+            rawText = parsed.text;
+            if (!foundNextUrl) foundNextUrl = parsed.nextUrl;
           }
         } catch (e) {
-          console.warn("Jina Scraper failed...");
+          console.warn("AllOrigins failed...");
         }
+      }
+
+      // 3. Fallback: Numeric ID Predictor (สำหรับเว็บอย่าง 69shuba ที่ลงท้ายด้วยเลขตอน)
+      if (!foundNextUrl) {
+        foundNextUrl = predictNextChapterUrl(url);
+        if (foundNextUrl) console.log("Predicting next chapter URL:", foundNextUrl);
       }
 
       if (!rawText || rawText.length < 50) {
@@ -407,6 +605,29 @@
       return { text: rawText, nextUrl: foundNextUrl };
     }
 
+    // แกะข้อความและลิงก์จาก Markdown (Jina)
+    function parseMarkdownWithNextLink(md, baseUrl) {
+      let nextUrl = null;
+
+      // ดักจับ Markdown Link เช่น [下一章](url) หรือ [下一页](url) หรือ [Next](url)
+      const linkRegex = /\[([^\]]*?(?:下一章|下一页|Next|ตอนถัดไป|ตอนต่อไป)[^\]]*?)\]\((https?:\/\/[^\s\)]+|\/[^\s\)]+|[a-zA-Z0-9_\-\.\/]+)\)/gi;
+      let match;
+      while ((match = linkRegex.exec(md)) !== null) {
+        const rawHref = match[2];
+        try {
+          nextUrl = new URL(rawHref, baseUrl).href;
+          break;
+        } catch(e) {}
+      }
+
+      const lines = md.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const textLines = lines.filter(l => !l.startsWith('!') && !l.startsWith('http') && l.length > 10);
+      const fullText = textLines.slice(0, 40).join('\n\n');
+
+      return { text: fullText, nextUrl: nextUrl };
+    }
+
+    // แกะข้อความและลิงก์จาก HTML (AllOrigins)
     function parseHtmlWithNextLink(html, baseUrl) {
       const parser = new DOMParser();
       const doc = parser.parseFromString(html, 'text/html');
@@ -437,10 +658,20 @@
       return { text: fullText, nextUrl: nextUrl };
     }
 
-    function parseMarkdownNovel(md) {
-      const lines = md.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-      const textLines = lines.filter(l => !l.startsWith('[') && !l.startsWith('!') && !l.startsWith('http') && l.length > 10);
-      return textLines.slice(0, 40).join('\n\n');
+    // เดา URL ถัดไปกรณีหาปุ่มไม่เจอ (เช่น .../40711443 -> .../40711444)
+    function predictNextChapterUrl(currentUrl) {
+      try {
+        // Match numbers at the end of URL, optionally followed by .html / .htm / /
+        const match = currentUrl.match(/^(.*?)(\d+)(\.html?|\/)?$/);
+        if (match) {
+          const prefix = match[1];
+          const numStr = match[2];
+          const suffix = match[3] || '';
+          const nextNum = (BigInt(numStr) + 1n).toString();
+          return `${prefix}${nextNum}${suffix}`;
+        }
+      } catch (e) {}
+      return null;
     }
 
     // ==================== TRANSLATION PIPELINE ====================
@@ -494,6 +725,7 @@
       currentChapterIndex = chapters.length - 1;
       renderChapter();
 
+      // Clear old prefetch and trigger background prefetch for nextUrl
       prefetchedChapter = null;
       document.getElementById('prefetch-indicator').classList.add('hidden');
       
@@ -525,7 +757,7 @@
             nextUrl: nextUrl
           };
           document.getElementById('prefetch-indicator').classList.remove('hidden');
-          console.log("Prefetch completed successfully!");
+          console.log("Prefetch completed successfully! Ready for instant read.");
         }
       } catch (e) {
         console.warn("Background prefetch failed:", e);
@@ -534,13 +766,16 @@
       }
     }
 
+    // Handle One-Tap Next Chapter Click
     async function handleNextChapterClick() {
+      // 1. ถ้ามีตอนที่เคยเปิดไว้อยู่แล้วในประวัติ
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
         renderChapter();
         return;
       }
 
+      // 2. ถ้าตอนต่อไปถูก Prefetch เตรียมไว้แล้วในหน่วยความจำ (กดปุ๊บมาปั๊บ)
       if (prefetchedChapter) {
         chapters.push(prefetchedChapter);
         nextChapterUrl = prefetchedChapter.nextUrl;
@@ -549,10 +784,12 @@
         currentChapterIndex = chapters.length - 1;
         renderChapter();
 
+        // สั่ง Prefetch ตอนถัดไปต่อทันที
         if (nextChapterUrl) triggerPrefetchNextChapter(nextChapterUrl);
         return;
       }
 
+      // 3. ถ้ามี URL ของตอนต่อไป แต่ยังไม่ได้ Prefetch ให้โหลดและแปลสด
       if (nextChapterUrl) {
         const loader = document.getElementById('chapter-loader');
         const nextBtn = document.getElementById('next-chap-btn');
@@ -563,12 +800,13 @@
           await loadAndTranslateChapter(nextChapterUrl);
         } catch (err) {
           alert("ไม่สามารถโหลดตอนถัดไปอัตโนมัติได้: " + err.message);
-          openImportModal();
+          openImportModal(nextChapterUrl);
         } finally {
           loader.classList.add('hidden');
           nextBtn.disabled = false;
         }
       } else {
+        // 4. กรณีหาลิงก์ไม่ได้จริงๆ ให้เปิดกล่องใส่ลิงก์
         openImportModal();
       }
     }
@@ -584,7 +822,7 @@
 1. หากพบคำศัพท์เหล่านี้ ให้แปลตามที่กำหนดอย่างเคร่งครัด: [${glossaryContext}]
 2. ตอบกลับเป็นรูปแบบ JSON Array ของ Object เท่านั้น: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ไม่ต้องใส่โค้ด Markdown ครอบ`;
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${key}`;
+      const endpoint = `[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){cleanModel}:generateContent?key=${key}`;
 
       const response = await fetch(endpoint, {
         method: 'POST',
