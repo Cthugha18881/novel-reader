@@ -65,9 +65,15 @@
 
     <!-- Actions -->
     <div class="flex items-center gap-1.5 sm:gap-2">
+      <!-- Prefetch Status Badge -->
+      <div id="prefetch-badge" class="hidden text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 px-2 py-1 rounded-full font-medium flex items-center gap-1">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span>ตอนถัดไปพร้อมแล้ว</span>
+      </div>
+
       <button onclick="openImportModal()" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium flex items-center gap-1 shadow transition">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-        <span>วางลิงก์แปล</span>
+        <span>วางลิงก์ใหม่</span>
       </button>
 
       <button onclick="toggleGlossaryModal()" class="p-2 rounded-lg border border-black/10 hover:bg-black/5 transition" title="คลังศัพท์">
@@ -109,13 +115,155 @@
     <!-- Reading Content Container -->
     <div id="reading-content" class="space-y-4 text-base sm:text-lg leading-relaxed select-text"></div>
 
+    <!-- Loading Indicator for In-line Loading -->
+    <div id="inline-loader" class="hidden py-8 flex flex-col items-center justify-center gap-2 text-sm opacity-70">
+      <svg class="animate-spin h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5นี่คือโค้ดฉบับอัปเกรดที่ติดตั้ง **ระบบสืบค้นและโหลดตอนถัดไปอัตโนมัติ (Automated Next-Chapter & Prefetch Pipeline)** เรียบร้อยแล้วครับ
+
+### สิ่งที่ถูกเพิ่มเข้ามาในเวอร์ชันนี้:
+1. **Intelligent Next-Chapter Sniffer:** เมื่อแปลตอนปัจจุบัน ตัว Scraper จะสแกนหาปุ่ม "ตอนถัดไป" (เช่น `下一章`, `下一页`, `Next`, `Next Chapter`) และแกะ Relative Link ออกมาเป็น URL เต็มให้อัตโนมัติ
+2. **One-Tap Next Chapter:** เมื่ออ่านจบตอน ปุ่ม **"ตอนถัดไป →"** ด้านล่างจะกลายเป็นปุ่มวิเศษ แค่กดปุ่มเดียว ระบบจะโหลดและแปลตอนต่อไปทันทีโดยที่คุณไม่ต้องไปก๊อปปี้ URL มาแปะใหม่อีกเลย
+3. **Background Auto-Prefetch (แปลล่วงหน้า):** หลังจากคุณอ่านตอนปัจจุบันไปได้สักครู่ ระบบหลังบ้านจะแอบไปดึงและแปลตอนถัดไปเตรียมรอไว้ในหน่วยความจำ เมื่อคุณกด "ตอนถัดไป" เนื้อหาจะสลับมาให้อ่านทันทีในเสี้ยววินาที (มีแบดจ์สีเขียวแจ้งเตือนด้านบนว่า *"ตอนถัดไปพร้อมแล้ว"*)
+
+---
+
+คัดลอกโค้ดทั้งหมดนี้ไปวางทับในไฟล์ `index.html` บน GitHub ได้เลยครับ:
+
+```html
+<!DOCTYPE html>
+<html lang="th" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>NovelTranslate AI</title>
+  
+  <script src="[https://cdn.tailwindcss.com](https://cdn.tailwindcss.com)"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            sepia: {
+              50: '#fbf7ee',
+              100: '#f4ecd8',
+              200: '#e9dac1',
+              800: '#433422',
+              900: '#2b2114'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <link rel="preconnect" href="[https://fonts.googleapis.com](https://fonts.googleapis.com)">
+  <link rel="preconnect" href="[https://fonts.gstatic.com](https://fonts.gstatic.com)" crossorigin>
+  <link href="[https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&family=Sarabun:wght@300;400;500;600&display=swap](https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&family=Sarabun:wght@300;400;500;600&display=swap)" rel="stylesheet">
+
+  <style>
+    body { font-family: 'Sarabun', sans-serif; -webkit-tap-highlight-color: transparent; }
+    .font-kanit { font-family: 'Kanit', sans-serif; }
+    .theme-light { background-color: #f8fafc; color: #1e293b; }
+    .theme-sepia { background-color: #f4ecd8; color: #2b2114; }
+    .theme-dark { background-color: #0b0f17; color: #e2e8f0; }
+
+    .card-light { background-color: #ffffff; border-color: #e2e8f0; }
+    .card-sepia { background-color: #fbf7ee; border-color: #e9dac1; }
+    .card-dark { background-color: #151d2a; border-color: #1e293b; }
+
+    .reading-highlight {
+      background-color: rgba(59, 130, 246, 0.15);
+      border-left: 4px solid #3b82f6;
+      padding-left: 0.75rem;
+      border-radius: 0.25rem;
+      transition: all 0.2s ease;
+    }
+  </style>
+</head>
+<body id="app-body" class="theme-sepia min-h-screen flex flex-col transition-colors duration-200">
+
+  <!-- Top Navigation Bar -->
+  <header id="top-nav" class="sticky top-0 z-40 backdrop-blur-md bg-opacity-90 border-b border-black/5 px-4 py-3 flex items-center justify-between shadow-sm">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
+        N
+      </div>
+      <div>
+        <h1 class="font-kanit font-semibold text-base leading-tight">NovelTranslate AI</h1>
+        <p id="chapter-title-nav" class="text-xs opacity-60 truncate max-w-[140px] sm:max-w-xs">ตอนปัจจุบัน</p>
+      </div>
+    </div>
+
+    <!-- Actions & Prefetch Status Badge -->
+    <div class="flex items-center gap-1.5 sm:gap-2">
+      <div id="prefetch-indicator" class="hidden text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 px-2 py-1 rounded-full font-medium flex items-center gap-1 border border-emerald-300 dark:border-emerald-800">
+        <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+        <span class="hidden sm:inline">ตอนถัดไปพร้อมอ่าน</span>
+        <span class="sm:hidden">พร้อม</span>
+      </div>
+
+      <button onclick="openImportModal()" class="px-2.5 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-medium flex items-center gap-1 shadow transition">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+        <span>วางลิงก์</span>
+      </button>
+
+      <button onclick="toggleGlossaryModal()" class="p-2 rounded-lg border border-black/10 hover:bg-black/5 transition" title="คลังศัพท์">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/></svg>
+      </button>
+
+      <button onclick="openSettingsModal()" class="p-2 rounded-lg border border-black/10 hover:bg-black/5 transition" title="ตั้งค่า API">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- TTS Sticky Control Bar -->
+  <div id="tts-bar" class="hidden sticky top-[57px] z-30 bg-blue-600 text-white px-4 py-2 text-xs flex items-center justify-between shadow-md">
+    <div class="flex items-center gap-2 truncate">
+      <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+      <span id="tts-status">กำลังอ่านออกเสียง...</span>
+    </div>
+    <div class="flex items-center gap-3">
+      <button onclick="toggleTTSPlayback()" id="tts-play-btn" class="font-bold underline">หยุดชั่วคราว</button>
+      <button onclick="stopTTS()" class="opacity-80 hover:opacity-100 font-bold">ปิดเสียง</button>
+    </div>
+  </div>
+
+  <!-- Main Reading Canvas Area -->
+  <main class="flex-1 w-full max-w-2xl sm:max-w-3xl mx-auto px-4 sm:px-6 py-6 pb-28 md:pb-16">
+    <div class="mb-6 flex items-center justify-between border-b border-black/10 pb-3">
+      <div>
+        <span id="novel-name" class="text-xs uppercase tracking-wider font-semibold opacity-60">ชื่อเรื่อง</span>
+        <h2 id="chapter-title" class="font-kanit font-bold text-xl sm:text-2xl mt-0.5">ยินดีต้อนรับ</h2>
+      </div>
+      <div class="text-right">
+        <button onclick="exportTxt()" class="text-xs opacity-70 hover:opacity-100 flex items-center gap-1 underline">
+          บันทึก .TXT
+        </button>
+      </div>
+    </div>
+
+    <!-- Reading Content Container -->
+    <div id="reading-content" class="space-y-4 text-base sm:text-lg leading-relaxed select-text"></div>
+
+    <!-- Inline Loader for Automatic Next Chapter -->
+    <div id="chapter-loader" class="hidden py-8 flex flex-col items-center justify-center gap-2 text-sm opacity-80">
+      <svg class="animate-spin h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      <span id="loader-status">กำลังโหลดและแปลตอนถัดไปอัตโนมัติ...</span>
+    </div>
+
     <!-- Chapter Navigation -->
     <div class="mt-10 pt-6 border-t border-black/10 flex items-center justify-between">
       <button onclick="prevChapter()" class="px-4 py-2 rounded-lg border border-black/10 hover:bg-black/5 text-sm font-medium">
         ← ตอนก่อนหน้า
       </button>
-      <button onclick="nextChapter()" id="next-chap-btn" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium shadow">
-        ตอนถัดไป →
+      <button onclick="handleNextChapterClick()" id="next-chap-btn" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium shadow flex items-center gap-1.5 transition">
+        <span id="next-btn-text">ตอนถัดไป →</span>
       </button>
     </div>
   </main>
@@ -148,16 +296,16 @@
     <div class="w-full max-w-lg rounded-2xl p-5 shadow-2xl card-light" id="import-modal-card">
       <div class="flex items-center justify-between border-b pb-3 mb-4">
         <div>
-          <h3 class="font-kanit font-bold text-lg">ดึงเนื้อหาและแปลทันที</h3>
-          <p class="text-xs opacity-60">แค่วาง URL หน้านิยาย ระบบจะดึงและเริ่มแปลอัตโนมัติ</p>
+          <h3 class="font-kanit font-bold text-lg">เริ่มต้นแปลตอนแรก</h3>
+          <p class="text-xs opacity-60">วาง URL หน้าเริ่มต้น ระบบจะดึงและหาปุ่มตอนถัดไปให้อัตโนมัติ</p>
         </div>
         <button onclick="closeImportModal()" class="p-1 rounded-full hover:bg-black/5 text-gray-500">✕</button>
       </div>
 
       <div class="space-y-3">
         <div>
-          <label class="block text-xs font-semibold mb-1 opacity-80">URL หน้านิยาย (เว็บจีน / ญี่ปุ่น / เกาหลี / อังกฤษ)</label>
-          <input type="url" id="import-url" placeholder="https://..." class="w-full text-sm px-3 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-black">
+          <label class="block text-xs font-semibold mb-1 opacity-80">URL หน้านิยาย</label>
+          <input type="url" id="import-url" placeholder="[https://www.69shuba.com/txt/](https://www.69shuba.com/txt/)..." class="w-full text-sm px-3 py-2.5 rounded-lg border focus:ring-2 focus:ring-blue-500 outline-none text-black">
         </div>
 
         <div id="import-status-box" class="p-3 bg-gray-50 rounded-lg border text-xs text-gray-700 hidden leading-relaxed">
@@ -167,8 +315,8 @@
 
       <div class="mt-5 flex gap-2">
         <button onclick="closeImportModal()" class="w-1/3 py-2.5 rounded-lg border text-sm font-medium hover:bg-black/5">ยกเลิก</button>
-        <button onclick="autoScrapeAndTranslate()" id="start-btn" class="w-2/3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow flex items-center justify-center gap-1.5 transition">
-          <span id="btn-text">ดึงและแปลทันที</span>
+        <button onclick="startFirstChapter()" id="start-btn" class="w-2/3 py-2.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold shadow flex items-center justify-center gap-1.5 transition">
+          <span id="btn-text">เริ่มแปลตอนนี้</span>
           <svg id="loading-spinner" class="hidden animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
         </button>
       </div>
@@ -181,7 +329,7 @@
       <div class="flex items-center justify-between border-b pb-3 mb-4">
         <div>
           <h3 class="font-kanit font-bold text-lg">คลังคำศัพท์เฉพาะ (Glossary)</h3>
-          <p class="text-xs opacity-60">ล็อกชื่อตัวละครเพื่อให้ทุกบทแปลสะกดเหมือนเดิม</p>
+          <p class="text-xs opacity-60">ล็อกชื่อตัวละครและวิชา เพื่อให้ทุกบทแปลสะกดเหมือนเดิม</p>
         </div>
         <button onclick="toggleGlossaryModal()" class="p-1 rounded-full hover:bg-black/5 text-gray-500">✕</button>
       </div>
@@ -198,38 +346,37 @@
   <div id="settings-modal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
     <div class="w-full max-w-md rounded-2xl p-5 shadow-2xl card-light" id="settings-modal-card">
       <div class="flex items-center justify-between border-b pb-3 mb-4">
-        <h3 class="font-kanit font-bold text-lg">ตั้งค่า Gemini API</h3>
+        <h3 class="font-kanit font-bold text-lg">ตั้งค่าระบบ</h3>
         <button onclick="openSettingsModal()" class="p-1 rounded-full hover:bg-black/5 text-gray-500">✕</button>
       </div>
 
       <div class="space-y-4 text-xs">
         <div>
-          <label class="block font-semibold mb-1 opacity-80">Google Gemini API Key (จาก Google AI Studio)</label>
+          <label class="block font-semibold mb-1 opacity-80">Google Gemini API Key</label>
           <input type="password" id="gemini-api-key" placeholder="AIzaSy..." class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black">
         </div>
 
         <div>
-          <label class="block font-semibold mb-1 opacity-80">เลือกรุ่นโมเดล (Active Models)</label>
+          <label class="block font-semibold mb-1 opacity-80">เลือกรุ่นโมเดล</label>
           <select id="gemini-model-select" onchange="toggleCustomModelInput()" class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black bg-white">
             <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash-Lite (แนะนำ / สปีดสูง ประหยัด Token)</option>
             <option value="gemini-3.5-flash">Gemini 3.5 Flash (ฉลาดขึ้น / สำนวนดี)</option>
             <option value="gemini-3.8-flash">Gemini 3.8 Flash (เรือธง)</option>
-            <option value="custom">-- กำหนดชื่อโมเดลเอง (Custom Endpoint) --</option>
+            <option value="custom">-- กำหนดชื่อโมเดลเอง --</option>
           </select>
         </div>
 
         <div id="custom-model-box" class="hidden">
-          <label class="block font-semibold mb-1 opacity-80">พิมพ์ชื่อโมเดลเอง (เช่น gemini-3.5-flash-lite)</label>
+          <label class="block font-semibold mb-1 opacity-80">พิมพ์ชื่อโมเดลเอง</label>
           <input type="text" id="custom-model-name" placeholder="gemini-..." class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black">
         </div>
 
-        <div>
-          <label class="block font-semibold mb-1 opacity-80">สไตล์สำนวนการแปล</label>
-          <select id="style-select" class="w-full text-xs px-3 py-2 rounded-lg border outline-none text-black bg-white">
-            <option value="wuxia">นิยายกำลังภายใน / เทพเซียน (สำนวนยุทธภพ สละสลวย)</option>
-            <option value="fantasy">แฟนตาซี / ดันเจี้ยน / ระบบ (ทับศัพท์ กระชับ)</option>
-            <option value="standard">วรรณกรรมทั่วไป (อ่านลื่นไหลเป็นธรรมชาติ)</option>
-          </select>
+        <div class="pt-2 border-t">
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" id="auto-prefetch-toggle" checked class="rounded text-blue-600 focus:ring-0">
+            <span class="font-semibold opacity-90">แปลตอนถัดไปล่วงหน้าอัตโนมัติ (Zero-wait Prefetch)</span>
+          </label>
+          <p class="text-[11px] opacity-60 mt-1 pl-5">ระบบจะแอบแปลตอนต่อไปรอไว้ เพื่อให้กดเปลี่ยนบทได้ทันทีโดยไม่ต้องรอ</p>
         </div>
       </div>
 
@@ -245,7 +392,12 @@
     let currentTheme = 'sepia';
     let currentFontSize = 18;
 
-    // Load & Sanitize Glossary (ป้องกันข้อผิดพลาดไม่ใช่ string)
+    // Next Chapter & Prefetch State
+    let nextChapterUrl = null;
+    let prefetchedChapter = null; // Buffer: { title, paragraphs, nextUrl }
+    let isPrefetching = false;
+
+    // Load & Sanitize Glossary
     let glossary = {};
     try {
       const stored = JSON.parse(localStorage.getItem('novel_glossary') || '{}');
@@ -263,8 +415,9 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "Welcome to NovelTranslate" },
-          { th: "1. ไปที่เมนู 'ตั้งค่า' (ไอคอนฟันเฟือง) เพื่อใส่ API Key ของคุณ และตรวจสอบรุ่นโมเดล", src: "Setup API Key" },
-          { th: "2. กดปุ่ม 'วางลิงก์แปล' แล้วใส่ URL หน้านิยาย ระบบจะดึงเนื้อหาและแปลให้อัตโนมัติในคลิกเดียว", src: "One-click URL Translate" }
+          { th: "1. กดปุ่ม 'วางลิงก์' แล้วใส่ URL หน้านิยายตอนที่ต้องการอ่าน", src: "Setup Chapter URL" },
+          { th: "2. ระบบจะตรวจหาลิงก์ตอนถัดไป (Next Chapter) ให้อัตโนมัติ", src: "Auto Sniffer" },
+          { th: "3. เมื่ออ่านจบ แค่กดปุ่ม 'ตอนถัดไป →' บทใหม่จะถูกแปลต่อเนื่องทันที!", src: "One-tap Next Chapter" }
         ]
       }
     ];
@@ -295,7 +448,6 @@
       if (content) content.style.fontSize = `${currentFontSize}px`;
     }
 
-    // ฟังก์ชัน Render ที่แก้บั๊ก name.trim is not a function ปลอดภัย 100%
     function renderChapter() {
       const chap = chapters[currentChapterIndex];
       document.getElementById('chapter-title').innerText = chap.title;
@@ -312,7 +464,6 @@
 
         let thText = String(p.th || "");
 
-        // ป้องกัน Error จาก Glossary
         Object.values(glossary).forEach(name => {
           if (typeof name === 'string' && name.trim().length > 0) {
             const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -329,6 +480,8 @@
         `;
         container.appendChild(pEl);
       });
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
     function toggleDualView(idx) {
@@ -348,33 +501,79 @@
       else box.classList.add('hidden');
     }
 
-    // MULTI-ENGINE SCRAPER ENGINE
-    async function scrapeNovelPage(url) {
-      try {
-        const jinaUrl = `https://r.jina.ai/${url}`;
-        const res = await fetch(jinaUrl);
-        if (res.ok) {
-          const md = await res.text();
-          if (md && md.length > 200) {
-            return parseMarkdownNovel(md);
-          }
-        }
-      } catch (e) {
-        console.warn("Jina Scraper failed, fallback to secondary proxy...");
-      }
+    // ==================== ADVANCED SCRAPER & NEXT CHAPTER SNIFFER ====================
 
+    async function scrapeNovelPageWithNextLink(url) {
+      let rawText = "";
+      let foundNextUrl = null;
+
+      // Primary: AllOrigins to parse raw HTML and find <a> tags
       try {
-        const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
+        const proxyUrl = `[https://api.allorigins.win/get?url=$](https://api.allorigins.win/get?url=$){encodeURIComponent(url)}`;
         const res = await fetch(proxyUrl);
         const data = await res.json();
-        if (data.contents) {
-          return parseHtmlNovel(data.contents);
+        if (data && data.contents) {
+          const parsed = parseHtmlWithNextLink(data.contents, url);
+          rawText = parsed.text;
+          foundNextUrl = parsed.nextUrl;
         }
       } catch (e) {
-        console.warn("AllOrigins failed...");
+        console.warn("AllOrigins HTML parse failed, falling back to Jina...");
       }
 
-      throw new Error("ไม่สามารถดึงข้อมูลเว็บนี้ได้ เนื่องจากเว็บมีระบบป้องกันขั้นสูง");
+      // Fallback: Jina Reader if AllOrigins fails to fetch text
+      if (!rawText || rawText.length < 100) {
+        try {
+          const jinaUrl = `[https://r.jina.ai/$](https://r.jina.ai/$){url}`;
+          const res = await fetch(jinaUrl);
+          if (res.ok) {
+            const md = await res.text();
+            rawText = parseMarkdownNovel(md);
+          }
+        } catch (e) {
+          console.warn("Jina Scraper failed...");
+        }
+      }
+
+      if (!rawText || rawText.length < 50) {
+        throw new Error("ไม่สามารถดึงเนื้อหาจากเว็บนี้ได้ กรุณาตรวจสอบ URL");
+      }
+
+      return { text: rawText, nextUrl: foundNextUrl };
+    }
+
+    function parseHtmlWithNextLink(html, baseUrl) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(html, 'text/html');
+
+      // 1. Sniff Next Chapter <a> Link
+      let nextUrl = null;
+      const links = doc.querySelectorAll('a');
+      for (let a of links) {
+        const text = (a.innerText || "").trim().toLowerCase();
+        // Match: 下一章 (Next Chapter), 下一页 (Next Page), next, next chapter
+        if (text.includes("下一章") || text.includes("下一页") || text === "next" || text === "next chapter" || text.includes("ตอนต่อไป") || text.includes("ตอนถัดไป")) {
+          const href = a.getAttribute('href');
+          if (href && !href.startsWith('javascript') && !href.startsWith('#')) {
+            try {
+              // Convert to Absolute URL
+              nextUrl = new URL(href, baseUrl).href;
+              break;
+            } catch(e) {}
+          }
+        }
+      }
+
+      // 2. Clean and Extract Paragraphs
+      doc.querySelectorAll('script, style, nav, header, footer, noscript, .ads, .bottem2').forEach(e => e.remove());
+      const paras = [];
+      doc.querySelectorAll('article p, .content p, #content, .txtnav, p').forEach(el => {
+        const t = el.innerText ? el.innerText.trim() : '';
+        if (t.length > 20) paras.push(t);
+      });
+
+      const fullText = paras.slice(0, 40).join('\n\n');
+      return { text: fullText, nextUrl: nextUrl };
     }
 
     function parseMarkdownNovel(md) {
@@ -383,66 +582,24 @@
       return textLines.slice(0, 40).join('\n\n');
     }
 
-    function parseHtmlNovel(html) {
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(html, 'text/html');
-      doc.querySelectorAll('script, style, nav, header, footer, noscript, .ads').forEach(e => e.remove());
-      const paras = [];
-      doc.querySelectorAll('article p, .content p, #content, p').forEach(el => {
-        const t = el.innerText ? el.innerText.trim() : '';
-        if (t.length > 25) paras.push(t);
-      });
-      if (paras.length === 0) throw new Error("ไม่พบเนื้อหานิยายในหน้าเว็บนี้");
-      return paras.slice(0, 40).join('\n\n');
-    }
+    // ==================== TRANSLATION PIPELINE ====================
 
-    // AUTOMATIC SCRAPE & TRANSLATE
-    async function autoScrapeAndTranslate() {
+    async function startFirstChapter() {
       const url = document.getElementById('import-url').value.trim();
+      if (!url) return alert("กรุณาวาง URL หน้านิยาย");
+
       const statusBox = document.getElementById('import-status-box');
       const statusText = document.getElementById('import-status-text');
       const startBtn = document.getElementById('start-btn');
-      const btnText = document.getElementById('btn-text');
       const spinner = document.getElementById('loading-spinner');
 
-      if (!url) {
-        alert("กรุณาวาง URL หน้านิยาย");
-        return;
-      }
-
       statusBox.classList.remove('hidden');
-      statusText.innerText = "กำลังดึงเนื้อหาจากเว็บนิยาย...";
+      statusText.innerText = "กำลังดึงเนื้อหาและตรวจหาตอนถัดไป...";
       startBtn.disabled = true;
       spinner.classList.remove('hidden');
-      btnText.innerText = "กำลังประมวลผล...";
 
       try {
-        const rawContent = await scrapeNovelPage(url);
-        statusText.innerText = `ดึงเนื้อหาสำเร็จ (${rawContent.length} ตัวอักษร) กำลังส่งแปลผ่าน Gemini AI...`;
-
-        const apiKey = (localStorage.getItem('gemini_api_key') || "").trim();
-        let model = (localStorage.getItem('gemini_model') || "gemini-3.5-flash-lite").trim();
-        
-        if (model === 'custom') {
-          model = (localStorage.getItem('gemini_custom_model') || "gemini-3.5-flash-lite").trim();
-        }
-        if (!model) model = "gemini-3.5-flash-lite";
-
-        const style = localStorage.getItem('translation_style') || "wuxia";
-
-        if (!apiKey) {
-          throw new Error("ยังไม่ได้ใส่ API Key กรุณาไปที่เมนู 'ตั้งค่า' (ไอคอนฟันเฟือง) ก่อน");
-        }
-
-        const translatedParagraphs = await callGeminiAPI(rawContent, apiKey, model, style);
-
-        chapters.push({
-          title: `ตอนที่ ${chapters.length + 1}`,
-          paragraphs: translatedParagraphs
-        });
-
-        currentChapterIndex = chapters.length - 1;
-        renderChapter();
+        await loadAndTranslateChapter(url, true);
         closeImportModal();
       } catch (err) {
         statusText.innerText = "เกิดข้อผิดพลาด: " + err.message;
@@ -450,21 +607,130 @@
       } finally {
         startBtn.disabled = false;
         spinner.classList.add('hidden');
-        btnText.innerText = "ดึงและแปลทันที";
       }
     }
 
-    // CALL GEMINI API
-    async function callGeminiAPI(text, key, rawModelName, style) {
+    async function loadAndTranslateChapter(url, isFirst = false) {
+      const { text, nextUrl } = await scrapeNovelPageWithNextLink(url);
+      nextChapterUrl = nextUrl;
+
+      const apiKey = (localStorage.getItem('gemini_api_key') || "").trim();
+      let model = (localStorage.getItem('gemini_model') || "gemini-3.5-flash-lite").trim();
+      if (model === 'custom') model = (localStorage.getItem('gemini_custom_model') || "gemini-3.5-flash-lite").trim();
+      if (!model) model = "gemini-3.5-flash-lite";
+
+      if (!apiKey) throw new Error("ยังไม่ได้ใส่ API Key ในเมนู 'ตั้งค่า'");
+
+      const paragraphs = await callGeminiAPI(text, apiKey, model);
+
+      chapters.push({
+        title: `ตอนที่ ${chapters.length + 1}`,
+        paragraphs: paragraphs,
+        sourceUrl: url,
+        nextUrl: nextUrl
+      });
+
+      currentChapterIndex = chapters.length - 1;
+      renderChapter();
+
+      // Trigger Background Prefetch for the NEXT chapter
+      prefetchedChapter = null;
+      document.getElementById('prefetch-indicator').classList.add('hidden');
+      
+      const prefetchEnabled = document.getElementById('auto-prefetch-toggle') ? document.getElementById('auto-prefetch-toggle').checked : true;
+      if (prefetchEnabled && nextChapterUrl) {
+        triggerPrefetchNextChapter(nextChapterUrl);
+      }
+    }
+
+    // ==================== BACKGROUND PREFETCH ====================
+
+    async function triggerPrefetchNextChapter(url) {
+      if (isPrefetching || !url) return;
+      isPrefetching = true;
+      console.log("Background prefetching next chapter:", url);
+
+      try {
+        const { text, nextUrl } = await scrapeNovelPageWithNextLink(url);
+        const apiKey = (localStorage.getItem('gemini_api_key') || "").trim();
+        let model = (localStorage.getItem('gemini_model') || "gemini-3.5-flash-lite").trim();
+        if (model === 'custom') model = (localStorage.getItem('gemini_custom_model') || "gemini-3.5-flash-lite").trim();
+
+        if (apiKey && text) {
+          const paragraphs = await callGeminiAPI(text, apiKey, model);
+          prefetchedChapter = {
+            title: `ตอนที่ ${chapters.length + 1}`,
+            paragraphs: paragraphs,
+            sourceUrl: url,
+            nextUrl: nextUrl
+          };
+          document.getElementById('prefetch-indicator').classList.remove('hidden');
+          console.log("Prefetch completed successfully!");
+        }
+      } catch (e) {
+        console.warn("Background prefetch failed:", e);
+      } finally {
+        isPrefetching = false;
+      }
+    }
+
+    // Handle One-Tap Next Chapter Click
+    async function handleNextChapterClick() {
+      // 1. If we already have subsequent chapter in history
+      if (currentChapterIndex < chapters.length - 1) {
+        currentChapterIndex++;
+        renderChapter();
+        return;
+      }
+
+      // 2. If prefetched chapter is already in memory
+      if (prefetchedChapter) {
+        chapters.push(prefetchedChapter);
+        nextChapterUrl = prefetchedChapter.nextUrl;
+        prefetchedChapter = null;
+        document.getElementById('prefetch-indicator').classList.add('hidden');
+        currentChapterIndex = chapters.length - 1;
+        renderChapter();
+
+        // Prefetch the subsequent one
+        if (nextChapterUrl) triggerPrefetchNextChapter(nextChapterUrl);
+        return;
+      }
+
+      // 3. If next chapter URL is known, fetch & translate on-the-fly
+      if (nextChapterUrl) {
+        const loader = document.getElementById('chapter-loader');
+        const nextBtn = document.getElementById('next-chap-btn');
+        loader.classList.remove('hidden');
+        nextBtn.disabled = true;
+
+        try {
+          await loadAndTranslateChapter(nextChapterUrl);
+        } catch (err) {
+          alert("ไม่สามารถโหลดตอนถัดไปอัตโนมัติได้: " + err.message);
+          openImportModal();
+        } finally {
+          loader.classList.add('hidden');
+          nextBtn.disabled = false;
+        }
+      } else {
+        // Fallback: If no next link found, open modal to ask user
+        openImportModal();
+      }
+    }
+
+    // ==================== GEMINI API CALL ====================
+
+    async function callGeminiAPI(text, key, rawModelName) {
       let cleanModel = rawModelName.replace(/^models\//, '').trim();
       const glossaryContext = Object.entries(glossary).map(([k, v]) => `${k} = ${v}`).join(", ");
       
-      const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลข้อความด้านล่างนี้เป็นภาษาไทยให้อ่านลื่นไหล สละสลวย ได้อารมณ์ตามสไตล์ "${style}"
+      const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลข้อความด้านล่างนี้เป็นภาษาไทยให้อ่านลื่นไหล สละสลวย ได้อารมณ์นิยาย
 สำคัญมาก:
 1. หากพบคำศัพท์เหล่านี้ ให้แปลตามที่กำหนดอย่างเคร่งครัด: [${glossaryContext}]
 2. ตอบกลับเป็นรูปแบบ JSON Array ของ Object เท่านั้น: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ไม่ต้องใส่โค้ด Markdown ครอบ`;
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${key}`;
+      const endpoint = `[https://generativelanguage.googleapis.com/v1beta/models/$](https://generativelanguage.googleapis.com/v1beta/models/$){cleanModel}:generateContent?key=${key}`;
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -486,7 +752,8 @@
       return JSON.parse(aiText);
     }
 
-    // Glossary Handlers
+    // ==================== GLOSSARY & SETTINGS ====================
+
     function renderGlossaryList() {
       const list = document.getElementById('glossary-list');
       list.innerHTML = "";
@@ -520,12 +787,10 @@
       renderChapter();
     }
 
-    // Settings
     function saveSettings() {
       localStorage.setItem('gemini_api_key', document.getElementById('gemini-api-key').value.trim());
       localStorage.setItem('gemini_model', document.getElementById('gemini-model-select').value);
       localStorage.setItem('gemini_custom_model', document.getElementById('custom-model-name').value.trim());
-      localStorage.setItem('translation_style', document.getElementById('style-select').value);
       openSettingsModal();
       alert("บันทึกการตั้งค่าเรียบร้อยแล้ว");
     }
@@ -543,7 +808,8 @@
       }
     }
 
-    // TTS
+    // ==================== TTS & UTILS ====================
+
     let ttsIndex = 0;
     let isTTSPlaying = false;
     let synth = window.speechSynthesis;
@@ -607,15 +873,6 @@
       if (currentChapterIndex > 0) {
         currentChapterIndex--;
         renderChapter();
-      }
-    }
-
-    function nextChapter() {
-      if (currentChapterIndex < chapters.length - 1) {
-        currentChapterIndex++;
-        renderChapter();
-      } else {
-        openImportModal();
       }
     }
   </script>
