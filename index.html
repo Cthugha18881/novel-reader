@@ -325,7 +325,7 @@
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
           { th: "แตะที่ย่อหน้านี้ เพื่อดูข้อความภาษาจีนต้นฉบับเด้งลงมาใต้ย่อหน้าทันที", src: "轻触本段落，即可在下方展开中文原文对比阅读" },
-          { th: "ลองลากคลุมคำไทยหรือจีน แถบด้านล่างจะเปิดขึ้นมาเพื่อให้กดเพิ่มลงคลังศัพท์ได้ทันที", src: "选中文本后底部弹条会自动识别中英文并填入词库" }
+          { th: "มีระบบป้องกันเซิร์ฟเวอร์หนาแน่น (High Demand Auto-Retry) อัตโนมัติในทุกจุด", src: "全自动高负载重试与模型降级保护机制已启用" }
         ]
       }
     ];
@@ -380,9 +380,7 @@
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
 
-    // แตะที่ย่อหน้าเพื่อกางดูต้นฉบับภาษาจีน
     function toggleParagraphSrc(idx) {
-      // ป้องกันการกางออกเวลากำลังลากคลุมข้อความ
       const selection = window.getSelection();
       if (selection && selection.toString().trim().length > 0) return;
 
@@ -400,7 +398,6 @@
 
         if (text && text.length >= 1 && text.length <= 40) {
           selectedWordBuffer = text;
-          // ตรวจสอบว่ามีตัวอักษรจีนหรือไม่
           isSelectedChinese = /[\u4e00-\u9fa5]/.test(text);
 
           const tag = document.getElementById('sel-tag-label');
@@ -421,16 +418,13 @@
       if (window.getSelection) window.getSelection().removeAllRanges();
     }
 
-    // เพิ่มลงคลัง: ดึงเฉพาะคำที่เลือก อีกช่องปล่อยว่าง 100%
     function addFromSelectionBar() {
       document.getElementById('selection-bar').style.display = 'none';
 
       if (isSelectedChinese) {
-        // เลือกภาษาจีน: คำเดิมใส่คำที่เลือก, คำแปลปล่อยว่างให้กรอกเอง
         document.getElementById('gloss-src').value = selectedWordBuffer;
         document.getElementById('gloss-tgt').value = "";
       } else {
-        // เลือกภาษาไทย: คำแปลใส่คำที่เลือก, คำเดิมปล่อยว่างให้กรอกเอง
         document.getElementById('gloss-src').value = "";
         document.getElementById('gloss-tgt').value = selectedWordBuffer;
       }
@@ -487,7 +481,6 @@
       return { text: rawText, nextUrl: nextUrl };
     }
 
-    // GENRE RULES
     function getGenreInstruction(genre) {
       switch (genre) {
         case 'xianxia':
@@ -513,10 +506,9 @@
       }
     }
 
-    // TRANSLATE
-    async function translateText(rawText) {
+    // BASE TRANSLATION CALL
+    async function executeApiCall(rawText, modelToUse) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
-      const model = (localStorage.getItem('nov_gemini_model') || "gemini-3.5-flash-lite").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
 
       if (!key) throw new Error("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
@@ -535,7 +527,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
 
 ตอบกลับเฉพาะรูปแบบ JSON Array: [{"th": "คำแปลไทย", "src": "ข้อความต้นฉบับ"}] ไม่ต้องใส่ Markdown`;
 
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${key}`;
       const res = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -545,7 +537,9 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || "ยิง API ไม่สำเร็จ");
+      if (!res.ok) {
+        throw new Error(data.error?.message || `HTTP ${res.status}: ยิง API ไม่สำเร็จ`);
+      }
 
       let outText = data.candidates[0].content.parts[0].text;
       const jsonMatch = outText.match(/\[\s*\{[\s\S]*\}\s*\]/);
@@ -562,7 +556,50 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       return parsedResult;
     }
 
-    // START FIRST CHAPTER
+    // ==================== AUTO-RETRY & FALLBACK PIPELINE ====================
+    async function translateTextWithRetry(rawText, onStatusUpdate = null, maxRetries = 3) {
+      let currentModel = (localStorage.getItem('nov_gemini_model') || "gemini-3.5-flash-lite").trim();
+      let delay = 2000;
+
+      // Fallback hierarchy
+      const fallbackModels = ["gemini-3.5-flash-lite", "gemini-2.5-flash", "gemini-3.8-flash"];
+
+      for (let attempt = 0; attempt <= maxRetries; attempt++) {
+        try {
+          return await executeApiCall(rawText, currentModel);
+        } catch (err) {
+          const errMsg = (err.message || "").toLowerCase();
+          const isHighDemand = errMsg.includes("high demand") || 
+                               errMsg.includes("503") || 
+                               errMsg.includes("resourceexhausted") || 
+                               errMsg.includes("429") ||
+                               errMsg.includes("overloaded");
+
+          if (!isHighDemand || attempt === maxRetries) {
+            throw err;
+          }
+
+          // สลับโมเดลสำรองเมื่อลองครั้งที่ 2 เป็นต้นไป
+          if (attempt >= 1) {
+            const nextModel = fallbackModels.find(m => m !== currentModel) || "gemini-2.5-flash";
+            currentModel = nextModel;
+            if (onStatusUpdate) {
+              onStatusUpdate(`เซิร์ฟเวอร์หนาแน่น กำลังสลับไปใช้โมเดลสำรอง (${currentModel}) ใน ${delay/1000} วิ...`);
+            }
+          } else {
+            if (onStatusUpdate) {
+              onStatusUpdate(`เซิร์ฟเวอร์หนาแน่น กำลังลองใหม่รอบที่ ${attempt + 1}/${maxRetries} ใน ${delay/1000} วิ...`);
+            }
+          }
+
+          console.warn(`High Demand encountered. Retrying in ${delay}ms with model ${currentModel}...`);
+          await new Promise(r => setTimeout(r, delay));
+          delay *= 2; // Exponential backoff (2s -> 4s -> 8s)
+        }
+      }
+    }
+
+    // START FIRST CHAPTER (WITH RETRY STATUS NOTIFICATION)
     async function startTranslateFirst() {
       const url = document.getElementById('import-url').value.trim();
       if (!url) return alert("กรุณาใส่ URL หน้านิยาย");
@@ -574,7 +611,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       status.style.display = 'block';
       status.style.background = '#eff6ff';
       status.style.color = '#1e40af';
-      status.innerText = "กำลังดึงเนื้อหาและแปลตามสำนวนที่เลือก...";
+      status.innerText = "กำลังดึงเนื้อหาและวิเคราะห์ข้อความ...";
       startBtn.disabled = true;
       btnText.innerText = "กำลังทำงาน...";
 
@@ -584,7 +621,15 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
         const { text, nextUrl } = await scrapePage(url);
         nextUrlCalculated = nextUrl;
 
-        const paragraphs = await translateText(text);
+        status.innerText = "กำลังแปลเนื้อหาผ่าน AI...";
+
+        // เรียกใช้ฟังก์ชันแปลพร้อมส่ง callback อัปเดตสถานะ Retry
+        const paragraphs = await translateTextWithRetry(text, (msg) => {
+          status.style.background = '#fffbeb';
+          status.style.color = '#b45309';
+          status.innerText = msg;
+        });
+
         chapters.push({
           title: `ตอนที่ ${chapters.length + 1}`,
           paragraphs: paragraphs
@@ -604,13 +649,14 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // PREFETCH
+    // PREFETCH (WITH SILENT BACKGROUND AUTO-RETRY)
     async function triggerPrefetch(url) {
       if (isPrefetching || !url) return;
       isPrefetching = true;
       try {
         const { text, nextUrl } = await scrapePage(url);
-        const paragraphs = await translateText(text);
+        // Prefetch with auto-retry
+        const paragraphs = await translateTextWithRetry(text, null, 2);
         prefetchedData = {
           title: `ตอนที่ ${chapters.length + 1}`,
           paragraphs: paragraphs,
@@ -618,11 +664,14 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
           nextUrl: nextUrl
         };
         document.getElementById('prefetch-badge').style.display = 'inline-block';
-      } catch(e) {}
-      finally { isPrefetching = false; }
+      } catch(e) {
+        console.warn("Background prefetch failed after retries:", e);
+      } finally {
+        isPrefetching = false;
+      }
     }
 
-    // NEXT CHAPTER CLICK
+    // NEXT CHAPTER CLICK (WITH ON-THE-FLY RETRY)
     async function handleNextChapterClick() {
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
@@ -657,7 +706,10 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
           const { text, nextUrl } = await scrapePage(currentUrl);
           nextUrlCalculated = nextUrl;
 
-          const paragraphs = await translateText(text);
+          const paragraphs = await translateTextWithRetry(text, (msg) => {
+            btnText.innerText = msg.substring(0, 28) + "...";
+          });
+
           chapters.push({
             title: `ตอนที่ ${chapters.length + 1}`,
             paragraphs: paragraphs
@@ -667,7 +719,7 @@ ${lastChapterContext ? `3. บริบทตอนก่อนหน้า: "${
 
           if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
         } catch (err) {
-          alert("ไม่สามารถดึงตอนถัดไปอัตโนมัติได้: " + err.message);
+          alert("ไม่สามารถดึงตอนถัดไปได้: " + err.message);
           document.getElementById('import-url').value = nextUrlCalculated;
           openModal('import-modal');
         } finally {
