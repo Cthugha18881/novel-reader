@@ -163,7 +163,7 @@
     }
     .modal-overlay.active { display: flex !important; }
     .modal-box {
-      width: 100%; max-width: 500px; border-radius: 12px;
+      width: 100%; max-width: 540px; border-radius: 12px;
       padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
       background-color: #fff; color: #1e293b;
     }
@@ -187,7 +187,7 @@
       margin-top: 8px; line-height: 1.4;
     }
 
-    /* BOOKSHELF STYLES */
+    /* ENHANCED BOOKSHELF STYLES */
     .book-item-container {
       border: 1px solid rgba(0,0,0,0.08); border-radius: 8px;
       margin-bottom: 12px; overflow: hidden; background: rgba(0,0,0,0.01);
@@ -212,21 +212,31 @@
     }
     body.theme-dark .batch-bar { background: rgba(255,255,255,0.03); border-top-color: rgba(255,255,255,0.08); }
 
+    /* CHAPTER SUB-LIST CONTROLS & SELECTION */
+    .shelf-sub-toolbar {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 6px 14px; background: rgba(0,0,0,0.03); font-size: 11px;
+      border-top: 1px solid rgba(0,0,0,0.06);
+    }
+    body.theme-dark .shelf-sub-toolbar { background: rgba(255,255,255,0.04); border-top-color: rgba(255,255,255,0.08); }
+    
     .book-chapters-list {
       display: none; border-top: 1px solid rgba(0,0,0,0.06);
-      max-height: 190px; overflow-y: auto; background: rgba(0,0,0,0.02);
+      max-height: 220px; overflow-y: auto; background: rgba(0,0,0,0.02);
       padding: 4px 0;
     }
     body.theme-dark .book-chapters-list { border-top-color: rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); }
+    
     .chap-subitem {
       padding: 6px 14px; font-size: 12px;
       display: flex; justify-content: space-between; align-items: center;
-      transition: background 0.1s ease;
+      transition: background 0.1s ease; gap: 8px;
     }
     .chap-subitem:hover { background-color: rgba(37,99,235,0.08); }
     .chap-subitem.active { font-weight: 600; color: #2563eb; background-color: rgba(37,99,235,0.08); }
+    .chap-chk { cursor: pointer; accent-color: #2563eb; }
     .chap-name-btn {
-      flex: 1; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 8px;
+      flex: 1; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
     .chap-action-btn {
       padding: 2px 6px; font-size: 10px; border-radius: 4px; border: none; cursor: pointer;
@@ -346,8 +356,8 @@
         <div id="batch-progress-desc">เตรียมคิว...</div>
       </div>
 
-      <div id="bookshelf-list" style="max-height: 330px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ระบบใช้สูตร URL + 1 อัตโนมัติ หากบทไหนเลขโดด ให้กด "แก้ URL ถัดไป" แปะลิงก์ใหม่ครั้งเดียว</p>
+      <div id="bookshelf-list" style="max-height: 380px; overflow-y: auto; margin-bottom: 12px;"></div>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แปลเสร็จบันทึกทันทีทุกตอน | แตะชื่อเรื่องเพื่อกางดูตอน เลือกสลับลำดับ หรือเลือกหลายบทเพื่อลบพร้อมกันได้</p>
     </div>
   </div>
 
@@ -540,6 +550,16 @@
       });
     }
 
+    function dbDeleteMultipleChapters(chapIds) {
+      return new Promise((resolve) => {
+        if (!db || !chapIds || chapIds.length === 0) return resolve();
+        const tx = db.transaction('chapters', 'readwrite');
+        const chapStore = tx.objectStore('chapters');
+        chapIds.forEach(id => chapStore.delete(id));
+        tx.oncomplete = () => resolve();
+      });
+    }
+
     // ==================== APP STATE ====================
     let currentTheme = 'sepia';
     let currentFontSize = 18;
@@ -556,6 +576,9 @@
     let isBatchRunning = false;
     let isBatchComplete = false;
 
+    // ระบบจำการจัดเรียงตอนย่อยในแต่ละเรื่อง
+    let bookSortModes = {}; // { [bookId]: 'newest' | 'oldest' | 'title' }
+
     let selectedWordBuffer = "";
     let isSelectedChinese = false;
 
@@ -568,8 +591,8 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับ Smart URL Increment", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบคำนวณลิงก์ถัดไปแบบ +1 อัตโนมัติ จบในตัว ไม่ต้องพึ่งพาเอนจินหลังบ้านที่ซับซ้อน", src: "已切换为智能自增递增逻辑" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับ Real-time Auto-save & Chapter Manager", src: "欢迎来到 NovelTranslate" },
+          { th: "แปลเสร็จบันทึกทันทีทุกตอน พร้อมปุ่มสลับการเรียงลำดับและเลือกลบหลายบทพร้อมกัน", src: "已支持单章即时存储、列表多向排序与批量多选删除" }
         ]
       }
     ];
@@ -754,7 +777,7 @@
       }, 150);
     }
 
-    // ==================== BOOKSHELF UI ====================
+    // ==================== ENHANCED BOOKSHELF WITH SORT & MULTI-DELETE ====================
     async function openBookshelfModal() {
       const listContainer = document.getElementById('bookshelf-list');
       listContainer.innerHTML = '<div style="text-align:center; padding:15px; opacity:0.6;">กำลังเปิดคลังหนังสือ...</div>';
@@ -774,28 +797,15 @@
         itemBox.className = 'book-item-container';
 
         let bookChaps = await dbGetChaptersByBook(b.bookId);
-        bookChaps.sort((x, y) => x.order - y.order);
-
-        let chapsHtml = '';
-        bookChaps.forEach((ch, cIdx) => {
-          const isActive = (b.bookId === currentBookId && cIdx === currentChapterIndex) ? 'active' : '';
-          chapsHtml += `
-            <div class="chap-subitem ${isActive}">
-              <div class="chap-name-btn" onclick="jumpToChapterFromShelf('${b.bookId}', ${cIdx})">
-                📖 ${ch.title}
-              </div>
-              <div style="display:flex; gap:6px; align-items:center;">
-                <button class="chap-action-btn" style="background:rgba(37,99,235,0.1); color:#2563eb;" onclick="jumpToChapterFromShelf('${b.bookId}', ${cIdx})">อ่าน</button>
-                <button class="chap-action-btn" style="background:rgba(220,38,38,0.1); color:#dc2626;" onclick="deleteSingleChapter(event, '${b.bookId}', '${ch.id}', '${ch.title}')" title="ลบบทนี้">✕ ลบ</button>
-              </div>
-            </div>
-          `;
-        });
+        
+        // กำหนดโหมดเรียงตอนเริ่มต้นเป็น newest (ล่าสุดขึ้นก่อน)
+        if (!bookSortModes[b.bookId]) bookSortModes[b.bookId] = 'newest';
+        applySortToChapters(bookChaps, bookSortModes[b.bookId]);
 
         itemBox.innerHTML = `
           <div class="book-card-header">
             <div class="book-info" onclick="toggleBookAccordion('${b.bookId}')">
-              <div class="book-title">📚 ${b.title || 'นิยายเรื่องใหม่'} <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนทั้งหมด)</span></div>
+              <div class="book-title">📚 ${b.title || 'นิยายเรื่องใหม่'} <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนย่อย)</span></div>
               <div class="book-meta">อ่านค้างไว้: <b>${b.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${bookChaps.length} ตอนที่บันทึกไว้</div>
             </div>
             <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบทั้งเรื่อง</button>
@@ -811,19 +821,155 @@
               🔗 แก้ URL ถัดไป
             </button>
           </div>
+          
+          <!-- Sub Toolbar: Sort Buttons & Multi-Delete -->
+          <div class="shelf-sub-toolbar" id="shelf-sub-bar-${b.bookId}" style="display: none;">
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <span>เรียง:</span>
+              <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="changeChapterSort(event, '${b.bookId}', 'newest')" title="บทใหม่ล่าสุดขึ้นบนสุด">ล่าสุดบน</button>
+              <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="changeChapterSort(event, '${b.bookId}', 'oldest')" title="เรียงตามลำดับเนื้อเรื่อง">1 ➔ ท้าย</button>
+              <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="changeChapterSort(event, '${b.bookId}', 'title')" title="เรียงตามตัวอักษร">ชื่อ</button>
+            </div>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="toggleSelectAllChaps('${b.bookId}')">เลือกทั้งหมด</button>
+              <button class="btn btn-danger" id="del-selected-btn-${b.bookId}" style="padding: 2px 6px; font-size: 10px; display: none;" onclick="deleteSelectedChapters('${b.bookId}')">ลบที่เลือก</button>
+            </div>
+          </div>
+
           <div class="book-chapters-list" id="shelf-chaps-${b.bookId}">
-            ${chapsHtml || '<div style="padding:8px 14px; font-size:11px; opacity:0.5;">ไม่มีตอน</div>'}
+            ${renderChaptersHtml(b.bookId, bookChaps)}
           </div>
         `;
         listContainer.appendChild(itemBox);
       }
     }
 
+    function applySortToChapters(chapsList, sortMode) {
+      if (sortMode === 'newest') {
+        chapsList.sort((x, y) => y.order - x.order);
+      } else if (sortMode === 'oldest') {
+        chapsList.sort((x, y) => x.order - y.order);
+      } else if (sortMode === 'title') {
+        chapsList.sort((x, y) => x.title.localeCompare(y.title, 'th'));
+      }
+    }
+
+    function renderChaptersHtml(bookId, bookChaps) {
+      if (!bookChaps || bookChaps.length === 0) {
+        return '<div style="padding:8px 14px; font-size:11px; opacity:0.5;">ไม่มีตอน</div>';
+      }
+
+      let chapsHtml = '';
+      bookChaps.forEach((ch) => {
+        // หา originalIndex จาก order เดิม เพื่อให้กระโดดอ่านถูกบท
+        const origIdx = ch.order - 1;
+        const isActive = (bookId === currentBookId && origIdx === currentChapterIndex) ? 'active' : '';
+
+        chapsHtml += `
+          <div class="chap-subitem ${isActive}">
+            <input type="checkbox" class="chap-chk chk-book-${bookId}" value="${ch.id}" onchange="updateSelectedDeleteBtn('${bookId}')">
+            <div class="chap-name-btn" onclick="jumpToChapterFromShelf('${bookId}', ${origIdx})">
+              📖 ${ch.title}
+            </div>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <button class="chap-action-btn" style="background:rgba(37,99,235,0.1); color:#2563eb;" onclick="jumpToChapterFromShelf('${bookId}', ${origIdx})">อ่าน</button>
+              <button class="chap-action-btn" style="background:rgba(220,38,38,0.1); color:#dc2626;" onclick="deleteSingleChapter(event, '${bookId}', '${ch.id}', '${ch.title}')" title="ลบบทนี้">✕ ลบ</button>
+            </div>
+          </div>
+        `;
+      });
+      return chapsHtml;
+    }
+
     function toggleBookAccordion(bookId) {
       const list = document.getElementById(`shelf-chaps-${bookId}`);
-      if (list) {
-        list.style.display = (list.style.display === 'block') ? 'none' : 'block';
+      const bar = document.getElementById(`shelf-sub-bar-${bookId}`);
+      if (list && bar) {
+        const isShown = (list.style.display === 'block');
+        list.style.display = isShown ? 'none' : 'block';
+        bar.style.display = isShown ? 'none' : 'flex';
       }
+    }
+
+    async function changeChapterSort(e, bookId, sortMode) {
+      e.stopPropagation();
+      bookSortModes[bookId] = sortMode;
+      let bookChaps = await dbGetChaptersByBook(bookId);
+      applySortToChapters(bookChaps, sortMode);
+      
+      const list = document.getElementById(`shelf-chaps-${bookId}`);
+      if (list) {
+        list.innerHTML = renderChaptersHtml(bookId, bookChaps);
+      }
+      updateSelectedDeleteBtn(bookId);
+    }
+
+    function updateSelectedDeleteBtn(bookId) {
+      const chks = document.querySelectorAll(`.chk-book-${bookId}:checked`);
+      const delBtn = document.getElementById(`del-selected-btn-${bookId}`);
+      if (delBtn) {
+        if (chks.length > 0) {
+          delBtn.style.display = 'inline-flex';
+          delBtn.innerText = `ลบที่เลือก (${chks.length})`;
+        } else {
+          delBtn.style.display = 'none';
+        }
+      }
+    }
+
+    function toggleSelectAllChaps(bookId) {
+      const chks = document.querySelectorAll(`.chk-book-${bookId}`);
+      if (chks.length === 0) return;
+      const allChecked = Array.from(chks).every(c => c.checked);
+      chks.forEach(c => c.checked = !allChecked);
+      updateSelectedDeleteBtn(bookId);
+    }
+
+    async function deleteSelectedChapters(bookId) {
+      const chks = document.querySelectorAll(`.chk-book-${bookId}:checked`);
+      const count = chks.length;
+      if (count === 0) return;
+
+      if (!confirm(`คุณต้องการลบตอนที่เลือกจำนวน ${count} ตอน ออกจากเครื่องใช่หรือไม่?`)) return;
+
+      const idsToDelete = Array.from(chks).map(c => c.value);
+      await dbDeleteMultipleChapters(idsToDelete);
+
+      // จัดระเบียบลำดับ order ใหม่หลังจากลบ
+      const remainingChaps = await dbGetChaptersByBook(bookId);
+      remainingChaps.sort((x, y) => x.order - y.order);
+      for (let i = 0; i < remainingChaps.length; i++) {
+        remainingChaps[i].order = i + 1;
+        await dbSaveChapter(remainingChaps[i]);
+      }
+
+      const books = await dbGetAllBooks();
+      const targetBook = books.find(b => b.bookId === bookId);
+
+      if (targetBook) {
+        if (remainingChaps.length > 0) {
+          const lastChap = remainingChaps[remainingChaps.length - 1];
+          await dbSaveBook({
+            ...targetBook,
+            totalChapters: remainingChaps.length,
+            lastChapterTitle: lastChap.title,
+            lastChapterIndex: Math.min(targetBook.lastChapterIndex || 0, remainingChaps.length - 1)
+          });
+        } else {
+          await dbSaveBook({
+            ...targetBook,
+            totalChapters: 0,
+            lastChapterTitle: "ไม่มีตอน",
+            lastChapterIndex: 0
+          });
+        }
+      }
+
+      if (currentBookId === bookId) {
+        await loadBookFromDB(bookId);
+      }
+
+      openBookshelfModal();
     }
 
     async function deleteSingleChapter(e, bookId, chapId, chapTitle) {
@@ -834,6 +980,10 @@
 
       const remainingChaps = await dbGetChaptersByBook(bookId);
       remainingChaps.sort((x, y) => x.order - y.order);
+      for (let i = 0; i < remainingChaps.length; i++) {
+        remainingChaps[i].order = i + 1;
+        await dbSaveChapter(remainingChaps[i]);
+      }
 
       const books = await dbGetAllBooks();
       const targetBook = books.find(b => b.bookId === bookId);
@@ -881,8 +1031,8 @@
       }
     }
 
-    async function jumpToChapterFromShelf(bookId, chapIdx) {
-      await loadBookFromDB(bookId, chapIdx);
+    async function jumpToChapterFromShelf(bookId, origIdx) {
+      await loadBookFromDB(bookId, origIdx);
       closeModal('bookshelf-modal');
     }
 
@@ -920,8 +1070,6 @@
     // ==================== SMART URL INCREMENT (+1) ENGINE ====================
     function computeNextNumericUrl(url) {
       if (!url) return null;
-      // จับตัวเลขชุดสุดท้ายใน URL ก่อนถึงนามสกุลไฟล์หรือพารามิเตอร์
-      // รองรับทั้ง /40717272, /40717272.htm, /40717272.html, /105/
       const match = url.match(/^(.*?)(\d+)(\.html?|\/)?$/i);
       if (!match) return null;
 
@@ -930,7 +1078,6 @@
       const suffix = match[3] || '';
 
       const nextNum = (BigInt(numStr) + 1n).toString();
-      // รักษารูปแบบ padding ไว้ เช่น 001 -> 002
       const paddedNextNum = nextNum.padStart(numStr.length, '0');
 
       return `${prefix}${paddedNextNum}${suffix}`;
@@ -942,7 +1089,6 @@
       let rawChapTitle = "";
       let rawBookTitle = "";
 
-      // ดึงผ่าน Jina Reader Engine ฝั่ง Client
       try {
         const res = await fetch(`https://r.jina.ai/${url}`);
         if (res.ok) {
@@ -985,7 +1131,6 @@
         throw new Error("ไม่พบเนื้อหานิยายในหน้านี้ (อาจเป็นหน้า 404 หรือเลขตอนกระโดดข้าม)");
       }
 
-      // คำนวณ URL ถัดไปแบบ +1 ทันที
       const nextUrl = computeNextNumericUrl(url);
 
       return {
@@ -1404,7 +1549,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // ==================== BATCH PRE-TRANSLATE WITH SMART URL (+1) ====================
+    // ==================== REAL-TIME AUTO-SAVE BATCH PRE-TRANSLATE ====================
     function handleBatchActionClick() {
       if (isBatchComplete) {
         document.getElementById('batch-progress-box').style.display = 'none';
@@ -1457,7 +1602,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
       for (let i = 1; i <= count; i++) {
         if (batchCancelRequested) {
-          progressDesc.innerText = `หยุดการแปลตามคำสั่งแล้ว (แปลเสร็จสิ้น ${successCount} ตอน)`;
+          progressDesc.innerText = `หยุดการแปลตามคำสั่งแล้ว (แปลและบันทึกเสร็จสิ้น ${successCount} ตอน)`;
           break;
         }
 
@@ -1484,6 +1629,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             nextUrl: nextUrl
           };
 
+          // บันทึกลง IndexedDB ทันทีทุกตอน
           await dbSaveChapter(newChap);
           successCount++;
 
@@ -1497,7 +1643,15 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             updatedAt: Date.now()
           });
 
-          // ส่งต่อ URL (+1) เข้าลูปถัดไป
+          // อัปเดตรายการในชั้นหนังสือแบบเรียลไทม์
+          let liveChaps = await dbGetChaptersByBook(bookId);
+          applySortToChapters(liveChaps, bookSortModes[bookId] || 'newest');
+          const listEl = document.getElementById(`shelf-chaps-${bookId}`);
+          if (listEl) {
+            listEl.innerHTML = renderChaptersHtml(bookId, liveChaps);
+          }
+
+          // ส่งต่อ URL (+1)
           targetUrl = nextUrl;
 
           if (i < count && !batchCancelRequested) {
