@@ -661,7 +661,7 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI โหมดอ่านต่อเนื่องไร้รอยต่อ", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบ Proactive Pipeline ป้องกันการแสดงบทซ้ำซ้อนและจำกัดการแปลล่วงหน้า 1 ตอนอย่างแม่นยำ", src: "已支持防止章节重复渲染与单章精确预加载" }
+          { th: "ระบบตรวจจับ URL โดดและแจ้งเตือนให้วางลิงก์ใหม่ทันทีที่เกิดปัญหา", src: "已支持即时跳章检测与引导提示" }
         ]
       }
     ];
@@ -789,14 +789,12 @@
       checkProactivePrefetch();
     }
 
-    // ป้องกันการต่อบทซ้ำ (Strict De-duplication)
     function appendNextChapterToWindow() {
       if (isAppendingNextChapter) return;
       const nextIdx = currentChapterIndex + 1;
       if (nextIdx >= chapters.length) return;
 
       const nextChap = chapters[nextIdx];
-      // ตรวจสอบทั้ง id และ index ถ้ามีอยู่บนจอแล้ว ห้ามใส่ซ้ำเด็ดขาด
       if (document.getElementById(`chapter-block-${nextIdx}`) || 
           document.querySelector(`[data-id="${nextChap.id}"]`)) {
         return;
@@ -813,7 +811,6 @@
         renderedWindowIndices.push(nextIdx);
       }
 
-      // รักษาขนาด DOM Window ไม่ให้เกิน 3 บท
       if (renderedWindowIndices.length > 3) {
         const removeIdx = renderedWindowIndices.shift();
         const removeEl = document.getElementById(`chapter-block-${removeIdx}`);
@@ -855,13 +852,10 @@
       });
     }
 
-    // ล็อก Buffer การแปลล่วงหน้าไว้เพียง 1 ตอนเสมอ (+1 Ahead)
     function checkProactivePrefetch() {
       const isPrefetchEnabled = localStorage.getItem('nov_enable_prefetch') !== 'false';
       if (!isPrefetchEnabled || isPrefetching) return;
 
-      // กฎเหล็ก: ถ้าในคลังมีตอนถัดไปรออยู่แล้ว 1 ตอน (chapters.length > currentChapterIndex + 1) ให้หยุดทันที
-      // จะเริ่มแปลก็ต่อเมื่ออ่านมาถึงตอนสุดท้ายที่มีในคลังแล้วเท่านั้น
       if (currentChapterIndex >= chapters.length - 1) {
         triggerReadingPrefetchIfEnabled(false);
       }
@@ -874,14 +868,13 @@
         return;
       }
 
-      // ถ้าหน้าจอยังมีตอนถัดไปให้เลื่อนอ่านต่อได้ ไม่ต้องแสดงแถบสถานะ
       if (currentChapterIndex < chapters.length - 1) {
         updateInfiniteStatusBanner('', false);
         return;
       }
 
       const lastChap = chapters[chapters.length - 1];
-      const targetUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
+      const targetUrl = lastChap.nextUrl;
 
       if (isPrefetching) {
         updateInfiniteStatusBanner(`
@@ -902,18 +895,21 @@
           </button>
         `, true);
       } else {
+        // ไม่มี URL ถัดไป (เนื่องจากตรวจพบว่า URL เลขกระโดด หรืออ่านถึงตอนล่าสุด)
         updateInfiniteStatusBanner(`
           <div style="font-size: 13px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">
             ⚠️ ไม่พบ URL ของตอนถัดไป (เลข URL อาจกระโดดข้าม)
           </div>
-          <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="promptFixNextUrlFromBottom()">
+          <div style="font-size: 11px; opacity: 0.75; margin-bottom: 10px;">
+            กรุณาก๊อปปี้ URL ตอนถัดไปจากหน้าเว็บจริงมาวางเพื่อแปลต่อ
+          </div>
+          <button class="btn btn-primary" style="padding: 6px 14px; font-size: 12px;" onclick="promptFixNextUrlFromBottom()">
             🔗 วาง URL ตอนถัดไป
           </button>
         `, true);
       }
     }
 
-    // ฟังก์ชันสำหรับปุ่มกดที่ท้ายจอโดยตรง (ทำงาน 100% ไม่พึ่งพา index สายตา)
     function triggerManualFetchNext() {
       triggerReadingPrefetchIfEnabled(true);
     }
@@ -922,9 +918,10 @@
       const lastChap = chapters[chapters.length - 1];
       const input = prompt(`กรุณาวาง URL ของตอนถัดไปสำหรับ "${lastChap.title}":`, "");
       if (input && input.trim()) {
-        lastChap.nextUrl = input.trim();
+        const cleanUrl = input.trim();
+        lastChap.nextUrl = cleanUrl;
         dbSaveChapter(lastChap);
-        nextUrlCalculated = lastChap.nextUrl;
+        nextUrlCalculated = cleanUrl;
         triggerReadingPrefetchIfEnabled(true);
       }
     }
@@ -1408,7 +1405,7 @@
         const latestChap = chapters[chapters.length - 1];
 
         currentUrl = currentActiveChap.sourceUrl || targetBook.lastUrl || "";
-        nextUrlCalculated = latestChap.nextUrl || computeNextNumericUrl(latestChap.sourceUrl);
+        nextUrlCalculated = latestChap.nextUrl;
         
         renderVirtualWindow(currentChapterIndex, true);
         refreshShelfViewOnly(bookId);
@@ -1460,7 +1457,7 @@
           const md = await res.text();
           
           if (md.includes('404 Not Found') || md.includes('页面不存在') || (md.includes('Just a moment...') && md.length < 1500)) {
-            throw new Error(`ไม่พบเนื้อหา (อาจเป็นหน้า 404 หรือติดระบบตรวจบ็อตชั่วคราว)`);
+            throw new Error(`404`);
           }
 
           const lines = md.split('\n').map(l => l.trim());
@@ -1487,14 +1484,16 @@
             return true;
           });
           rawText = filteredLines.join('\n\n');
+        } else if (res.status === 404) {
+          throw new Error('404');
         }
       } catch(e) {
         if (e.name === 'AbortError') throw new Error("คำสั่งถูกยกเลิกแล้ว");
-        throw new Error(`ดึงเนื้อหาไม่สำเร็จ: ${e.message}`);
+        throw e;
       }
 
       if (!rawText || rawText.length < 40) {
-        throw new Error("ไม่พบเนื้อหานิยายในหน้านี้ (อาจเป็นหน้า 404 หรือเลขตอนกระโดดข้าม)");
+        throw new Error("404");
       }
 
       const nextUrl = computeNextNumericUrl(url);
@@ -1835,23 +1834,29 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       } catch (err) {
         status.style.background = '#fef2f2';
         status.style.color = '#991b1b';
-        status.innerText = "ข้อผิดพลาด: " + err.message;
+        status.innerText = "ข้อผิดพลาด: " + (err.message === '404' ? 'ไม่พบหน้านิยาย (404 Not Found)' : err.message);
       } finally {
         startBtn.disabled = false;
         btnText.innerText = "เริ่มแปลตอนนี้";
       }
     }
 
-    // ON-DEMAND READING PREFETCH (ดึงและแปลตอนถัดไป)
+    // ON-DEMAND READING PREFETCH
     async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       const isPrefetchEnabled = localStorage.getItem('nov_enable_prefetch') !== 'false';
       if (!isPrefetchEnabled && !isManualClick) return;
 
       const lastChap = chapters[chapters.length - 1];
-      const targetUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
-      if (!targetUrl || isPrefetching) return;
+      const targetUrl = lastChap.nextUrl;
+      
+      // ถ้าไม่มี URL ถัดไป (เช่น โดดข้าม) ให้เด้งกล่องเตือนให้ใส่ URL ใหม่ทันที
+      if (!targetUrl) {
+        checkAndRefreshBottomStatus();
+        return;
+      }
+      
+      if (isPrefetching) return;
 
-      // ตรวจสอบใน IndexedDB ว่ามี URL นี้อยู่แล้วหรือไม่
       const bookChaps = await dbGetChaptersByBook(currentBookId);
       if (bookChaps.some(c => c.sourceUrl === targetUrl)) {
         document.getElementById('prefetch-badge').style.display = 'inline-block';
@@ -1920,21 +1925,14 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         nextUrlCalculated = nextUrl;
         document.getElementById('prefetch-badge').style.display = 'inline-block';
 
-        // ต่อบทใหม่เข้าจอทันที
         appendNextChapterToWindow();
       } catch (e) {
-        console.warn("Reading prefetch failed or aborted:", e);
-        if (e.message && e.message.includes('404')) {
-          updateInfiniteStatusBanner(`
-            <div style="font-size: 13px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">
-              ⚠️ ไม่พบหน้านิยาย (เลข URL กระโดดข้าม)
-            </div>
-            <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="promptFixNextUrlFromBottom()">
-              🔗 วาง URL ตอนถัดไป
-            </button>
-          `, true);
-        } else {
-          checkAndRefreshBottomStatus();
+        console.warn("Reading prefetch failed:", e);
+        // หากเจอหน้า 404 ให้ล้าง URL ของบทล่าสุดออกทันที เพื่อให้ระบบโชว์ปุ่มวาง URL ใหม่
+        if (e.message && (e.message.includes('404') || e.message.includes('ไม่พบเนื้อหา'))) {
+          lastChap.nextUrl = null;
+          await dbSaveChapter(lastChap);
+          nextUrlCalculated = null;
         }
       } finally {
         isPrefetching = false;
@@ -1993,7 +1991,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
           checkProactivePrefetch();
         } catch (err) {
           if (!retryAbortRequested) {
-            document.getElementById('import-url').value = nextUrlCalculated;
+            document.getElementById('import-url').value = nextUrlCalculated || '';
             const modalTitle = document.getElementById('import-modal-title');
             if (modalTitle) modalTitle.innerText = "ไม่พบ URL ตอนถัดไป (กรุณาวาง URL ใหม่)";
             openModal('import-modal');
@@ -2039,7 +2037,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       if (bookChaps.length === 0) return alert("ไม่พบบทตั้งต้นของนิยายเรื่องนี้");
 
       const lastChap = bookChaps[bookChaps.length - 1];
-      let targetUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
+      let targetUrl = lastChap.nextUrl;
 
       if (!targetUrl) {
         const inputUrl = prompt(`ไม่พบ URL ตอนถัดไปสำหรับ "${lastChap.title}"\nกรุณาวาง URL ของตอนถัดไป:`, "");
@@ -2134,7 +2132,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             await new Promise(r => setTimeout(r, 2500));
           }
         } catch (err) {
-          progressDesc.innerText = `หยุดที่ตอนที่ ${i}: ${err.message}\n(หากเลขตอนกระโดด ให้กดปุ่ม 'แก้ URL ถัดไป' เพื่อใส่ลิงก์ใหม่)`;
+          progressDesc.innerText = `หยุดที่ตอนที่ ${i}: ${err.message === '404' ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}\n(กรุณากดปุ่ม 'แก้ URL ถัดไป' เพื่อใส่ลิงก์ใหม่)`;
           break;
         }
       }
