@@ -81,17 +81,21 @@
     
     .editable-title-wrap {
       display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-      border-radius: 4px; padding: 2px 4px; margin-left: -4px;
+      border-radius: 6px; padding: 3px 6px; margin-left: -6px;
       transition: background-color 0.15s ease;
     }
-    .editable-title-wrap:hover { background-color: rgba(0,0,0,0.04); }
-    body.theme-dark .editable-title-wrap:hover { background-color: rgba(255,255,255,0.06); }
+    .editable-title-wrap:hover { background-color: rgba(0,0,0,0.05); }
+    body.theme-dark .editable-title-wrap:hover { background-color: rgba(255,255,255,0.08); }
     
-    .edit-icon { font-size: 11px; opacity: 0; transition: opacity 0.15s ease; color: #2563eb; }
-    body.theme-dark .edit-icon { color: #60a5fa; }
-    .editable-title-wrap:hover .edit-icon { opacity: 0.8; }
+    .edit-badge-btn {
+      font-size: 10px; padding: 2px 6px; border-radius: 4px;
+      background: rgba(37,99,235,0.1); color: #2563eb; font-weight: 600;
+      border: 1px solid rgba(37,99,235,0.2); transition: all 0.15s ease;
+    }
+    body.theme-dark .edit-badge-btn { background: rgba(96,165,250,0.15); color: #93c5fd; border-color: rgba(96,165,250,0.3); }
+    .editable-title-wrap:hover .edit-badge-btn { background: #2563eb; color: #fff; }
 
-    .book-heading { font-size: 12px; opacity: 0.7; font-weight: 600; text-transform: uppercase; }
+    .book-heading { font-size: 13px; opacity: 0.8; font-weight: 600; text-transform: uppercase; }
     .chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; line-height: 1.3; }
 
     /* READING PARAGRAPHS */
@@ -298,14 +302,16 @@
   <main>
     <div class="chapter-toolbar">
       <div style="flex: 1; padding-right: 12px;">
-        <div class="editable-title-wrap" onclick="promptEditBookTitle()" title="คลิกเพื่อแก้ไขชื่อเรื่อง">
+        <!-- Editable Book Title -->
+        <div class="editable-title-wrap" onclick="promptEditBookTitle()" title="คลิกเพื่อแก้ไขชื่อเรื่อง (จะล็อกชื่อถาวร)">
           <span class="book-heading" id="display-book-title">ชื่อนิยาย</span>
-          <span class="edit-icon">✎ แก้ไข</span>
+          <span class="edit-badge-btn">✎ แก้ไขชื่อเรื่อง</span>
         </div>
+        <!-- Editable Chapter Title -->
         <div>
           <div class="editable-title-wrap" onclick="promptEditChapterTitle()" title="คลิกเพื่อแก้ไขชื่อตอน">
             <h1 class="chap-heading" id="display-chap-title">ยินดีต้อนรับ</h1>
-            <span class="edit-icon">✎ แก้ไข</span>
+            <span class="edit-badge-btn">✎ แก้ไขชื่อตอน</span>
           </div>
         </div>
       </div>
@@ -357,7 +363,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 380px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แปลล่วงหน้าจะบันทึกลงเครื่องทันที แต่ตำแหน่งอ่านค้างไว้จะนับเฉพาะตอนที่เปิดอ่านจริงเท่านั้น</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ชื่อเรื่องที่แก้ไขจะถูกล็อกไว้ถาวร AI จะไม่เปลี่ยนชื่อกลับ | ตำแหน่งอ่านค้างไว้นับเฉพาะตอนที่เปิดอ่านจริง</p>
     </div>
   </div>
 
@@ -569,13 +575,14 @@
     let lastChapterContext = "";
     let currentBookId = "default_novel";
     let currentBookTitle = "NovelTranslate";
+    let isUserCustomTitle = false; // Flag ล็อกชื่อเรื่องเมื่อผู้ใช้ตั้งเอง
 
     let retryAbortRequested = false;
     let batchCancelRequested = false;
     let isBatchRunning = false;
     let isBatchComplete = false;
 
-    let bookSortModes = {}; // { [bookId]: 'newest' | 'oldest' | 'title' }
+    let bookSortModes = {};
 
     let selectedWordBuffer = "";
     let isSelectedChinese = false;
@@ -589,8 +596,8 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับ Smart Reading Pointer & Background Save", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบบันทึกตอนที่แปลล่วงหน้าลงเครื่องทันที โดยแยกตำแหน่งที่อ่านค้างไว้จริงอย่างอิสระ", src: "已支持后台自动存盘且严格保持实际阅读进度锚点" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
+          { th: "คุณสามารถคลิกที่ชื่อเรื่องหรือชื่อตอนเพื่อแก้ไขได้โดยตรง และชื่อเรื่องที่แก้ไขจะถูกล็อกไว้ถาวร", src: "已支持自定义书名与章节名且具备最高优先级" }
         ]
       }
     ];
@@ -634,7 +641,7 @@
     function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-    // RENDER CONTENT (จะอัปเดตตำแหน่งอ่านจริงลง DB เฉพาะเมื่อถูกเรียกอ่าน)
+    // RENDER CONTENT
     async function renderChapter() {
       const chap = chapters[currentChapterIndex];
       document.getElementById('display-book-title').innerText = currentBookTitle;
@@ -661,13 +668,14 @@
       // บันทึกตำแหน่งอ่านจริง (Pointer) ลง IndexedDB
       if (currentBookId !== "default_novel") {
         const books = await dbGetAllBooks();
-        const currentBook = books.find(b => b.bookId === currentBookId);
+        const curBook = books.find(b => b.bookId === currentBookId);
         
         await dbSaveBook({
           bookId: currentBookId,
           title: currentBookTitle,
-          lastChapterIndex: currentChapterIndex, // บันทึก index ที่อ่านจริง
-          lastChapterTitle: chap.title,          // บันทึกชื่อตอนที่อ่านจริง
+          isUserCustomTitle: isUserCustomTitle,
+          lastChapterIndex: currentChapterIndex,
+          lastChapterTitle: chap.title,
           totalChapters: chapters.length,
           lastUrl: currentUrl,
           updatedAt: Date.now()
@@ -676,11 +684,12 @@
       }
     }
 
-    // MANUAL EDIT TITLES
+    // ==================== MANUAL EDIT TITLES (PRIORITY #1) ====================
     async function promptEditBookTitle() {
-      const newTitle = prompt("แก้ไขชื่อเรื่อง:", currentBookTitle);
-      if (newTitle && newTitle.trim()) {
+      const newTitle = prompt("แก้ไขชื่อนิยายเรื่องนี้ (ชื่อที่ตั้งใหม่จะถูกล็อกไว้ถาวร AI จะไม่เปลี่ยนทับ):", currentBookTitle);
+      if (newTitle !== null && newTitle.trim()) {
         currentBookTitle = newTitle.trim();
+        isUserCustomTitle = true; // ล็อกสถานะว่าผู้ใช้เป็นคนตั้ง
         document.getElementById('display-book-title').innerText = currentBookTitle;
         
         if (currentBookId !== "default_novel") {
@@ -690,6 +699,7 @@
           await dbSaveBook({
             bookId: currentBookId,
             title: currentBookTitle,
+            isUserCustomTitle: true,
             lastChapterIndex: currentChapterIndex,
             lastChapterTitle: chap.title,
             totalChapters: chapters.length,
@@ -702,8 +712,8 @@
 
     async function promptEditChapterTitle() {
       const chap = chapters[currentChapterIndex];
-      const newTitle = prompt("แก้ไขชื่อตอน:", chap.title);
-      if (newTitle && newTitle.trim()) {
+      const newTitle = prompt("แก้ไขชื่อตอนปัจจุบัน:", chap.title);
+      if (newTitle !== null && newTitle.trim()) {
         chap.title = newTitle.trim();
         document.getElementById('display-chap-title').innerText = chap.title;
         
@@ -712,6 +722,7 @@
           await dbSaveBook({
             bookId: currentBookId,
             title: currentBookTitle,
+            isUserCustomTitle: isUserCustomTitle,
             lastChapterIndex: currentChapterIndex,
             lastChapterTitle: chap.title,
             totalChapters: chapters.length,
@@ -1047,8 +1058,8 @@
         chapters = loadedChaps;
         currentBookId = bookId;
         currentBookTitle = targetBook.title;
+        isUserCustomTitle = targetBook.isUserCustomTitle || false;
 
-        // กระโดดไปยังตอนที่อ่านจริงเสมอ (ไม่ข้ามไปตอนที่แปลล่วงหน้าไว้)
         if (specifyIdx !== null) {
           currentChapterIndex = Math.min(specifyIdx, chapters.length - 1);
         } else {
@@ -1059,7 +1070,6 @@
         nextUrlCalculated = chapters[chapters.length - 1].nextUrl || computeNextNumericUrl(chapters[chapters.length - 1].sourceUrl);
         await renderChapter();
         
-        // เช็ก Prefetch ต่อจากบทสุดท้ายที่มี
         if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
       }
     }
@@ -1401,7 +1411,18 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
           status.innerText = msg;
         }, rawChapTitle, rawBookTitle);
 
-        if (result.bookTitle) currentBookTitle = result.bookTitle;
+        // ตรวจสอบว่ามีชื่อที่ผู้ใช้เคยตั้งล็อกไว้ไหม
+        const books = await dbGetAllBooks();
+        const existingBook = books.find(b => b.bookId === currentBookId);
+        
+        if (existingBook && existingBook.isUserCustomTitle) {
+          currentBookTitle = existingBook.title;
+          isUserCustomTitle = true;
+        } else if (result.bookTitle) {
+          currentBookTitle = result.bookTitle;
+          isUserCustomTitle = false;
+        }
+
         const chapTitle = result.chapterTitle || rawChapTitle || "ตอนที่ 1";
 
         const newChapter = {
@@ -1421,6 +1442,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         await dbSaveBook({
           bookId: currentBookId,
           title: currentBookTitle,
+          isUserCustomTitle: isUserCustomTitle,
           lastChapterIndex: 0,
           lastChapterTitle: newChapter.title,
           totalChapters: 1,
@@ -1444,11 +1466,9 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
     }
 
     // PREFETCH & AUTO-SAVE BACKGROUND CHAPTER
-    // (บันทึกบทลง IndexedDB ทันที แต่ไม่ขยับตำแหน่งอ่านค้างไว้)
     async function triggerPrefetch(url) {
       if (isPrefetching || !url) return;
       
-      // ตรวจสอบว่าตอน URL นี้มีอยู่ใน IndexedDB แล้วหรือยัง ป้องกันการดึงซ้ำ
       const bookChaps = await dbGetChaptersByBook(currentBookId);
       if (bookChaps.some(c => c.sourceUrl === url)) {
         document.getElementById('prefetch-badge').style.display = 'inline-block';
@@ -1471,17 +1491,18 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
           nextUrl: nextUrl
         };
 
-        // 1. บันทึกลง IndexedDB ทันที
         await dbSaveChapter(newChap);
 
-        // 2. ดึงหนังสือมาอัปเดต totalChapters แต่คง lastChapterIndex เดิมไว้ 100%
         const books = await dbGetAllBooks();
         const curBook = books.find(b => b.bookId === currentBookId);
         if (curBook) {
+          // หากผู้ใช้ล็อกชื่อเรื่องไว้ จะไม่เอา result.bookTitle ของ AI มาทับเด็ดขาด
+          const resolvedTitle = curBook.isUserCustomTitle ? curBook.title : (result.bookTitle || curBook.title);
+
           await dbSaveBook({
             ...curBook,
+            title: resolvedTitle,
             totalChapters: bookChaps.length + 1,
-            // คงตำแหน่งอ่านค้างไว้เดิมอย่างแม่นยำ
             lastChapterIndex: curBook.lastChapterIndex !== undefined ? curBook.lastChapterIndex : currentChapterIndex,
             lastChapterTitle: curBook.lastChapterTitle || chapters[currentChapterIndex].title,
             lastUrl: url,
@@ -1489,7 +1510,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
           });
         }
 
-        // ซิงก์เข้า array chapters ในหน่วยความจำ
         chapters.push(newChap);
         nextUrlCalculated = nextUrl;
 
@@ -1503,20 +1523,17 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
     // NEXT CHAPTER CLICK
     async function handleNextChapterClick() {
-      // 1. ถ้าตอนถัดไปมีอยู่ในหน่วยความจำ/บันทึกไว้แล้ว ให้เปิดอ่านทันที
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
         document.getElementById('prefetch-badge').style.display = 'none';
-        await renderChapter(); // จะอัปเดต Reading Pointer ใน DB ให้ตรงกับตอนปัจจุบัน
+        await renderChapter();
 
-        // ให้ระบบเริ่ม Prefetch บทถัดไปต่อไปเบื้องหลัง
         const lastChap = chapters[chapters.length - 1];
         const nextUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
         if (nextUrl) triggerPrefetch(nextUrl);
         return;
       }
 
-      // 2. ถ้ายังไม่มี ให้ดึงและแปลสด
       if (nextUrlCalculated) {
         const btnText = document.getElementById('next-btn-text');
         const nextBtn = document.getElementById('next-chap-btn');
@@ -1657,16 +1674,24 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             nextUrl: nextUrl
           };
 
-          // 1. บันทึกลง IndexedDB ทันทีทุกตอน
           await dbSaveChapter(newChap);
           successCount++;
 
-          // 2. อัปเดตข้อมูลหนังสือ โดยล็อก lastChapterIndex และ lastChapterTitle เดิมไว้ ไม่ให้กระโดด
           const books = await dbGetAllBooks();
           const targetBook = books.find(b => b.bookId === bookId);
+          
+          // ล็อกชื่อเรื่องถ้าผู้ใช้เคยตั้งเองไว้
+          let finalBookTitle = currentBookTitle;
+          let customFlag = false;
+          if (targetBook) {
+            customFlag = targetBook.isUserCustomTitle || false;
+            finalBookTitle = customFlag ? targetBook.title : (result.bookTitle || targetBook.title);
+          }
+
           await dbSaveBook({
             bookId: bookId,
-            title: result.bookTitle || (targetBook ? targetBook.title : currentBookTitle),
+            title: finalBookTitle,
+            isUserCustomTitle: customFlag,
             lastChapterIndex: (targetBook && targetBook.lastChapterIndex !== undefined) ? targetBook.lastChapterIndex : 0,
             lastChapterTitle: (targetBook && targetBook.lastChapterTitle) ? targetBook.lastChapterTitle : (bookChaps[0]?.title || 'ตอนที่ 1'),
             totalChapters: currentTotal + 1,
@@ -1674,12 +1699,10 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             updatedAt: Date.now()
           });
 
-          // 3. ซิงก์เข้า chapters ถ้าเป็นเรื่องที่เปิดอ่านอยู่
           if (currentBookId === bookId) {
             chapters.push(newChap);
           }
 
-          // 4. อัปเดตรายการในชั้นหนังสือแบบเรียลไทม์
           let liveChaps = await dbGetChaptersByBook(bookId);
           applySortToChapters(liveChaps, bookSortModes[bookId] || 'newest');
           const listEl = document.getElementById(`shelf-chaps-${bookId}`);
@@ -1687,7 +1710,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             listEl.innerHTML = renderChaptersHtml(bookId, liveChaps);
           }
 
-          // ส่งต่อ URL (+1)
           targetUrl = nextUrl;
 
           if (i < count && !batchCancelRequested) {
