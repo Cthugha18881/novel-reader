@@ -357,7 +357,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 380px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แปลเสร็จบันทึกทันทีทุกตอน | แตะชื่อเรื่องเพื่อกางดูตอน เลือกสลับลำดับ หรือเลือกหลายบทเพื่อลบพร้อมกันได้</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แปลล่วงหน้าจะบันทึกลงเครื่องทันที แต่ตำแหน่งอ่านค้างไว้จะนับเฉพาะตอนที่เปิดอ่านจริงเท่านั้น</p>
     </div>
   </div>
 
@@ -565,7 +565,6 @@
     let currentFontSize = 18;
     let currentUrl = "";
     let nextUrlCalculated = "";
-    let prefetchedData = null;
     let isPrefetching = false;
     let lastChapterContext = "";
     let currentBookId = "default_novel";
@@ -576,7 +575,6 @@
     let isBatchRunning = false;
     let isBatchComplete = false;
 
-    // ระบบจำการจัดเรียงตอนย่อยในแต่ละเรื่อง
     let bookSortModes = {}; // { [bookId]: 'newest' | 'oldest' | 'title' }
 
     let selectedWordBuffer = "";
@@ -591,8 +589,8 @@
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับ Real-time Auto-save & Chapter Manager", src: "欢迎来到 NovelTranslate" },
-          { th: "แปลเสร็จบันทึกทันทีทุกตอน พร้อมปุ่มสลับการเรียงลำดับและเลือกลบหลายบทพร้อมกัน", src: "已支持单章即时存储、列表多向排序与批量多选删除" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับ Smart Reading Pointer & Background Save", src: "欢迎来到 NovelTranslate" },
+          { th: "ระบบบันทึกตอนที่แปลล่วงหน้าลงเครื่องทันที โดยแยกตำแหน่งที่อ่านค้างไว้จริงอย่างอิสระ", src: "已支持后台自动存盘且严格保持实际阅读进度锚点" }
         ]
       }
     ];
@@ -636,8 +634,8 @@
     function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-    // RENDER CONTENT
-    function renderChapter() {
+    // RENDER CONTENT (จะอัปเดตตำแหน่งอ่านจริงลง DB เฉพาะเมื่อถูกเรียกอ่าน)
+    async function renderChapter() {
       const chap = chapters[currentChapterIndex];
       document.getElementById('display-book-title').innerText = currentBookTitle;
       document.getElementById('display-chap-title').innerText = chap.title;
@@ -660,12 +658,16 @@
 
       window.scrollTo({ top: 0, behavior: 'smooth' });
 
+      // บันทึกตำแหน่งอ่านจริง (Pointer) ลง IndexedDB
       if (currentBookId !== "default_novel") {
-        dbSaveBook({
+        const books = await dbGetAllBooks();
+        const currentBook = books.find(b => b.bookId === currentBookId);
+        
+        await dbSaveBook({
           bookId: currentBookId,
           title: currentBookTitle,
-          lastChapterIndex: currentChapterIndex,
-          lastChapterTitle: chap.title,
+          lastChapterIndex: currentChapterIndex, // บันทึก index ที่อ่านจริง
+          lastChapterTitle: chap.title,          // บันทึกชื่อตอนที่อ่านจริง
           totalChapters: chapters.length,
           lastUrl: currentUrl,
           updatedAt: Date.now()
@@ -683,6 +685,8 @@
         
         if (currentBookId !== "default_novel") {
           const chap = chapters[currentChapterIndex];
+          const books = await dbGetAllBooks();
+          const targetBook = books.find(b => b.bookId === currentBookId);
           await dbSaveBook({
             bookId: currentBookId,
             title: currentBookTitle,
@@ -798,7 +802,6 @@
 
         let bookChaps = await dbGetChaptersByBook(b.bookId);
         
-        // กำหนดโหมดเรียงตอนเริ่มต้นเป็น newest (ล่าสุดขึ้นก่อน)
         if (!bookSortModes[b.bookId]) bookSortModes[b.bookId] = 'newest';
         applySortToChapters(bookChaps, bookSortModes[b.bookId]);
 
@@ -822,7 +825,6 @@
             </button>
           </div>
           
-          <!-- Sub Toolbar: Sort Buttons & Multi-Delete -->
           <div class="shelf-sub-toolbar" id="shelf-sub-bar-${b.bookId}" style="display: none;">
             <div style="display: flex; gap: 4px; align-items: center;">
               <span>เรียง:</span>
@@ -861,7 +863,6 @@
 
       let chapsHtml = '';
       bookChaps.forEach((ch) => {
-        // หา originalIndex จาก order เดิม เพื่อให้กระโดดอ่านถูกบท
         const origIdx = ch.order - 1;
         const isActive = (bookId === currentBookId && origIdx === currentChapterIndex) ? 'active' : '';
 
@@ -935,7 +936,6 @@
       const idsToDelete = Array.from(chks).map(c => c.value);
       await dbDeleteMultipleChapters(idsToDelete);
 
-      // จัดระเบียบลำดับ order ใหม่หลังจากลบ
       const remainingChaps = await dbGetChaptersByBook(bookId);
       remainingChaps.sort((x, y) => x.order - y.order);
       for (let i = 0; i < remainingChaps.length; i++) {
@@ -948,12 +948,12 @@
 
       if (targetBook) {
         if (remainingChaps.length > 0) {
-          const lastChap = remainingChaps[remainingChaps.length - 1];
+          const safeIdx = Math.min(targetBook.lastChapterIndex || 0, remainingChaps.length - 1);
           await dbSaveBook({
             ...targetBook,
             totalChapters: remainingChaps.length,
-            lastChapterTitle: lastChap.title,
-            lastChapterIndex: Math.min(targetBook.lastChapterIndex || 0, remainingChaps.length - 1)
+            lastChapterTitle: remainingChaps[safeIdx].title,
+            lastChapterIndex: safeIdx
           });
         } else {
           await dbSaveBook({
@@ -990,12 +990,12 @@
 
       if (targetBook) {
         if (remainingChaps.length > 0) {
-          const lastChap = remainingChaps[remainingChaps.length - 1];
+          const safeIdx = Math.min(targetBook.lastChapterIndex || 0, remainingChaps.length - 1);
           await dbSaveBook({
             ...targetBook,
             totalChapters: remainingChaps.length,
-            lastChapterTitle: lastChap.title,
-            lastChapterIndex: Math.min(targetBook.lastChapterIndex || 0, remainingChaps.length - 1)
+            lastChapterTitle: remainingChaps[safeIdx].title,
+            lastChapterIndex: safeIdx
           });
         } else {
           await dbSaveBook({
@@ -1048,6 +1048,7 @@
         currentBookId = bookId;
         currentBookTitle = targetBook.title;
 
+        // กระโดดไปยังตอนที่อ่านจริงเสมอ (ไม่ข้ามไปตอนที่แปลล่วงหน้าไว้)
         if (specifyIdx !== null) {
           currentChapterIndex = Math.min(specifyIdx, chapters.length - 1);
         } else {
@@ -1055,8 +1056,11 @@
         }
 
         currentUrl = chapters[currentChapterIndex].sourceUrl || targetBook.lastUrl || "";
-        nextUrlCalculated = chapters[currentChapterIndex].nextUrl || computeNextNumericUrl(currentUrl);
-        renderChapter();
+        nextUrlCalculated = chapters[chapters.length - 1].nextUrl || computeNextNumericUrl(chapters[chapters.length - 1].sourceUrl);
+        await renderChapter();
+        
+        // เช็ก Prefetch ต่อจากบทสุดท้ายที่มี
+        if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
       }
     }
 
@@ -1439,24 +1443,56 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // PREFETCH
+    // PREFETCH & AUTO-SAVE BACKGROUND CHAPTER
+    // (บันทึกบทลง IndexedDB ทันที แต่ไม่ขยับตำแหน่งอ่านค้างไว้)
     async function triggerPrefetch(url) {
       if (isPrefetching || !url) return;
+      
+      // ตรวจสอบว่าตอน URL นี้มีอยู่ใน IndexedDB แล้วหรือยัง ป้องกันการดึงซ้ำ
+      const bookChaps = await dbGetChaptersByBook(currentBookId);
+      if (bookChaps.some(c => c.sourceUrl === url)) {
+        document.getElementById('prefetch-badge').style.display = 'inline-block';
+        return;
+      }
+
       isPrefetching = true;
       try {
         const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(url);
         const result = await translateTextWithPingPong(text, null, rawChapTitle, rawBookTitle);
-        const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${chapters.length + 1}`;
+        const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${bookChaps.length + 1}`;
 
-        prefetchedData = {
+        const newChap = {
           id: `${currentBookId}_chap_${Date.now()}`,
           bookId: currentBookId,
-          order: chapters.length + 1,
+          order: bookChaps.length + 1,
           title: chapTitle,
           paragraphs: result.paragraphs,
           sourceUrl: url,
           nextUrl: nextUrl
         };
+
+        // 1. บันทึกลง IndexedDB ทันที
+        await dbSaveChapter(newChap);
+
+        // 2. ดึงหนังสือมาอัปเดต totalChapters แต่คง lastChapterIndex เดิมไว้ 100%
+        const books = await dbGetAllBooks();
+        const curBook = books.find(b => b.bookId === currentBookId);
+        if (curBook) {
+          await dbSaveBook({
+            ...curBook,
+            totalChapters: bookChaps.length + 1,
+            // คงตำแหน่งอ่านค้างไว้เดิมอย่างแม่นยำ
+            lastChapterIndex: curBook.lastChapterIndex !== undefined ? curBook.lastChapterIndex : currentChapterIndex,
+            lastChapterTitle: curBook.lastChapterTitle || chapters[currentChapterIndex].title,
+            lastUrl: url,
+            updatedAt: Date.now()
+          });
+        }
+
+        // ซิงก์เข้า array chapters ในหน่วยความจำ
+        chapters.push(newChap);
+        nextUrlCalculated = nextUrl;
+
         document.getElementById('prefetch-badge').style.display = 'inline-block';
       } catch(e) {
         console.warn("Background prefetch failed:", e);
@@ -1467,28 +1503,20 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
     // NEXT CHAPTER CLICK
     async function handleNextChapterClick() {
+      // 1. ถ้าตอนถัดไปมีอยู่ในหน่วยความจำ/บันทึกไว้แล้ว ให้เปิดอ่านทันที
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
-        renderChapter();
-        return;
-      }
-
-      if (prefetchedData) {
-        const nextChap = prefetchedData;
-        chapters.push(nextChap);
-        currentUrl = nextChap.sourceUrl;
-        nextUrlCalculated = nextChap.nextUrl;
-        prefetchedData = null;
         document.getElementById('prefetch-badge').style.display = 'none';
+        await renderChapter(); // จะอัปเดต Reading Pointer ใน DB ให้ตรงกับตอนปัจจุบัน
 
-        await dbSaveChapter(nextChap);
-        currentChapterIndex = chapters.length - 1;
-        renderChapter();
-
-        if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
+        // ให้ระบบเริ่ม Prefetch บทถัดไปต่อไปเบื้องหลัง
+        const lastChap = chapters[chapters.length - 1];
+        const nextUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
+        if (nextUrl) triggerPrefetch(nextUrl);
         return;
       }
 
+      // 2. ถ้ายังไม่มี ให้ดึงและแปลสด
       if (nextUrlCalculated) {
         const btnText = document.getElementById('next-btn-text');
         const nextBtn = document.getElementById('next-chap-btn');
@@ -1523,7 +1551,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
           await dbSaveChapter(newChap);
 
           currentChapterIndex = chapters.length - 1;
-          renderChapter();
+          await renderChapter();
 
           if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
         } catch (err) {
@@ -1542,10 +1570,10 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    function prevChapter() {
+    async function prevChapter() {
       if (currentChapterIndex > 0) {
         currentChapterIndex--;
-        renderChapter();
+        await renderChapter();
       }
     }
 
@@ -1629,21 +1657,29 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             nextUrl: nextUrl
           };
 
-          // บันทึกลง IndexedDB ทันทีทุกตอน
+          // 1. บันทึกลง IndexedDB ทันทีทุกตอน
           await dbSaveChapter(newChap);
           successCount++;
 
+          // 2. อัปเดตข้อมูลหนังสือ โดยล็อก lastChapterIndex และ lastChapterTitle เดิมไว้ ไม่ให้กระโดด
+          const books = await dbGetAllBooks();
+          const targetBook = books.find(b => b.bookId === bookId);
           await dbSaveBook({
             bookId: bookId,
-            title: result.bookTitle || currentBookTitle,
-            lastChapterIndex: (bookId === currentBookId) ? currentChapterIndex : currentTotal,
-            lastChapterTitle: newChap.title,
+            title: result.bookTitle || (targetBook ? targetBook.title : currentBookTitle),
+            lastChapterIndex: (targetBook && targetBook.lastChapterIndex !== undefined) ? targetBook.lastChapterIndex : 0,
+            lastChapterTitle: (targetBook && targetBook.lastChapterTitle) ? targetBook.lastChapterTitle : (bookChaps[0]?.title || 'ตอนที่ 1'),
             totalChapters: currentTotal + 1,
             lastUrl: targetUrl,
             updatedAt: Date.now()
           });
 
-          // อัปเดตรายการในชั้นหนังสือแบบเรียลไทม์
+          // 3. ซิงก์เข้า chapters ถ้าเป็นเรื่องที่เปิดอ่านอยู่
+          if (currentBookId === bookId) {
+            chapters.push(newChap);
+          }
+
+          // 4. อัปเดตรายการในชั้นหนังสือแบบเรียลไทม์
           let liveChaps = await dbGetChaptersByBook(bookId);
           applySortToChapters(liveChaps, bookSortModes[bookId] || 'newest');
           const listEl = document.getElementById(`shelf-chaps-${bookId}`);
@@ -1680,9 +1716,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
 
       openBookshelfModal();
-      if (currentBookId === bookId) {
-        loadBookFromDB(bookId, currentChapterIndex);
-      }
     }
 
     function cancelBatchTranslate() {
