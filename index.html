@@ -361,7 +361,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 380px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แก้ปัญหาเลขโดดแล้วนำเข้าต่อท้ายให้อัตโนมัติ ไม่เด้งลงไปข้างล่างอีกต่อไป</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ลบบทเก่าได้อิสระ ไม่กระทบตอนใหม่ | ระบบยึดบทปลายสุดที่เหลืออยู่จริงเป็นตัวตั้งต้นเสมอ</p>
     </div>
   </div>
 
@@ -458,6 +458,17 @@
           <option value="horror">สยองขวัญ / ระทึกขวัญเอาชีวิตรอด (บรรยากาศกดดัน เยือกเย็น ชวนระแวง)</option>
           <option value="modern_romance">ปัจจุบัน / สืบสวน / โรแมนติก (บทสนทนาเป็นธรรมชาติ ไหลลื่น)</option>
         </select>
+      </div>
+
+      <!-- สวิตช์เปิด-ปิดระบบแปลล่วงหน้าเบื้องหลังขณะอ่านสด -->
+      <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
+          <input type="checkbox" id="enable-live-prefetch" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
+          <span>แปลบทถัดไปล่วงหน้า 1 ตอนในเบื้องหลังขณะอ่านสด</span>
+        </label>
+        <p style="font-size: 10px; opacity: 0.6; margin-top: 4px; padding-left: 24px;">
+          *ระบบจะแอบแปลตอนถัดไปรอไว้เฉพาะเมื่อคุณอ่านถึงบทปลายสุดแล้ว เพื่อให้อ่านได้ลื่นไหลต่อเนื่องโดยไม่ต้องรอ
+        </p>
       </div>
 
       <div style="margin-top: 14px;">
@@ -598,7 +609,7 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบคำนวณลำดับต่อยอดอัตโนมัติเมื่อเจอบทกระโดด ไม่เด้งลงล่างอีกต่อไป", src: "已修复新增章节插入算法与智能序列继承" }
+          { th: "ระบบเปิดปิดการแปลเบื้องหลังขณะอ่านสดพร้อมใช้งานแล้ว สามารถตั้งค่าได้ที่เมนู 'ตั้งค่า'", src: "已支持阅读时按需静默预加载及开关控制" }
         ]
       }
     ];
@@ -692,6 +703,8 @@
         
         if (currentBookId !== "default_novel") {
           const chap = chapters[currentChapterIndex];
+          const books = await dbGetAllBooks();
+          const targetBook = books.find(b => b.bookId === currentBookId);
           await dbSaveBook({
             bookId: currentBookId,
             title: currentBookTitle,
@@ -1262,7 +1275,7 @@
     function getGenreInstruction(genre) {
       switch (genre) {
         case 'xianxia':
-          return `สไตล์: "เทพเซียน / บำเพ็เพียร (Xianxia)"
+          return `สไตล์: "เทพเซียน / บำเพ็ญเพียร (Xianxia)"
 - ใช้สรรพนาม: "ข้า - เจ้า", "ผู้อาวุโส - ศิษย์น้อง/ผู้น้อย" ห้ามหลุด "ฉัน/นาย/คุณ/ผม" เด็ดขาด
 - ศัพท์เต๋า: บำเพ็ญเพียร, ลมปราณ, แก่นทองคำ, ทัณฑ์สวรรค์, ตำหนัก, ยอดเขา`;
         case 'wuxia':
@@ -1485,7 +1498,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       closeModal('import-modal');
     }
 
-    // ==================== FIXED: START TRANSLATE (SMART APPENDING FOR JUMP URL) ====================
+    // START TRANSLATE (SMART APPENDING FOR JUMP URL)
     async function startTranslateFirst() {
       const url = document.getElementById('import-url').value.trim();
       if (!url) return alert("กรุณาใส่ URL หน้านิยาย");
@@ -1515,7 +1528,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
           status.innerText = msg;
         }, rawChapTitle, rawBookTitle);
 
-        // ดึงตอนทั้งหมดของเรื่องนี้จาก IndexedDB เพื่อหา maxOrder สูงสุดที่มีอยู่จริง
         const existingChaps = await dbGetChaptersByBook(targetBookId);
         const maxOrder = existingChaps.reduce((max, c) => Math.max(max, c.order || 0), 0);
 
@@ -1535,7 +1547,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
         const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
 
-        // สร้างตอนใหม่โดยใช้ maxOrder + 1 เสมอ (ไม่รีเซ็ตเป็น 1 อีกต่อไป!)
         const newChapter = {
           id: `${targetBookId}_chap_${Date.now()}`,
           bookId: targetBookId,
@@ -1548,12 +1559,10 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
         await dbSaveChapter(newChapter);
 
-        // ถ้าเป็นเรื่องเดิมที่เปิดอ่านอยู่ ให้ push ต่อท้ายใน RAM
         if (currentBookId === targetBookId) {
           chapters.push(newChapter);
           currentChapterIndex = chapters.length - 1;
         } else {
-          // ถ้าเป็นนิยายเรื่องใหม่ ให้เริ่มรายการใหม่
           currentBookId = targetBookId;
           chapters = [newChapter];
           currentChapterIndex = 0;
@@ -1578,6 +1587,9 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
         await renderChapter();
         closeModal('import-modal');
+
+        // หากเปิดโหมดแปลเบื้องหลัง ให้แอบแปลบทถัดไปล่วงหน้า 1 ตอน
+        triggerReadingPrefetchIfEnabled();
       } catch (err) {
         status.style.background = '#fef2f2';
         status.style.color = '#991b1b';
@@ -1588,15 +1600,88 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
+    // ==================== ON-DEMAND READING PREFETCH (แปลล่วงหน้า 1 ตอนเฉพาะตอนอ่านสด) ====================
+    async function triggerReadingPrefetchIfEnabled() {
+      const isPrefetchEnabled = localStorage.getItem('nov_enable_prefetch') !== 'false';
+      if (!isPrefetchEnabled) return; // ถ้าผู้ใช้ปิดไว้ในตั้งค่า จะไม่ทำงานเด็ดขาด
+
+      // เงื่อนไข: ถ้ามีตอนถัดไปในคลังอยู่แล้ว จะไม่ทำอะไรทั้งสิ้น
+      if (currentChapterIndex < chapters.length - 1) {
+        return;
+      }
+
+      const lastChap = chapters[chapters.length - 1];
+      const targetUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
+      if (!targetUrl || isPrefetching) return;
+
+      // ตรวจสอบว่าใน IndexedDB มี URL นี้บันทึกไว้แล้วหรือยัง
+      const bookChaps = await dbGetChaptersByBook(currentBookId);
+      if (bookChaps.some(c => c.sourceUrl === targetUrl)) {
+        document.getElementById('prefetch-badge').style.display = 'inline-block';
+        return;
+      }
+
+      isPrefetching = true;
+      try {
+        const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(targetUrl);
+        const result = await translateTextWithPingPong(text, null, rawChapTitle, rawBookTitle);
+        
+        const currentAll = await dbGetChaptersByBook(currentBookId);
+        const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
+        const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
+
+        const newChap = {
+          id: `${currentBookId}_chap_${Date.now()}`,
+          bookId: currentBookId,
+          order: maxOrder + 1,
+          title: chapTitle,
+          paragraphs: result.paragraphs,
+          sourceUrl: targetUrl,
+          nextUrl: nextUrl
+        };
+
+        await dbSaveChapter(newChap);
+
+        const books = await dbGetAllBooks();
+        const curBook = books.find(b => b.bookId === currentBookId);
+        if (curBook) {
+          const resolvedTitle = curBook.isUserCustomTitle ? curBook.title : (result.bookTitle || curBook.title);
+          await dbSaveBook({
+            ...curBook,
+            title: resolvedTitle,
+            totalChapters: maxOrder + 1,
+            lastChapterId: curBook.lastChapterId || chapters[currentChapterIndex]?.id,
+            lastChapterIndex: curBook.lastChapterIndex !== undefined ? curBook.lastChapterIndex : currentChapterIndex,
+            lastChapterTitle: curBook.lastChapterTitle || chapters[currentChapterIndex]?.title,
+            lastUrl: targetUrl,
+            updatedAt: Date.now()
+          });
+        }
+
+        chapters.push(newChap);
+        nextUrlCalculated = nextUrl;
+        document.getElementById('prefetch-badge').style.display = 'inline-block';
+      } catch (e) {
+        console.warn("Reading prefetch failed or aborted:", e);
+      } finally {
+        isPrefetching = false;
+      }
+    }
+
     // NEXT CHAPTER CLICK (แปลเฉพาะเมื่อผู้ใช้กดสั่งจริง)
     async function handleNextChapterClick() {
+      // 1. ถ้าตอนถัดไปมีอยู่แล้วในคิว (อาจแปลสดไว้หรือ Prefetch เสร็จแล้ว) ให้เปิดอ่านทันที
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
         document.getElementById('prefetch-badge').style.display = 'none';
         await renderChapter();
+
+        // เมื่อเปิดอ่านแล้ว ตรวจสอบว่าต้องแอบแปลบทถัดไปอีก 1 ตอนรอไว้หรือไม่
+        triggerReadingPrefetchIfEnabled();
         return;
       }
 
+      // 2. ถ้ายังไม่มี ให้ดึงและแปลสด
       if (nextUrlCalculated) {
         const btnText = document.getElementById('next-btn-text');
         const nextBtn = document.getElementById('next-chap-btn');
@@ -1635,9 +1720,11 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
           currentChapterIndex = chapters.length - 1;
           await renderChapter();
+
+          // แปลบทนี้เสร็จแล้ว แอบแปลบทถัดไปล่วงหน้า 1 ตอนรอไว้ (ถ้าเปิดใช้งาน)
+          triggerReadingPrefetchIfEnabled();
         } catch (err) {
           if (!retryAbortRequested) {
-            // เมื่อเจอบทเลขกระโดด เปิดกล่อง Import ขึ้นมาให้ใส่ URL ใหม่
             document.getElementById('import-url').value = nextUrlCalculated;
             const modalTitle = document.getElementById('import-modal-title');
             if (modalTitle) modalTitle.innerText = "ไม่พบ URL ตอนถัดไป (กรุณาวาง URL ใหม่)";
@@ -1927,6 +2014,10 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       localStorage.setItem('nov_backup_model', document.getElementById('gemini-backup-model').value);
       localStorage.setItem('nov_retry_limit', document.getElementById('retry-limit').value || "10");
       localStorage.setItem('nov_genre', document.getElementById('novel-genre').value);
+      
+      const prefetchChk = document.getElementById('enable-live-prefetch');
+      localStorage.setItem('nov_enable_prefetch', prefetchChk.checked ? 'true' : 'false');
+
       closeModal('settings-modal');
       alert("บันทึกการตั้งค่าเรียบร้อยแล้ว");
     }
@@ -1968,6 +2059,12 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
       if (localStorage.getItem('nov_genre')) {
         document.getElementById('novel-genre').value = localStorage.getItem('nov_genre');
+      }
+
+      const prefetchVal = localStorage.getItem('nov_enable_prefetch');
+      const prefetchChk = document.getElementById('enable-live-prefetch');
+      if (prefetchChk) {
+        prefetchChk.checked = (prefetchVal !== 'false');
       }
     }
 
