@@ -30,6 +30,7 @@
       padding: 10px 16px; border-bottom: 1px solid rgba(0,0,0,0.08);
       backdrop-filter: blur(8px);
       background-color: inherit;
+      transition: transform 0.2s ease, opacity 0.2s ease;
     }
     body.theme-dark header { border-bottom-color: rgba(255,255,255,0.1); }
     .brand-box { display: flex; align-items: center; gap: 8px; }
@@ -66,10 +67,66 @@
       background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
     }
 
+    /* FLOATING FULLSCREEN TOGGLE BUTTON */
+    #fullscreen-btn {
+      position: fixed;
+      top: 62px;
+      right: 16px;
+      z-index: 35;
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: rgba(0,0,0,0.05);
+      border: 1px solid rgba(0,0,0,0.12);
+      backdrop-filter: blur(6px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: inherit;
+      opacity: 0.65;
+      transition: opacity 0.2s, background-color 0.2s, transform 0.2s;
+    }
+    body.theme-dark #fullscreen-btn {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.15);
+    }
+    #fullscreen-btn:hover {
+      opacity: 1;
+      transform: scale(1.05);
+      background-color: rgba(0,0,0,0.1);
+    }
+    body.theme-dark #fullscreen-btn:hover {
+      background-color: rgba(255,255,255,0.15);
+    }
+
+    /* FULLSCREEN ACTIVE STATE UI OPTIMIZATION */
+    body.is-fullscreen header {
+      transform: translateY(-100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    body.is-fullscreen .mobile-dock {
+      transform: translateY(100%);
+      opacity: 0;
+      pointer-events: none;
+    }
+    body.is-fullscreen #fullscreen-btn {
+      top: 14px;
+      opacity: 0.4;
+    }
+    body.is-fullscreen #fullscreen-btn:hover {
+      opacity: 0.9;
+    }
+    body.is-fullscreen main {
+      padding-top: 14px;
+    }
+
     /* MAIN READING CANVAS */
     main {
       flex: 1; width: 100%; max-width: 740px; margin: 0 auto;
       padding: 20px 16px 120px 16px;
+      transition: padding 0.2s ease;
     }
     @media (min-width: 768px) { main { padding-bottom: 50px; } }
 
@@ -179,6 +236,7 @@
       background: inherit; border-top: 1px solid rgba(0,0,0,0.08);
       padding: 8px 12px; justify-content: space-around; align-items: center;
       backdrop-filter: blur(12px);
+      transition: transform 0.2s ease, opacity 0.2s ease;
     }
     body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
     @media (min-width: 768px) { .mobile-dock { display: none; } }
@@ -323,6 +381,11 @@
       <button class="btn" onclick="openModal('settings-modal')">ตั้งค่า</button>
     </div>
   </header>
+
+  <!-- FLOATING FULLSCREEN BUTTON (มุมขวาบน ใต้ปุ่มตั้งค่า) -->
+  <button id="fullscreen-btn" onclick="toggleFullscreenMode()" title="โหมดอ่านเต็มจอ">
+    <span id="fullscreen-icon">⛶</span>
+  </button>
 
   <!-- BOTTOM FLOATING ACTION BAR FOR SELECTED WORD -->
   <div id="selection-bar">
@@ -661,7 +724,7 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
-          { th: "เมื่อปิดโหมดเลื่อนอ่านต่อเนื่อง ระบบจะล็อกให้อ่านทีละหน้าและต้องกดปุ่มตอนถัดไปเองอย่างเคร่งครัด", src: "已严格隔离单章模式与无限滚动逻辑" }
+          { th: "คุณสามารถคลิกปุ่มไอคอน ⛶ ที่มุมขวาบนใต้ปุ่มตั้งค่าเพื่อเข้าสู่โหมดอ่านเต็มจอได้อย่างสะดวก", src: "已支持右上方快捷全屏聚焦阅读模式" }
         ]
       }
     ];
@@ -673,6 +736,7 @@
       loadSettings();
       setupSelectionMonitor();
       setupScrollMonitor();
+      setupFullscreenListener();
       
       const lastBookId = localStorage.getItem('nov_last_book_id');
       if (lastBookId) {
@@ -683,11 +747,57 @@
       renderGlossary();
     });
 
+    // ==================== FULLSCREEN FOCUS MODE ====================
+    function toggleFullscreenMode() {
+      const isCurrentlyFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains('is-fullscreen');
+
+      if (!isCurrentlyFullscreen) {
+        // ขอเข้าสู่โหมดเต็มจอระดับเบราว์เซอร์
+        const elem = document.documentElement;
+        if (elem.requestFullscreen) {
+          elem.requestFullscreen().catch(() => {});
+        } else if (elem.webkitRequestFullscreen) {
+          elem.webkitRequestFullscreen();
+        }
+        document.body.classList.add('is-fullscreen');
+        document.getElementById('fullscreen-icon').innerText = '🗗';
+        document.getElementById('fullscreen-btn').title = 'ออกจากโหมดเต็มจอ';
+      } else {
+        // ขอออกจากโหมดเต็มจอ
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        } else if (document.webkitExitFullscreen) {
+          document.webkitExitFullscreen();
+        }
+        document.body.classList.remove('is-fullscreen');
+        document.getElementById('fullscreen-icon').innerText = '⛶';
+        document.getElementById('fullscreen-btn').title = 'โหมดอ่านเต็มจอ';
+      }
+    }
+
+    function setupFullscreenListener() {
+      document.addEventListener('fullscreenchange', () => {
+        const isFS = !!document.fullscreenElement;
+        if (isFS) {
+          document.body.classList.add('is-fullscreen');
+          document.getElementById('fullscreen-icon').innerText = '🗗';
+          document.getElementById('fullscreen-btn').title = 'ออกจากโหมดเต็มจอ';
+        } else {
+          document.body.classList.remove('is-fullscreen');
+          document.getElementById('fullscreen-icon').innerText = '⛶';
+          document.getElementById('fullscreen-btn').title = 'โหมดอ่านเต็มจอ';
+        }
+      });
+    }
+
     // THEME & FONT
     function cycleTheme() {
       const themes = ['sepia', 'light', 'dark'];
       currentTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length];
       document.getElementById('app-body').className = 'theme-' + currentTheme;
+      if (document.body.classList.contains('is-fullscreen')) {
+        document.body.classList.add('is-fullscreen');
+      }
       
       const themeText = currentTheme === 'sepia' ? 'ถนอมสายตา' : (currentTheme === 'light' ? 'สว่าง' : 'มืด');
       const mobileBtn = document.getElementById('mobile-theme-btn');
@@ -914,7 +1024,7 @@
           <div style="font-size: 11px; opacity: 0.75; margin-bottom: 10px;">
             กรุณาก๊อปปี้ URL ตอนถัดไปจากหน้าเว็บจริงมาวางเพื่อแปลต่อ
           </div>
-          <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="promptFixNextUrlFromBottom()">
+          <button class="btn btn-primary" style="padding: 6px 14px; font-size: 12px;" onclick="promptFixNextUrlFromBottom()">
             🔗 วาง URL ตอนถัดไป
           </button>
         `, true);
@@ -940,7 +1050,7 @@
     function setupScrollMonitor() {
       window.addEventListener('scroll', () => {
         const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
-        if (!isInfinite) return; // ถ้าปิดโหมดเลื่อนอ่าน ตัว Scroll Monitor จะหยุดทำงานทันที
+        if (!isInfinite) return;
 
         if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 1200) {
           if (currentChapterIndex < chapters.length - 1) {
@@ -1935,7 +2045,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         nextUrlCalculated = nextUrl;
         document.getElementById('prefetch-badge').style.display = 'inline-block';
 
-        // เช็กอย่างเคร่งครัด: ถ้าเปิดโหมด Infinite Scroll ถึงจะต่อตอนเข้าหน้าจออัตโนมัติ
         const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
         if (isInfinite) {
           appendNextChapterToWindow();
@@ -1955,7 +2064,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
     // NEXT CHAPTER CLICK (สำหรับโหมดอ่านทีละหน้า)
     async function handleNextChapterClick() {
-      // 1. ถ้าตอนถัดไปมีอยู่แล้วในคิว (อาจแปลสดไว้หรือ Prefetch เสร็จแล้ว) ให้เปิดอ่านทันที
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
         document.getElementById('prefetch-badge').style.display = 'none';
@@ -1964,7 +2072,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         return;
       }
 
-      // 2. ถ้ายังไม่มี ให้ดึงและแปลสด
       if (nextUrlCalculated) {
         const btnText = document.getElementById('next-btn-text');
         const nextBtn = document.getElementById('next-chap-btn');
