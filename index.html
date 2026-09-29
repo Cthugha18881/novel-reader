@@ -347,27 +347,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 330px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*รองรับทั้งแปลอัตโนมัติ และการวางชุด URL หลายบทพร้อมกัน</p>
-    </div>
-  </div>
-
-  <!-- MODAL: BATCH URL QUEUE INPUT -->
-  <div class="modal-overlay" id="batch-urls-modal">
-    <div class="modal-box">
-      <div class="modal-head">
-        <div class="modal-title">วางชุด URL ตอนที่ต้องการแปล</div>
-        <button class="modal-close" onclick="closeModal('batch-urls-modal')">✕</button>
-      </div>
-      <p style="font-size: 12px; opacity: 0.8; margin-bottom: 8px;">
-        วาง URL ของบทที่ต้องการแปลต่อเนื่อง (บรรทัดละ 1 URL) เช่น ลิงก์บทที่ 815, 816, 817:
-      </p>
-      <textarea id="batch-urls-textarea" class="form-input" style="height: 120px; font-family: monospace; font-size: 11px;" placeholder="https://www.69shuba.com/txt/88724/40711452
-https://www.69shuba.com/txt/88724/40711453
-https://www.69shuba.com/txt/88724/40711454"></textarea>
-      <div style="display: flex; gap: 8px; margin-top: 12px;">
-        <button class="btn" style="flex: 1;" onclick="closeModal('batch-urls-modal')">ยกเลิก</button>
-        <button class="btn btn-primary" style="flex: 2;" onclick="startCustomUrlsBatch()">เริ่มแปลตามรายการนี้</button>
-      </div>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ขับเคลื่อนด้วย Invisible Backend ดึงตอนถัดไปอัตโนมัติ ไม่สะดุด</p>
     </div>
   </div>
 
@@ -415,6 +395,12 @@ https://www.69shuba.com/txt/88724/40711454"></textarea>
       <div class="modal-head">
         <div class="modal-title">ตั้งค่าระบบและการแปล</div>
         <button class="modal-close" onclick="closeModal('settings-modal')">✕</button>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Cloudflare Worker Backend URL (แนะนำ)</label>
+        <input type="url" id="custom-backend-url" class="form-input" placeholder="https://novel-scraper.your-name.workers.dev">
+        <p style="font-size: 10px; opacity: 0.6; margin-top: 3px;">*ใส่ URL ของ Cloudflare Worker ที่คุณสร้างเพื่อแก้ปัญหาบล็อกบ็อตและลิงก์ขาดตอน 100%</p>
       </div>
 
       <div class="form-group">
@@ -575,7 +561,6 @@ https://www.69shuba.com/txt/88724/40711454"></textarea>
     let batchCancelRequested = false;
     let isBatchRunning = false;
     let isBatchComplete = false;
-    let targetBookIdForQueue = "";
 
     let selectedWordBuffer = "";
     let isSelectedChinese = false;
@@ -589,8 +574,8 @@ https://www.69shuba.com/txt/88724/40711454"></textarea>
       {
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับระบบแปลล่วงหน้าทนทานต่อ Anti-Bot", src: "欢迎来到 NovelTranslate" },
-          { th: "คุณสามารถกดปุ่ม '+ วางชุด URL' ในชั้นหนังสือเพื่อนำลิงก์หลายๆ ตอนมาใส่ให้แปลต่อเนื่องได้ทันที หรือกดเริ่มแปลล่วงหน้าได้ตามปกติ", src: "支持多URL队列批量输入与自动下一章抓取" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับ Invisible Backend", src: "欢迎来到 NovelTranslate" },
+          { th: "ระบบรองรับการเชื่อมต่อ Cloudflare Worker เพื่อการดึงบทถัดไปอย่างต่อเนื่องและแม่นยำ 100%", src: "已支持无感后端架构，实现真正自动化下一章跳转" }
         ]
       }
     ];
@@ -828,9 +813,6 @@ https://www.69shuba.com/txt/88724/40711454"></textarea>
             <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="startBatchTranslateForBook('${b.bookId}')">
               ⚡ เริ่มแปลล่วงหน้า
             </button>
-            <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="openBatchUrlsModal('${b.bookId}')" title="วางชุด URL หลายๆ ตอนเพื่อแปลรวดเดียว">
-              + วางชุด URL
-            </button>
             <button class="btn" style="padding: 3px 6px; font-size: 10px; margin-left: auto;" onclick="fixBookNextUrl('${b.bookId}')" title="แก้ไข URL สำหรับบทถัดไป">
               🔗 แก้ URL ถัดไป
             </button>
@@ -905,12 +887,6 @@ https://www.69shuba.com/txt/88724/40711454"></textarea>
       }
     }
 
-    function openBatchUrlsModal(bookId) {
-      targetBookIdForQueue = bookId;
-      document.getElementById('batch-urls-textarea').value = "";
-      openModal('batch-urls-modal');
-    }
-
     async function jumpToChapterFromShelf(bookId, chapIdx) {
       await loadBookFromDB(bookId, chapIdx);
       closeModal('bookshelf-modal');
@@ -947,60 +923,37 @@ https://www.69shuba.com/txt/88724/40711454"></textarea>
       openBookshelfModal();
     }
 
-    // ==================== UNIVERSAL NEXT LINK EXTRACTOR ====================
-    function extractNextUrlFromHtml(html, baseUrl) {
-      if (!html) return null;
-
-      const nextKeywords = ['下一章', '下一页', '下一篇', '下一節', '下一节', 'next chapter', 'next'];
-      for (const kw of nextKeywords) {
-        const reg = new RegExp(`<a[^>]+href=["']([^"']+)["'][^>]*>[\\s\\S]*?${kw}[\\s\\S]*?<\\/a>`, 'i');
-        const match = html.match(reg);
-        if (match && match[1]) {
-          const rawHref = match[1].trim();
-          if (!rawHref.startsWith('javascript:') && !rawHref.includes('index') && !rawHref.includes('catalog')) {
-            try {
-              return new URL(rawHref, baseUrl).href;
-            } catch(e) {
-              return rawHref;
-            }
-          }
-        }
-      }
-
-      const jsPatterns = [
-        /(?:nextpage|url_next|next_page|nextPageUrl)\s*=\s*['"]([^'"]+)['"]/i,
-        /var\s+preview_page\s*=\s*['"][^'"]*['"];\s*var\s+next_page\s*=\s*['"]([^'"]+)['"]/i
-      ];
-      for (const p of jsPatterns) {
-        const m = html.match(p);
-        if (m && m[1]) {
-          const rawJsHref = m[1].trim();
-          if (!rawJsHref.startsWith('javascript:') && !rawJsHref.includes('index')) {
-            try {
-              return new URL(rawJsHref, baseUrl).href;
-            } catch(e) {
-              return rawJsHref;
-            }
-          }
-        }
-      }
-
-      const mdMatch = html.match(/\[(?:下一章|下一页|下一节|下一篇)\]\((https?:\/\/[^\)]+)\)/i);
-      if (mdMatch && mdMatch[1]) {
-        return mdMatch[1].trim();
-      }
-
-      return null;
-    }
-
-    // ==================== SCRAPER ENGINE ====================
+    // ==================== INVISIBLE BACKEND SCRAPER ====================
     async function scrapePage(url) {
+      const customWorkerUrl = (localStorage.getItem('nov_backend_url') || "").trim();
+
+      // 1. ถ้ามีการตั้งค่า Cloudflare Worker URL ให้ใช้เป็นตัวหลัก (ทำงานดีที่สุด)
+      if (customWorkerUrl) {
+        try {
+          const endpoint = customWorkerUrl.replace(/\/$/, '') + '/?url=' + encodeURIComponent(url);
+          const res = await fetch(endpoint);
+          const data = await res.json();
+          if (data.success && data.text) {
+            return {
+              text: data.text,
+              nextUrl: data.nextUrl,
+              rawChapTitle: data.chapterTitle || "บทนิยาย",
+              rawBookTitle: data.bookTitle || ""
+            };
+          } else if (data.error) {
+            throw new Error(data.error);
+          }
+        } catch(e) {
+          console.warn("Custom Worker error, falling back to Client-side proxies:", e);
+        }
+      }
+
+      // 2. Fallback: ถ้ายังไม่ได้ใส่ Worker ให้ใช้ Corsproxy / Allorigins
       let rawText = "";
       let rawChapTitle = "";
       let rawBookTitle = "";
       let realNextUrl = null;
 
-      // 1. ลองผ่าน Allorigins / Corsproxy
       const proxyList = [
         `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`,
         `https://corsproxy.io/?${encodeURIComponent(url)}`
@@ -1019,20 +972,26 @@ https://www.69shuba.com/txt/88724/40711454"></textarea>
             }
 
             if (html && html.length > 200) {
-              realNextUrl = extractNextUrlFromHtml(html, url);
+              const nextKeywords = ['下一章', '下一页', '下一篇', '下一節', '下一节'];
+              for (const kw of nextKeywords) {
+                const reg = new RegExp(`<a[^>]+href=["']([^"']+)["'][^>]*>[\\s\\S]*?${kw}[\\s\\S]*?<\\/a>`, 'i');
+                const match = html.match(reg);
+                if (match && match[1]) {
+                  const rawHref = match[1].trim();
+                  if (!rawHref.startsWith('javascript:') && !rawHref.includes('index')) {
+                    try { realNextUrl = new URL(rawHref, url).href; } catch(e) { realNextUrl = rawHref; }
+                    break;
+                  }
+                }
+              }
 
               const parser = new DOMParser();
               const doc = parser.parseFromString(html, 'text/html');
 
-              const docTitle = doc.querySelector('title')?.innerText || "";
-              if (docTitle.includes('404') || docTitle.includes('不存在') || docTitle.includes('Not Found')) {
-                throw new Error("หน้าเว็บไม่พบ (404 Not Found)");
-              }
-
-              const h1 = doc.querySelector('h1, .hide-720, .txtnav h1, .readTitle');
+              const h1 = doc.querySelector('h1, .hide-720, .txtnav h1');
               if (h1 && h1.innerText.trim()) rawChapTitle = h1.innerText.trim();
 
-              const breadcrumb = doc.querySelector('.bread, .con_top, .nav, .crumbs');
+              const breadcrumb = doc.querySelector('.bread, .con_top, .nav');
               if (breadcrumb) {
                 const links = breadcrumb.querySelectorAll('a');
                 if (links.length >= 2) rawBookTitle = links[1].innerText.trim();
@@ -1040,7 +999,7 @@ https://www.69shuba.com/txt/88724/40711454"></textarea>
 
               doc.querySelectorAll('script, style, nav, header, footer, noscript, .ads, ins, iframe, .bottem2').forEach(e => e.remove());
               const paras = [];
-              doc.querySelectorAll('article p, .content p, #content, .txtnav, #txt, p').forEach(el => {
+              doc.querySelectorAll('article p, .content p, #content, .txtnav, p').forEach(el => {
                 const t = el.innerText ? el.innerText.trim() : '';
                 if (t.length > 5 && !t.includes('69书吧') && !t.includes('www.69shuba.com')) paras.push(t);
               });
@@ -1051,34 +1010,18 @@ https://www.69shuba.com/txt/88724/40711454"></textarea>
               }
             }
           }
-        } catch(e) {
-          if (e.message && e.message.includes('404')) throw e;
-        }
+        } catch(e) {}
       }
 
-      // 2. ลองผ่าน Jina AI Reader สำรอง
       if (!rawText || rawText.length < 50) {
         try {
           const res = await fetch(`https://r.jina.ai/${url}`);
           if (res.ok) {
             const md = await res.text();
-            if (md.includes('404') && md.length < 350) throw new Error("หน้าเว็บไม่พบ (404 Not Found)");
-
-            if (!realNextUrl) realNextUrl = extractNextUrlFromHtml(md, url);
+            const mdMatch = md.match(/\[(?:下一章|下一页|下一节)\]\((https?:\/\/[^\)]+)\)/i);
+            if (mdMatch && mdMatch[1]) realNextUrl = mdMatch[1].trim();
 
             const lines = md.split('\n').map(l => l.trim());
-            const titleLine = lines.find(l => l.startsWith('Title:'));
-            if (titleLine && !rawChapTitle) {
-              const cleanTitle = titleLine.replace('Title:', '').trim();
-              const parts = cleanTitle.split(/[-_]/);
-              if (parts.length >= 2) {
-                rawBookTitle = parts[0].trim();
-                rawChapTitle = parts[1].trim();
-              } else {
-                rawChapTitle = cleanTitle.replace('-69书吧', '').trim();
-              }
-            }
-
             const filteredLines = lines.filter(l => {
               if (!l || l.length < 3) return false;
               if (l.startsWith('Title:') || l.startsWith('URL Source:') || l.startsWith('Published Time:') || l.startsWith('Markdown Content:')) return false;
@@ -1091,13 +1034,11 @@ https://www.69shuba.com/txt/88724/40711454"></textarea>
             });
             rawText = filteredLines.join('\n\n');
           }
-        } catch(e) {
-          if (e.message && e.message.includes('404')) throw e;
-        }
+        } catch(e) {}
       }
 
-      if (!rawText || rawText.length < 40 || rawText.includes('404 Not Found') || rawText.includes('页面不存在')) {
-        throw new Error("ไม่พบเนื้อหาในหน้านี้ (อาจถึงตอนจบ หรือ URL สิ้นสุดแล้ว)");
+      if (!rawText || rawText.length < 40) {
+        throw new Error("ไม่สามารถดึงเนื้อหาจากเว็บนี้ได้ (แนะนำให้ตั้งค่า Cloudflare Worker ในหน้าตั้งค่า)");
       }
 
       return {
@@ -1525,110 +1466,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // ฟังก์ชันแปลล่วงหน้าตามคิว URL ที่ผู้ใช้วางเอง (เสถียรที่สุด 100%)
-    async function startCustomUrlsBatch() {
-      const text = document.getElementById('batch-urls-textarea').value.trim();
-      if (!text) return alert("กรุณาวาง URL อย่างน้อย 1 บรรทัด");
-
-      const urls = text.split('\n').map(u => u.trim()).filter(u => u.startsWith('http'));
-      if (urls.length === 0) return alert("ไม่พบ URL ที่ถูกต้อง กรุณาตรวจสอบลิงก์");
-
-      closeModal('batch-urls-modal');
-
-      const bookId = targetBookIdForQueue || currentBookId;
-      let bookChaps = await dbGetChaptersByBook(bookId);
-      bookChaps.sort((a, b) => a.order - b.order);
-
-      isBatchRunning = true;
-      batchCancelRequested = false;
-      isBatchComplete = false;
-
-      const progressBox = document.getElementById('batch-progress-box');
-      const progressTitle = document.getElementById('batch-progress-title');
-      const progressDesc = document.getElementById('batch-progress-desc');
-      const actionBtn = document.getElementById('batch-action-btn');
-
-      progressBox.className = 'progress-box';
-      progressBox.style.display = 'block';
-      progressTitle.innerText = "กำลังแปลล่วงหน้าจากคิว URL...";
-      actionBtn.className = 'btn btn-danger';
-      actionBtn.innerText = "หยุดแปล";
-
-      let successCount = 0;
-
-      for (let i = 0; i < urls.length; i++) {
-        if (batchCancelRequested) {
-          progressDesc.innerText = `หยุดการแปลตามคำสั่งแล้ว (แปลเสร็จสิ้น ${successCount} ตอน)`;
-          break;
-        }
-
-        const targetUrl = urls[i];
-        progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i + 1}/${urls.length}...`;
-
-        try {
-          const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(targetUrl);
-          
-          const result = await translateTextWithPingPong(text, (msg) => {
-            progressDesc.innerText = `[${i + 1}/${urls.length}] ${msg.substring(0, 32)}...`;
-          }, rawChapTitle, rawBookTitle);
-
-          const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${bookChaps.length + i + 1}`;
-          const nextInQueue = (i + 1 < urls.length) ? urls[i + 1] : nextUrl;
-
-          const newChap = {
-            id: `${bookId}_chap_${Date.now()}_${i}`,
-            bookId: bookId,
-            order: bookChaps.length + i + 1,
-            title: chapTitle,
-            paragraphs: result.paragraphs,
-            sourceUrl: targetUrl,
-            nextUrl: nextInQueue
-          };
-
-          await dbSaveChapter(newChap);
-          successCount++;
-
-          await dbSaveBook({
-            bookId: bookId,
-            title: result.bookTitle || currentBookTitle,
-            lastChapterIndex: (bookId === currentBookId) ? currentChapterIndex : bookChaps.length + i,
-            lastChapterTitle: newChap.title,
-            totalChapters: bookChaps.length + i + 1,
-            lastUrl: targetUrl,
-            updatedAt: Date.now()
-          });
-
-          if (i + 1 < urls.length && !batchCancelRequested) {
-            progressDesc.innerText = `บันทึก "${chapTitle}" สำเร็จ พักระบบ 2.5 วิก่อนเริ่มบทถัดไป...`;
-            await new Promise(r => setTimeout(r, 2500));
-          }
-        } catch (err) {
-          progressDesc.innerText = `หยุดที่ตอนที่ ${i + 1}: ${err.message}`;
-          break;
-        }
-      }
-
-      isBatchRunning = false;
-      if (successCount > 0 && !batchCancelRequested) {
-        isBatchComplete = true;
-        progressBox.className = 'progress-box success';
-        progressTitle.innerText = "✓ แปลล่วงหน้าเสร็จสมบูรณ์!";
-        progressDesc.innerText = `บันทึกเนื้อหาเรียบร้อยแล้วทั้งหมด ${successCount} ตอน พร้อมให้อ่านแบบออฟไลน์`;
-        actionBtn.className = 'btn btn-secondary';
-        actionBtn.innerText = "ปิดการแจ้งเตือน";
-      } else if (batchCancelRequested) {
-        actionBtn.className = 'btn btn-secondary';
-        actionBtn.innerText = "ปิดการแจ้งเตือน";
-        isBatchComplete = true;
-      }
-
-      openBookshelfModal();
-      if (currentBookId === bookId) {
-        loadBookFromDB(bookId, currentChapterIndex);
-      }
-    }
-
-    // ฟังก์ชันแปลล่วงหน้าตามจำนวนตอนปกติ
     async function startBatchTranslateForBook(bookId) {
       if (isBatchRunning) {
         alert("กำลังมีกระบวนการแปลล่วงหน้าทำงานอยู่ กรุณารอหรือกดยกเลิกก่อน");
@@ -1866,6 +1703,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
     // SETTINGS MANAGEMENT
     function saveSettings() {
+      localStorage.setItem('nov_backend_url', document.getElementById('custom-backend-url').value.trim());
       localStorage.setItem('nov_gemini_key', document.getElementById('gemini-key').value.trim());
       localStorage.setItem('nov_primary_model', document.getElementById('gemini-primary-model').value);
       localStorage.setItem('nov_backup_model', document.getElementById('gemini-backup-model').value);
@@ -1876,6 +1714,9 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
     }
 
     function loadSettings() {
+      if (localStorage.getItem('nov_backend_url')) {
+        document.getElementById('custom-backend-url').value = localStorage.getItem('nov_backend_url');
+      }
       if (localStorage.getItem('nov_gemini_key')) {
         document.getElementById('gemini-key').value = localStorage.getItem('nov_gemini_key');
       }
