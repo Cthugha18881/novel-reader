@@ -80,6 +80,36 @@
     #fullscreen-btn:hover { opacity: 1; transform: scale(1.05); background-color: rgba(0,0,0,0.1); }
     body.theme-dark #fullscreen-btn:hover { background-color: rgba(255,255,255,0.15); }
 
+    /* FLOATING SCAN TERMS BUTTON (มุมขวาล่าง) */
+    #scan-terms-btn {
+      position: fixed;
+      bottom: 75px;
+      right: 18px;
+      z-index: 35;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      box-shadow: 0 4px 12px rgba(37,99,235,0.35);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      opacity: 0.85;
+      transition: opacity 0.2s, transform 0.2s;
+      font-size: 16px;
+    }
+    @media (min-width: 768px) { #scan-terms-btn { bottom: 25px; } }
+    #scan-terms-btn:hover {
+      opacity: 1;
+      transform: scale(1.08);
+    }
+    #scan-terms-btn:active {
+      transform: scale(0.95);
+    }
+
     body.is-fullscreen header { transform: translateY(-100%); opacity: 0; pointer-events: none; }
     body.is-fullscreen .mobile-dock { transform: translateY(100%); opacity: 0; pointer-events: none; }
     body.is-fullscreen #fullscreen-btn { top: 14px; opacity: 0.4; }
@@ -312,9 +342,14 @@
     </div>
   </header>
 
-  <!-- FLOATING FULLSCREEN BUTTON -->
+  <!-- FLOATING FULLSCREEN BUTTON (มุมขวาบน) -->
   <button id="fullscreen-btn" onclick="toggleFullscreenMode()" title="โหมดอ่านเต็มจอ">
     <span id="fullscreen-icon">⛶</span>
+  </button>
+
+  <!-- FLOATING SCAN TERMS BUTTON (มุมขวาล่าง) -->
+  <button id="scan-terms-btn" onclick="scanTermsInCurrentChapter()" title="สแกนหาคำศัพท์เฉพาะในบทนี้ที่ยังไม่มีในคลัง">
+    🔍+
   </button>
 
   <!-- BOTTOM FLOATING ACTION BAR FOR SELECTED WORD -->
@@ -701,7 +736,7 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.1", src: "欢迎来到 NovelTranslate" },
-          { th: "แก้ไขและเปิดหน้าต่างชั้นหนังสือได้ตามปกติแล้ว พร้อมปุ่ม 🔄 แปลใหม่ สำหรับแต่ละบท", src: "已完全修复书架模态框与单章重译" }
+          { th: "คุณสามารถคลิกปุ่ม 🔍+ ที่มุมขวาล่างเพื่อสแกนหาคำศัพท์เฉพาะในบทนี้ที่ยังไม่มีในคลังได้ทันที", src: "已支持右下角单章快捷实体词智能提取" }
         ]
       }
     ];
@@ -724,7 +759,7 @@
       renderGlossaryUI();
     });
 
-    // ==================== FULLSCREEN FOCUS MODE ====================
+    // FULLSCREEN FOCUS MODE
     function toggleFullscreenMode() {
       const isCurrentlyFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains('is-fullscreen');
 
@@ -1144,17 +1179,17 @@
       }, 150);
     }
 
-    // ==================== AUTO-GLOSSARY AI SCANNER ====================
+    // ==================== AUTO-GLOSSARY SCAN FOR SPECIFIC TEXT ====================
     async function extractAndStoreAutoGlossary(rawText, modelToUse, signal = null) {
       const isAutoGlossaryEnabled = localStorage.getItem('nov_enable_auto_glossary') !== 'false';
-      if (!isAutoGlossaryEnabled) return;
+      if (!isAutoGlossaryEnabled) return 0;
 
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
-      if (!key) return;
+      if (!key) return 0;
 
       const existingTerms = Object.keys(glossary);
-      const sampleText = rawText.substring(0, 3500);
+      const sampleText = rawText.substring(0, 4500);
 
       const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนแนว "${genre}"
 จงวิเคราะห์ข้อความภาษาจีนต่อไปนี้ และสกัดหา "ชื่อเฉพาะใหม่" ที่สำคัญอย่างยิ่งต่อความต่อเนื่องของเรื่อง โดยแบ่งออกเป็น 5 หมวด:
@@ -1167,7 +1202,7 @@
 ข้อกำหนดสำคัญ:
 1. ห้ามเลือกคำทั่วไป เช่น พ่อ, แม่, ประตู, ท้องฟ้า, เจ้าสำนัก
 2. ค้นหาคำแปลไทยที่ถูกต้อง ตรงตามหลักการทับศัพท์ภาษาจีนกลาง หรือคำแปลมาตรฐานที่นิยมใช้ในนิยายแปลไทยแนวเดียวกัน
-3. คำศัพท์ที่มีอยู่แล้วในระบบ ห้ามนำซ้ำ: [${existingTerms.slice(-50).join(', ')}]
+3. คำศัพท์ที่มีอยู่แล้วในระบบ ห้ามนำซ้ำ: [${existingTerms.slice(-60).join(', ')}]
 4. หากไม่พบคำศัพท์ใหม่ ให้ส่งรายการว่าง []
 
 ตอบกลับเป็น JSON เท่านั้นในรูปแบบ:
@@ -1209,10 +1244,46 @@
               localStorage.setItem('nov_gloss', JSON.stringify(glossary));
               renderGlossaryUI();
             }
+            return addedCount;
           }
         }
       } catch (err) {
         console.warn("Auto-Glossary scan skipped:", err.message);
+      }
+      return 0;
+    }
+
+    // ฟังก์ชันสำหรับปุ่มสแกนคำศัพท์ในบทปัจจุบัน (มุมขวาล่าง)
+    async function scanTermsInCurrentChapter() {
+      const curChap = chapters[currentChapterIndex];
+      if (!curChap || !Array.isArray(curChap.paragraphs) || curChap.paragraphs.length === 0) {
+        return alert("ไม่พบเนื้อหาในบทปัจจุบันสำหรับสแกน");
+      }
+
+      const key = (localStorage.getItem('nov_gemini_key') || "").trim();
+      if (!key) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+
+      const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
+      const btn = document.getElementById('scan-terms-btn');
+      const originalText = btn.innerHTML;
+
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner-icon" style="margin:0;"></span>`;
+
+      const srcText = curChap.paragraphs.map(p => p.src || "").filter(Boolean).join("\n\n");
+
+      try {
+        const addedCount = await extractAndStoreAutoGlossary(srcText, primaryModel);
+        if (addedCount > 0) {
+          alert(`✓ สแกน "${curChap.title}" เสร็จสิ้น!\nพบชื่อเฉพาะใหม่ ${addedCount} คำ และบันทึกเข้าคลังคำศัพท์เรียบร้อยแล้ว\n(หากต้องการให้บทนี้เปลี่ยนคำตามศัพท์ใหม่ สามารถกด 'แปลใหม่' ในชั้นหนังสือได้)`);
+        } else {
+          alert(`ตรวจสอบ "${curChap.title}" เรียบร้อยแล้ว ไม่พบชื่อเฉพาะใหม่ตกหล่น (ทุกคำมีอยู่ในคลังแล้ว)`);
+        }
+      } catch (err) {
+        alert("สแกนไม่สำเร็จ: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
       }
     }
 
@@ -1946,7 +2017,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       renderVirtualWindow(currentChapterIndex);
     }
 
-    // ==================== RE-TRANSLATE SPECIFIC CHAPTER ====================
+    // ==================== RE-TRANSLATE CHAPTER BY ID ====================
     async function retranslateSpecificChapter(e, bookId, chapId) {
       e.stopPropagation();
 
@@ -2004,7 +2075,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // ==================== BOOKSHELF RENDERING (วางตำแหน่งให้เรียกใช้ได้อย่างปลอดภัย) ====================
+    // ==================== BOOKSHELF RENDERING ====================
     function renderChaptersHtml(bookId, bookChaps, readingChapId) {
       if (!bookChaps || bookChaps.length === 0) {
         return '<div style="padding:8px 14px; font-size:11px; opacity:0.5;">ไม่มีตอน</div>';
