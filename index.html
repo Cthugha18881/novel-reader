@@ -394,7 +394,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 380px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*กด 🔄 เพื่อแปลใหม่ตามคลังศัพท์ล่าสุด | ติ๊กถูกที่ช่องสี่เหลี่ยมด้านหน้าเมื่อต้องการลบ</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*กด 🔄 เพื่อแปลใหม่ตามคลังศัพท์ล่าสุด | ติ๊กถูกที่ช่องสี่เหลี่ยมด้านหน้าเพื่อเลือกลบ</p>
     </div>
   </div>
 
@@ -701,7 +701,7 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.1", src: "欢迎来到 NovelTranslate" },
-          { th: "คุณสามารถกดปุ่ม 🔄 แปลใหม่ ในชั้นหนังสือเพื่ออัปเดตคำแปลของบทนั้นๆ ให้สอดคล้องกับคลังศัพท์ล่าสุดได้ทันที", src: "已支持单章即时重译与术语库联动" }
+          { th: "แก้ไขและเปิดหน้าต่างชั้นหนังสือได้ตามปกติแล้ว พร้อมปุ่ม 🔄 แปลใหม่ สำหรับแต่ละบท", src: "已完全修复书架模态框与单章重译" }
         ]
       }
     ];
@@ -788,8 +788,15 @@
       localStorage.setItem('nov_font_size', currentFontSize);
     }
 
-    function openModal(id) { document.getElementById(id).classList.add('active'); }
-    function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+    function openModal(id) { 
+      const modal = document.getElementById(id);
+      if (modal) modal.classList.add('active'); 
+    }
+    
+    function closeModal(id) { 
+      const modal = document.getElementById(id);
+      if (modal) modal.classList.remove('active'); 
+    }
 
     // ==================== VIRTUAL SLIDING WINDOW RENDERER ====================
     function buildChapterBlockHtml(chap, chapIdx) {
@@ -1939,7 +1946,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       renderVirtualWindow(currentChapterIndex);
     }
 
-    // ==================== RE-TRANSLATE CHAPTER BY ID (แปลบทนั้นใหม่ตามคลังศัพท์ล่าสุด) ====================
+    // ==================== RE-TRANSLATE SPECIFIC CHAPTER ====================
     async function retranslateSpecificChapter(e, bookId, chapId) {
       e.stopPropagation();
 
@@ -1949,7 +1956,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
       if (!confirm(`ต้องการแปล "${targetChap.title}" ใหม่อีกครั้งตามคลังศัพท์ล่าสุดใช่หรือไม่?`)) return;
 
-      // รวมข้อความจีนต้นฉบับเดิมที่มีบันทึกไว้ในย่อหน้า
       let srcChineseText = "";
       if (Array.isArray(targetChap.paragraphs) && targetChap.paragraphs.length > 0) {
         srcChineseText = targetChap.paragraphs.map(p => p.src || "").filter(Boolean).join("\n\n");
@@ -1979,7 +1985,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
         await dbSaveChapter(targetChap);
 
-        // หากกำลังเปิดอ่านบทนี้อยู่ ให้รีเฟรชหน้าจอทันที
         if (currentBookId === bookId) {
           const memChap = chapters.find(c => c.id === chapId);
           if (memChap) {
@@ -1999,6 +2004,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
+    // ==================== BOOKSHELF RENDERING (วางตำแหน่งให้เรียกใช้ได้อย่างปลอดภัย) ====================
     function renderChaptersHtml(bookId, bookChaps, readingChapId) {
       if (!bookChaps || bookChaps.length === 0) {
         return '<div style="padding:8px 14px; font-size:11px; opacity:0.5;">ไม่มีตอน</div>';
@@ -2029,6 +2035,120 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         `;
       });
       return chapsHtml;
+    }
+
+    async function openBookshelfModal() {
+      const listContainer = document.getElementById('bookshelf-list');
+      if (!listContainer) return;
+      listContainer.innerHTML = '<div style="text-align:center; padding:15px; opacity:0.6;">กำลังเปิดคลังหนังสือ...</div>';
+      openModal('bookshelf-modal');
+
+      const books = await dbGetAllBooks();
+      books.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+      if (books.length === 0) {
+        listContainer.innerHTML = '<div style="text-align:center; padding:20px; opacity:0.6; font-size:13px;">ยังไม่มีนิยายในชั้นหนังสือ วางลิงก์เพื่อเริ่มอ่านตอนแรกได้เลย</div>';
+        return;
+      }
+
+      listContainer.innerHTML = "";
+      for (const b of books) {
+        const itemBox = document.createElement('div');
+        itemBox.className = 'book-item-container';
+
+        let bookChaps = await dbGetChaptersByBook(b.bookId);
+        
+        if (!bookSortModes[b.bookId]) bookSortModes[b.bookId] = 'time_desc';
+        applySortToChapters(bookChaps, bookSortModes[b.bookId]);
+
+        const currentSort = bookSortModes[b.bookId];
+        const timeBtnLabel = currentSort === 'time_desc' ? 'ล่าสุด ↓' : (currentSort === 'time_asc' ? 'เก่าสุด ↑' : 'เวลา');
+        const titleBtnLabel = currentSort === 'title_asc' ? 'ชื่อ ก-ฮ ↓' : (currentSort === 'title_desc' ? 'ชื่อ ฮ-ก ↑' : 'ชื่อ');
+
+        itemBox.innerHTML = `
+          <div class="book-card-header">
+            <div class="book-info" onclick="toggleBookAccordion('${b.bookId}')">
+              <div class="book-title">📚 ${b.title || 'นิยายเรื่องใหม่'} <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนย่อย)</span></div>
+              <div class="book-meta" id="shelf-meta-${b.bookId}">อ่านค้างไว้: <b>${b.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${bookChaps.length} ตอนที่บันทึกไว้</div>
+            </div>
+            <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบทั้งเรื่อง</button>
+          </div>
+          <div class="batch-bar">
+            <span>แปลล่วงหน้า</span>
+            <input type="number" id="batch-input-${b.bookId}" class="form-input" style="width: 50px; padding: 3px 6px; font-size: 12px;" min="1" max="50" value="5">
+            <span>บท</span>
+            <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="startBatchTranslateForBook('${b.bookId}')">
+              ⚡ เริ่มแปลล่วงหน้า
+            </button>
+            <button class="btn" style="padding: 3px 6px; font-size: 10px; margin-left: auto;" onclick="fixBookNextUrl('${b.bookId}')" title="แก้ไข URL สำหรับบทถัดไป">
+              🔗 แก้ URL ถัดไป
+            </button>
+          </div>
+          
+          <div class="shelf-sub-toolbar" id="shelf-sub-bar-${b.bookId}" style="display: none;">
+            <div style="display: flex; gap: 4px; align-items: center;">
+              <span>เรียง:</span>
+              <button class="btn" id="sort-time-btn-${b.bookId}" style="padding: 2px 7px; font-size: 10px;" onclick="toggleSortMode(event, '${b.bookId}', 'time')">
+                ${timeBtnLabel}
+              </button>
+              <button class="btn" id="sort-title-btn-${b.bookId}" style="padding: 2px 7px; font-size: 10px;" onclick="toggleSortMode(event, '${b.bookId}', 'title')">
+                ${titleBtnLabel}
+              </button>
+            </div>
+            <div style="display: flex; gap: 6px; align-items: center;">
+              <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="toggleSelectAllChaps('${b.bookId}')">เลือกทั้งหมด</button>
+              <button class="btn btn-danger" id="del-selected-btn-${b.bookId}" style="padding: 2px 6px; font-size: 10px; display: none;" onclick="deleteSelectedChapters('${b.bookId}')">ลบที่เลือก</button>
+            </div>
+          </div>
+
+          <div class="book-chapters-list" id="shelf-chaps-${b.bookId}">
+            ${renderChaptersHtml(b.bookId, bookChaps, b.lastChapterId)}
+          </div>
+        `;
+        listContainer.appendChild(itemBox);
+      }
+    }
+
+    async function toggleSortMode(e, bookId, type) {
+      e.stopPropagation();
+      let currentMode = bookSortModes[bookId] || 'time_desc';
+
+      if (type === 'time') {
+        bookSortModes[bookId] = (currentMode === 'time_desc') ? 'time_asc' : 'time_desc';
+      } else if (type === 'title') {
+        bookSortModes[bookId] = (currentMode === 'title_asc') ? 'title_desc' : 'title_asc';
+      }
+
+      const currentSort = bookSortModes[bookId];
+      const timeBtn = document.getElementById(`sort-time-btn-${bookId}`);
+      const titleBtn = document.getElementById(`sort-title-btn-${bookId}`);
+
+      if (timeBtn) timeBtn.innerText = currentSort === 'time_desc' ? 'ล่าสุด ↓' : (currentSort === 'time_asc' ? 'เก่าสุด ↑' : 'เวลา');
+      if (titleBtn) titleBtn.innerText = currentSort === 'title_asc' ? 'ชื่อ ก-ฮ ↓' : (currentSort === 'title_desc' ? 'ชื่อ ฮ-ก ↑' : 'ชื่อ');
+
+      let bookChaps = await dbGetChaptersByBook(bookId);
+      applySortToChapters(bookChaps, currentSort);
+
+      const books = await dbGetAllBooks();
+      const b = books.find(x => x.bookId === bookId);
+
+      const listEl = document.getElementById(`shelf-chaps-${bookId}`);
+      if (listEl) {
+        listEl.innerHTML = renderChaptersHtml(bookId, bookChaps, b?.lastChapterId);
+      }
+      updateSelectedDeleteBtn(bookId);
+    }
+
+    function applySortToChapters(chapsList, sortMode) {
+      if (sortMode === 'time_desc') {
+        chapsList.sort((x, y) => y.order - x.order);
+      } else if (sortMode === 'time_asc') {
+        chapsList.sort((x, y) => x.order - y.order);
+      } else if (sortMode === 'title_asc') {
+        chapsList.sort((x, y) => x.title.localeCompare(y.title, 'th', { numeric: true }));
+      } else if (sortMode === 'title_desc') {
+        chapsList.sort((x, y) => y.title.localeCompare(x.title, 'th', { numeric: true }));
+      }
     }
 
     function toggleBookAccordion(bookId) {
