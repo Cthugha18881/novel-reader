@@ -925,12 +925,13 @@
 
     // ==================== INVISIBLE BACKEND SCRAPER ====================
     async function scrapePage(url) {
-      const customWorkerUrl = (localStorage.getItem('nov_backend_url') || "").trim();
+      let customWorkerUrl = (localStorage.getItem('nov_backend_url') || "").trim();
+      customWorkerUrl = customWorkerUrl.replace(/\/+$/, '');
 
       // 1. ดึงผ่าน Cloudflare Worker ที่ระบุ
       if (customWorkerUrl) {
         try {
-          const endpoint = customWorkerUrl.replace(/\/$/, '') + '/?url=' + encodeURIComponent(url);
+          const endpoint = customWorkerUrl + '/?url=' + encodeURIComponent(url);
           const res = await fetch(endpoint);
           const data = await res.json();
           if (data.success && data.text) {
@@ -1456,14 +1457,12 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${targetUrl.substring(targetUrl.lastIndexOf('/'))})`;
 
         try {
-          // ดึงเนื้อหาและ Next URL ผ่าน Worker
           const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(targetUrl);
           
           const result = await translateTextWithPingPong(text, (msg) => {
             progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 32)}...`;
           }, rawChapTitle, rawBookTitle);
 
-          // อัปเดตรายการบทในเครื่องให้แม่นยำ
           const currentTotal = (await dbGetChaptersByBook(bookId)).length;
           const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${currentTotal + 1}`;
 
@@ -1490,7 +1489,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             updatedAt: Date.now()
           });
 
-          // ตรวจสอบ Next URL สำหรับตอนถัดไป
+          // ถ้าดึงไม่ได้ URL ตอนถัดไปจริงๆ ถึงจะตัดจบ
           if (!nextUrl) {
             progressDesc.innerText = `⚠️ แปลจบที่ "${chapTitle}" แต่ระบบหา URL ของตอนถัดไปไม่พบ (ดึงเสร็จ ${successCount}/${count} ตอน)`;
             break;
@@ -1648,7 +1647,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
     // SETTINGS MANAGEMENT
     function saveSettings() {
       let bUrl = document.getElementById('custom-backend-url').value.trim();
-      bUrl = bUrl.replace(/\/+$/, ''); // ลบ trailing slash
+      bUrl = bUrl.replace(/\/+$/, '');
       localStorage.setItem('nov_backend_url', bUrl);
       localStorage.setItem('nov_gemini_key', document.getElementById('gemini-key').value.trim());
       localStorage.setItem('nov_primary_model', document.getElementById('gemini-primary-model').value);
