@@ -361,7 +361,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 380px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*กดปุ่ม 'เวลา' หรือ 'ชื่อ' ซ้ำเพื่อสลับบน-ล่าง | ลบบทแล้วระบบจะอัปเดตตำแหน่งต่อเนื่องให้อัตโนมัติ</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*กดปุ่ม 'เวลา' หรือ 'ชื่อ' ซ้ำเพื่อสลับบน-ล่าง | ระบบล็อกลำดับเรียงตัวเลขถัดไปให้อัตโนมัติ</p>
     </div>
   </div>
 
@@ -580,7 +580,6 @@
     let isBatchRunning = false;
     let isBatchComplete = false;
 
-    // การจัดเรียง: 'time_desc', 'time_asc', 'title_asc', 'title_desc'
     let bookSortModes = {}; 
 
     let selectedWordBuffer = "";
@@ -597,7 +596,7 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบลบบทแล้วซิงก์ตำแหน่งใหม่ทันที พร้อมปุ่มสลับการเรียงลำดับโดยไม่ทำให้หน้าจอพับ", src: "已支持彻底同步删除状态与保持列表展开" }
+          { th: "ระบบแก้ไขปัญหาลำดับตอนกระโดด และการเรียงลำดับแบบถาวรเรียบร้อยแล้ว", src: "已全面重构全局章节序号自增体系" }
         ]
       }
     ];
@@ -691,6 +690,8 @@
         
         if (currentBookId !== "default_novel") {
           const chap = chapters[currentChapterIndex];
+          const books = await dbGetAllBooks();
+          const targetBook = books.find(b => b.bookId === currentBookId);
           await dbSaveBook({
             bookId: currentBookId,
             title: currentBookTitle,
@@ -861,7 +862,6 @@
       }
     }
 
-    // สลับทิศทางการเรียงลำดับโดยไม่ทำให้แถบตอนย่อยพับตัว
     async function toggleSortMode(e, bookId, type) {
       e.stopPropagation();
       let currentMode = bookSortModes[bookId] || 'time_desc';
@@ -967,7 +967,6 @@
       updateSelectedDeleteBtn(bookId);
     }
 
-    // ลบหลายตอนพร้อมกัน + ซิงก์สถานะต่อเนื่องทันที
     async function deleteSelectedChapters(bookId) {
       const chks = document.querySelectorAll(`.chk-book-${bookId}:checked`);
       const count = chks.length;
@@ -978,7 +977,6 @@
       const idsToDelete = Array.from(chks).map(c => c.value);
       await dbDeleteMultipleChapters(idsToDelete);
 
-      // จัดระเบียบลำดับ order ใหม่หลังจากลบ
       const remainingChaps = await dbGetChaptersByBook(bookId);
       remainingChaps.sort((x, y) => x.order - y.order);
       for (let i = 0; i < remainingChaps.length; i++) {
@@ -1012,7 +1010,6 @@
         }
       }
 
-      // ซิงก์ state ฝั่งอ่านสดทันที ป้องกันการจำค่าบทที่ลบไปแล้ว
       if (currentBookId === bookId) {
         await loadBookFromDB(bookId);
       } else {
@@ -1020,7 +1017,6 @@
       }
     }
 
-    // ลบบทเดียว + ซิงก์สถานะต่อเนื่องทันที
     async function deleteSingleChapter(e, bookId, chapId, chapTitle) {
       e.stopPropagation();
       if (!confirm(`ต้องการลบ "${chapTitle}" ออกจากเครื่องใช่หรือไม่?`)) return;
@@ -1067,7 +1063,6 @@
       }
     }
 
-    // รีเฟรชเฉพาะเนื้อหาตอนย่อยโดยไม่พับเก็บหน้าจอ
     async function refreshShelfViewOnly(bookId) {
       let liveChaps = await dbGetChaptersByBook(bookId);
       applySortToChapters(liveChaps, bookSortModes[bookId] || 'time_desc');
@@ -1561,6 +1556,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         const result = await translateTextWithPingPong(text, null, rawChapTitle, rawBookTitle);
         const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${bookChaps.length + 1}`;
 
+        // ค้นหา maxOrder แท้จริงจาก DB
         const maxOrder = bookChaps.reduce((max, c) => Math.max(max, c.order || 0), 0);
 
         const newChap = {
@@ -1603,8 +1599,9 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // NEXT CHAPTER CLICK
+    // NEXT CHAPTER CLICK (แก้บั๊ก order และการซิงก์ตำแหน่งข้ามตอน 100%)
     async function handleNextChapterClick() {
+      // 1. ถ้าตอนถัดไปมีโหลดบันทึกไว้ในระบบแล้ว ให้เปิดอ่านทันที
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
         document.getElementById('prefetch-badge').style.display = 'none';
@@ -1616,6 +1613,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         return;
       }
 
+      // 2. ถ้ายังไม่มี ให้ดึงและแปลสด
       if (nextUrlCalculated) {
         const btnText = document.getElementById('next-btn-text');
         const nextBtn = document.getElementById('next-chap-btn');
@@ -1634,8 +1632,11 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             btnText.innerText = msg.substring(0, 30) + "...";
           }, rawChapTitle, rawBookTitle);
 
-          const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${chapters.length + 1}`;
-          const maxOrder = chapters.reduce((max, c) => Math.max(max, c.order || 0), 0);
+          // หา maxOrder จากฐานข้อมูลจริงเสมอ เพื่อไม่ให้กระโดดไปแทรกกลางลำดับเดิม
+          const currentAll = await dbGetChaptersByBook(currentBookId);
+          const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
+
+          const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
 
           const newChap = {
             id: `${currentBookId}_chap_${Date.now()}`,
@@ -1647,8 +1648,8 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             nextUrl: nextUrl
           };
 
-          chapters.push(newChap);
           await dbSaveChapter(newChap);
+          chapters.push(newChap);
 
           currentChapterIndex = chapters.length - 1;
           await renderChapter();
