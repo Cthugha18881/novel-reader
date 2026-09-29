@@ -394,7 +394,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 380px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*โหมดอ่านทีละหน้าต้องกดปุ่มตอนถัดไปเอง | โหมดเลื่อนอ่านจะโหลดตอนต่อเนื่องอัตโนมัติ</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*กด 🔄 เพื่อแปลใหม่ตามคลังศัพท์ล่าสุด | ติ๊กถูกที่ช่องสี่เหลี่ยมด้านหน้าเมื่อต้องการลบ</p>
     </div>
   </div>
 
@@ -431,7 +431,7 @@
       <div class="gloss-category-tabs">
         <button class="cat-tab-btn active" onclick="switchGlossaryCategory('all', event)">ทั้งหมด</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('character', event)">👤 ตัวละคร</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('location', event)">🏔️️ สถานที่</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('location', event)">🏔 สถานที่</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('skill', event)">📜 วิชา/ทักษะ</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('item', event)">🗡️ สิ่งของ/โอสถ</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('other', event)">🏷️ อื่นๆ</button>
@@ -672,7 +672,6 @@
     let selectedWordBuffer = "";
     let isSelectedChinese = false;
 
-    // โครงสร้างคลังคำศัพท์ใหม่: { [src]: { tgt: string, category: 'character'|'location'|'skill'|'item'|'other' } }
     let glossary = {};
     let currentGlossaryCategory = 'all';
 
@@ -702,7 +701,7 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.1", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบติดตั้ง Smart Auto-Glossary จำแนกหมวดหมู่คำศัพท์และค้นหาคำแปลมาตรฐานให้อัตโนมัติ", src: "已支持智能自动术语库与分类管理" }
+          { th: "คุณสามารถกดปุ่ม 🔄 แปลใหม่ ในชั้นหนังสือเพื่ออัปเดตคำแปลของบทนั้นๆ ให้สอดคล้องกับคลังศัพท์ล่าสุดได้ทันที", src: "已支持单章即时重译与术语库联动" }
         ]
       }
     ];
@@ -1138,548 +1137,6 @@
       }, 150);
     }
 
-    // ==================== ENHANCED BOOKSHELF WITH DUAL TOGGLE SORT ====================
-    async function openBookshelfModal() {
-      const listContainer = document.getElementById('bookshelf-list');
-      listContainer.innerHTML = '<div style="text-align:center; padding:15px; opacity:0.6;">กำลังเปิดคลังหนังสือ...</div>';
-      openModal('bookshelf-modal');
-
-      const books = await dbGetAllBooks();
-      books.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-
-      if (books.length === 0) {
-        listContainer.innerHTML = '<div style="text-align:center; padding:20px; opacity:0.6; font-size:13px;">ยังไม่มีนิยายในชั้นหนังสือ วางลิงก์เพื่อเริ่มอ่านตอนแรกได้เลย</div>';
-        return;
-      }
-
-      listContainer.innerHTML = "";
-      for (const b of books) {
-        const itemBox = document.createElement('div');
-        itemBox.className = 'book-item-container';
-
-        let bookChaps = await dbGetChaptersByBook(b.bookId);
-        
-        if (!bookSortModes[b.bookId]) bookSortModes[b.bookId] = 'time_desc';
-        applySortToChapters(bookChaps, bookSortModes[b.bookId]);
-
-        const currentSort = bookSortModes[b.bookId];
-        const timeBtnLabel = currentSort === 'time_desc' ? 'ล่าสุด ↓' : (currentSort === 'time_asc' ? 'เก่าสุด ↑' : 'เวลา');
-        const titleBtnLabel = currentSort === 'title_asc' ? 'ชื่อ ก-ฮ ↓' : (currentSort === 'title_desc' ? 'ชื่อ ฮ-ก ↑' : 'ชื่อ');
-
-        itemBox.innerHTML = `
-          <div class="book-card-header">
-            <div class="book-info" onclick="toggleBookAccordion('${b.bookId}')">
-              <div class="book-title">📚 ${b.title || 'นิยายเรื่องใหม่'} <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนย่อย)</span></div>
-              <div class="book-meta" id="shelf-meta-${b.bookId}">อ่านค้างไว้: <b>${b.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${bookChaps.length} ตอนที่บันทึกไว้</div>
-            </div>
-            <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบทั้งเรื่อง</button>
-          </div>
-          <div class="batch-bar">
-            <span>แปลล่วงหน้า</span>
-            <input type="number" id="batch-input-${b.bookId}" class="form-input" style="width: 50px; padding: 3px 6px; font-size: 12px;" min="1" max="50" value="5">
-            <span>บท</span>
-            <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="startBatchTranslateForBook('${b.bookId}')">
-              ⚡ เริ่มแปลล่วงหน้า
-            </button>
-            <button class="btn" style="padding: 3px 6px; font-size: 10px; margin-left: auto;" onclick="fixBookNextUrl('${b.bookId}')" title="แก้ไข URL สำหรับบทถัดไป">
-              🔗 แก้ URL ถัดไป
-            </button>
-          </div>
-          
-          <div class="shelf-sub-toolbar" id="shelf-sub-bar-${b.bookId}" style="display: none;">
-            <div style="display: flex; gap: 4px; align-items: center;">
-              <span>เรียง:</span>
-              <button class="btn" id="sort-time-btn-${b.bookId}" style="padding: 2px 7px; font-size: 10px;" onclick="toggleSortMode(event, '${b.bookId}', 'time')">
-                ${timeBtnLabel}
-              </button>
-              <button class="btn" id="sort-title-btn-${b.bookId}" style="padding: 2px 7px; font-size: 10px;" onclick="toggleSortMode(event, '${b.bookId}', 'title')">
-                ${titleBtnLabel}
-              </button>
-            </div>
-            <div style="display: flex; gap: 6px; align-items: center;">
-              <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="toggleSelectAllChaps('${b.bookId}')">เลือกทั้งหมด</button>
-              <button class="btn btn-danger" id="del-selected-btn-${b.bookId}" style="padding: 2px 6px; font-size: 10px; display: none;" onclick="deleteSelectedChapters('${b.bookId}')">ลบที่เลือก</button>
-            </div>
-          </div>
-
-          <div class="book-chapters-list" id="shelf-chaps-${b.bookId}">
-            ${renderChaptersHtml(b.bookId, bookChaps, b.lastChapterId)}
-          </div>
-        `;
-        listContainer.appendChild(itemBox);
-      }
-    }
-
-    async function toggleSortMode(e, bookId, type) {
-      e.stopPropagation();
-      let currentMode = bookSortModes[bookId] || 'time_desc';
-
-      if (type === 'time') {
-        bookSortModes[bookId] = (currentMode === 'time_desc') ? 'time_asc' : 'time_desc';
-      } else if (type === 'title') {
-        bookSortModes[bookId] = (currentMode === 'title_asc') ? 'title_desc' : 'title_asc';
-      }
-
-      const currentSort = bookSortModes[bookId];
-      const timeBtn = document.getElementById(`sort-time-btn-${bookId}`);
-      const titleBtn = document.getElementById(`sort-title-btn-${bookId}`);
-
-      if (timeBtn) timeBtn.innerText = currentSort === 'time_desc' ? 'ล่าสุด ↓' : (currentSort === 'time_asc' ? 'เก่าสุด ↑' : 'เวลา');
-      if (titleBtn) titleBtn.innerText = currentSort === 'title_asc' ? 'ชื่อ ก-ฮ ↓' : (currentSort === 'title_desc' ? 'ชื่อ ฮ-ก ↑' : 'ชื่อ');
-
-      let bookChaps = await dbGetChaptersByBook(bookId);
-      applySortToChapters(bookChaps, currentSort);
-
-      const books = await dbGetAllBooks();
-      const b = books.find(x => x.bookId === bookId);
-
-      const listEl = document.getElementById(`shelf-chaps-${bookId}`);
-      if (listEl) {
-        listEl.innerHTML = renderChaptersHtml(bookId, bookChaps, b?.lastChapterId);
-      }
-      updateSelectedDeleteBtn(bookId);
-    }
-
-    function applySortToChapters(chapsList, sortMode) {
-      if (sortMode === 'time_desc') {
-        chapsList.sort((x, y) => y.order - x.order);
-      } else if (sortMode === 'time_asc') {
-        chapsList.sort((x, y) => x.order - y.order);
-      } else if (sortMode === 'title_asc') {
-        chapsList.sort((x, y) => x.title.localeCompare(y.title, 'th', { numeric: true }));
-      } else if (sortMode === 'title_desc') {
-        chapsList.sort((x, y) => y.title.localeCompare(x.title, 'th', { numeric: true }));
-      }
-    }
-
-    function renderChaptersHtml(bookId, bookChaps, readingChapId) {
-      if (!bookChaps || bookChaps.length === 0) {
-        return '<div style="padding:8px 14px; font-size:11px; opacity:0.5;">ไม่มีตอน</div>';
-      }
-
-      let chapsHtml = '';
-      bookChaps.forEach((ch) => {
-        let isActive = false;
-        if (bookId === currentBookId && chapters[currentChapterIndex]) {
-          isActive = (ch.id === chapters[currentChapterIndex].id);
-        } else if (readingChapId) {
-          isActive = (ch.id === readingChapId);
-        }
-
-        const activeClass = isActive ? 'active' : '';
-
-        chapsHtml += `
-          <div class="chap-subitem ${activeClass}">
-            <input type="checkbox" class="chap-chk chk-book-${bookId}" value="${ch.id}" onchange="updateSelectedDeleteBtn('${bookId}')">
-            <div class="chap-name-btn" onclick="jumpToChapterById('${bookId}', '${ch.id}')">
-              📖 ${ch.title}
-            </div>
-            <div style="display:flex; gap:6px; align-items:center;">
-              <button class="chap-action-btn" style="background:rgba(37,99,235,0.1); color:#2563eb;" onclick="jumpToChapterById('${bookId}', '${ch.id}')">อ่าน</button>
-              <button class="chap-action-btn" style="background:rgba(220,38,38,0.1); color:#dc2626;" onclick="deleteSingleChapter(event, '${bookId}', '${ch.id}', '${ch.title}')" title="ลบบทนี้">✕ ลบ</button>
-            </div>
-          </div>
-        `;
-      });
-      return chapsHtml;
-    }
-
-    function toggleBookAccordion(bookId) {
-      const list = document.getElementById(`shelf-chaps-${bookId}`);
-      const bar = document.getElementById(`shelf-sub-bar-${bookId}`);
-      if (list && bar) {
-        const isShown = (list.style.display === 'block');
-        list.style.display = isShown ? 'none' : 'block';
-        bar.style.display = isShown ? 'none' : 'flex';
-      }
-    }
-
-    function updateSelectedDeleteBtn(bookId) {
-      const chks = document.querySelectorAll(`.chk-book-${bookId}:checked`);
-      const delBtn = document.getElementById(`del-selected-btn-${bookId}`);
-      if (delBtn) {
-        if (chks.length > 0) {
-          delBtn.style.display = 'inline-flex';
-          delBtn.innerText = `ลบที่เลือก (${chks.length})`;
-        } else {
-          delBtn.style.display = 'none';
-        }
-      }
-    }
-
-    function toggleSelectAllChaps(bookId) {
-      const chks = document.querySelectorAll(`.chk-book-${bookId}`);
-      if (chks.length === 0) return;
-      const allChecked = Array.from(chks).every(c => c.checked);
-      chks.forEach(c => c.checked = !allChecked);
-      updateSelectedDeleteBtn(bookId);
-    }
-
-    function abortAllRunningProcesses() {
-      if (activeAbortController) {
-        activeAbortController.abort();
-        activeAbortController = null;
-      }
-      isPrefetching = false;
-      document.getElementById('prefetch-badge').style.display = 'none';
-      checkAndRefreshBottomStatus();
-    }
-
-    async function deleteSelectedChapters(bookId) {
-      const chks = document.querySelectorAll(`.chk-book-${bookId}:checked`);
-      const count = chks.length;
-      if (count === 0) return;
-
-      if (!confirm(`คุณต้องการลบตอนที่เลือกจำนวน ${count} ตอน ออกจากเครื่องใช่หรือไม่?`)) return;
-
-      abortAllRunningProcesses();
-
-      const idsToDelete = Array.from(chks).map(c => c.value);
-      await dbDeleteMultipleChapters(idsToDelete);
-
-      const remainingChaps = await dbGetChaptersByBook(bookId);
-      remainingChaps.sort((x, y) => x.order - y.order);
-
-      const books = await dbGetAllBooks();
-      const targetBook = books.find(b => b.bookId === bookId);
-
-      if (targetBook) {
-        if (remainingChaps.length > 0) {
-          let safeActiveId = targetBook.lastChapterId;
-          if (!remainingChaps.some(c => c.id === safeActiveId)) {
-            safeActiveId = remainingChaps[0].id;
-          }
-          const safeActiveChap = remainingChaps.find(c => c.id === safeActiveId) || remainingChaps[0];
-          const safeActiveIdx = remainingChaps.indexOf(safeActiveChap);
-          const latestChap = remainingChaps[remainingChaps.length - 1];
-
-          await dbSaveBook({
-            ...targetBook,
-            totalChapters: remainingChaps.length,
-            lastChapterId: safeActiveChap.id,
-            lastChapterTitle: safeActiveChap.title,
-            lastChapterIndex: safeActiveIdx,
-            lastUrl: latestChap.sourceUrl
-          });
-        } else {
-          await dbSaveBook({
-            ...targetBook,
-            totalChapters: 0,
-            lastChapterId: '',
-            lastChapterTitle: "ไม่มีตอน",
-            lastChapterIndex: 0,
-            lastUrl: ''
-          });
-        }
-      }
-
-      if (currentBookId === bookId) {
-        await loadBookFromDB(bookId);
-      } else {
-        refreshShelfViewOnly(bookId);
-      }
-    }
-
-    async function deleteSingleChapter(e, bookId, chapId, chapTitle) {
-      e.stopPropagation();
-      if (!confirm(`ต้องการลบ "${chapTitle}" ออกจากเครื่องใช่หรือไม่?`)) return;
-
-      abortAllRunningProcesses();
-
-      await dbDeleteSpecificChapter(chapId);
-
-      const remainingChaps = await dbGetChaptersByBook(bookId);
-      remainingChaps.sort((x, y) => x.order - y.order);
-
-      const books = await dbGetAllBooks();
-      const targetBook = books.find(b => b.bookId === bookId);
-
-      if (targetBook) {
-        if (remainingChaps.length > 0) {
-          let safeActiveId = targetBook.lastChapterId;
-          if (!remainingChaps.some(c => c.id === safeActiveId)) {
-            safeActiveId = remainingChaps[0].id;
-          }
-          const safeActiveChap = remainingChaps.find(c => c.id === safeActiveId) || remainingChaps[0];
-          const safeActiveIdx = remainingChaps.indexOf(safeActiveChap);
-          const latestChap = remainingChaps[remainingChaps.length - 1];
-
-          await dbSaveBook({
-            ...targetBook,
-            totalChapters: remainingChaps.length,
-            lastChapterId: safeActiveChap.id,
-            lastChapterTitle: safeActiveChap.title,
-            lastChapterIndex: safeActiveIdx,
-            lastUrl: latestChap.sourceUrl
-          });
-        } else {
-          await dbSaveBook({
-            ...targetBook,
-            totalChapters: 0,
-            lastChapterId: '',
-            lastChapterTitle: "ไม่มีตอน",
-            lastChapterIndex: 0,
-            lastUrl: ''
-          });
-        }
-      }
-
-      if (currentBookId === bookId) {
-        await loadBookFromDB(bookId);
-      } else {
-        refreshShelfViewOnly(bookId);
-      }
-    }
-
-    async function refreshShelfViewOnly(bookId) {
-      let liveChaps = await dbGetChaptersByBook(bookId);
-      applySortToChapters(liveChaps, bookSortModes[bookId] || 'time_desc');
-      const listEl = document.getElementById(`shelf-chaps-${bookId}`);
-      const metaEl = document.getElementById(`shelf-meta-${bookId}`);
-      const books = await dbGetAllBooks();
-      const targetBook = books.find(b => b.bookId === bookId);
-
-      if (listEl) {
-        listEl.innerHTML = renderChaptersHtml(bookId, liveChaps, targetBook?.lastChapterId);
-      }
-      if (metaEl && targetBook) {
-        metaEl.innerHTML = `อ่านค้างไว้: <b>${targetBook.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${liveChaps.length} ตอนที่บันทึกไว้`;
-      }
-      updateSelectedDeleteBtn(bookId);
-    }
-
-    async function fixBookNextUrl(bookId) {
-      const bookChaps = await dbGetChaptersByBook(bookId);
-      bookChaps.sort((x, y) => x.order - y.order);
-      if (bookChaps.length === 0) return;
-      const lastChap = bookChaps[bookChaps.length - 1];
-
-      const input = prompt(`แก้ไข URL ตอนถัดไปสำหรับ "${lastChap.title}":`, lastChap.nextUrl || "");
-      if (input && input.trim()) {
-        lastChap.nextUrl = input.trim();
-        await dbSaveChapter(lastChap);
-        if (currentBookId === bookId) {
-          nextUrlCalculated = lastChap.nextUrl;
-        }
-        alert("อัปเดต URL เรียบร้อยแล้ว ตอนนี้สามารถกด 'เริ่มแปลล่วงหน้า' ได้ทันที");
-        checkAndRefreshBottomStatus();
-      }
-    }
-
-    async function jumpToChapterById(bookId, chapId) {
-      await loadBookFromDB(bookId, chapId);
-      closeModal('bookshelf-modal');
-    }
-
-    async function loadBookFromDB(bookId, specifyChapIdOrIdx = null) {
-      const books = await dbGetAllBooks();
-      const targetBook = books.find(b => b.bookId === bookId);
-      if (!targetBook) return;
-
-      const loadedChaps = await dbGetChaptersByBook(bookId);
-      if (loadedChaps.length > 0) {
-        loadedChaps.sort((a, b) => a.order - b.order);
-        chapters = loadedChaps;
-        currentBookId = bookId;
-        currentBookTitle = targetBook.title;
-        isUserCustomTitle = targetBook.isUserCustomTitle || false;
-
-        if (typeof specifyChapIdOrIdx === 'string') {
-          const foundIdx = chapters.findIndex(c => c.id === specifyChapIdOrIdx);
-          currentChapterIndex = (foundIdx !== -1) ? foundIdx : 0;
-        } else if (typeof specifyChapIdOrIdx === 'number') {
-          currentChapterIndex = Math.min(specifyChapIdOrIdx, chapters.length - 1);
-        } else if (targetBook.lastChapterId) {
-          const foundIdx = chapters.findIndex(c => c.id === targetBook.lastChapterId);
-          currentChapterIndex = (foundIdx !== -1) ? foundIdx : Math.min(targetBook.lastChapterIndex || 0, chapters.length - 1);
-        } else {
-          currentChapterIndex = Math.min(targetBook.lastChapterIndex || 0, chapters.length - 1);
-        }
-
-        const currentActiveChap = chapters[currentChapterIndex];
-        const latestChap = chapters[chapters.length - 1];
-
-        currentUrl = currentActiveChap.sourceUrl || targetBook.lastUrl || "";
-        nextUrlCalculated = latestChap.nextUrl;
-        
-        renderVirtualWindow(currentChapterIndex, true);
-        refreshShelfViewOnly(bookId);
-      } else {
-        chapters = [{
-          id: "empty_chap",
-          title: "ไม่มีตอนในเครื่อง",
-          paragraphs: [{ th: "นิยายเรื่องนี้ยังไม่มีตอนที่บันทึกไว้ หรือถูกลบออกไปทั้งหมดแล้ว", src: "暂无内容" }]
-        }];
-        currentChapterIndex = 0;
-        renderVirtualWindow(0, true);
-        refreshShelfViewOnly(bookId);
-      }
-    }
-
-    async function removeBookFromShelf(e, bookId) {
-      e.stopPropagation();
-      if (!confirm("ต้องการลบนิยายเรื่องนี้และตอนที่เก็บไว้ทั้งหมดในเครื่องใช่หรือไม่?")) return;
-      abortAllRunningProcesses();
-      await dbDeleteBook(bookId);
-      openBookshelfModal();
-    }
-
-    function computeNextNumericUrl(url) {
-      if (!url) return null;
-      const match = url.match(/^(.*?)(\d+)(\.html?|\/)?$/i);
-      if (!match) return null;
-
-      const prefix = match[1];
-      const numStr = match[2];
-      const suffix = match[3] || '';
-
-      const nextNum = (BigInt(numStr) + 1n).toString();
-      const paddedNextNum = nextNum.padStart(numStr.length, '0');
-
-      return `${prefix}${paddedNextNum}${suffix}`;
-    }
-
-    async function scrapePage(url, signal = null) {
-      let rawText = "";
-      let rawChapTitle = "";
-      let rawBookTitle = "";
-
-      try {
-        const res = await fetch(`https://r.jina.ai/${url}`, { signal });
-        if (res.ok) {
-          const md = await res.text();
-          
-          if (md.includes('404 Not Found') || md.includes('页面不存在') || (md.includes('Just a moment...') && md.length < 1500)) {
-            throw new Error(`404`);
-          }
-
-          const lines = md.split('\n').map(l => l.trim());
-          const titleLine = lines.find(l => l.startsWith('Title:'));
-          if (titleLine) {
-            const fullTitle = titleLine.replace('Title:', '').trim();
-            const parts = fullTitle.split(/[-_]/);
-            if (parts.length >= 2) {
-              rawBookTitle = parts[0].trim();
-              rawChapTitle = parts[1].replace('-69书吧', '').trim();
-            } else {
-              rawChapTitle = fullTitle.replace('-69书吧', '').trim();
-            }
-          }
-
-          const filteredLines = lines.filter(l => {
-            if (!l || l.length < 2) return false;
-            if (l.startsWith('Title:') || l.startsWith('URL Source:') || l.startsWith('Published Time:') || l.startsWith('Markdown Content:')) return false;
-            if (l.startsWith('!') || l.startsWith('[') || l.startsWith('http')) return false;
-            if (!rawChapTitle && (l.includes('第') && l.includes('章'))) {
-              rawChapTitle = l;
-              return false;
-            }
-            return true;
-          });
-          rawText = filteredLines.join('\n\n');
-        } else if (res.status === 404) {
-          throw new Error('404');
-        }
-      } catch(e) {
-        if (e.name === 'AbortError') throw new Error("คำสั่งถูกยกเลิกแล้ว");
-        throw e;
-      }
-
-      if (!rawText || rawText.length < 40) {
-        throw new Error("404");
-      }
-
-      const nextUrl = computeNextNumericUrl(url);
-
-      return {
-        text: rawText,
-        nextUrl: nextUrl,
-        rawChapTitle: rawChapTitle || "บทนิยาย",
-        rawBookTitle: rawBookTitle || ""
-      };
-    }
-
-    function extractBookIdFromUrl(url) {
-      const m = url.match(/txt\/(\d+)\//);
-      if (m) return 'book_' + m[1];
-      const m2 = url.match(/book\/(\d+)/);
-      if (m2) return 'book_' + m2[1];
-      return 'book_' + btoa(url.split('?')[0]).substring(0, 16);
-    }
-
-    function getGenreInstruction(genre) {
-      switch (genre) {
-        case 'xianxia':
-          return `สไตล์: "เทพเซียน / บำเพ็ญเพียร (Xianxia)"
-- ใช้สรรพนาม: "ข้า - เจ้า", "ผู้อาวุโส - ศิษย์น้อง/ผู้น้อย" ห้ามหลุด "ฉัน/นาย/คุณ/ผม" เด็ดขาด
-- ศัพท์เต๋า: บำเพ็ญเพียร, ลมปราณ, แก่นทองคำ, ทัณฑ์สวรรค์, ตำหนัก, ยอดเขา`;
-        case 'wuxia':
-          return `สไตล์: "กำลังภายใน / ยุทธภพ (Wuxia)"
-- บรรยากาศยุทธจักร: สำนัก, คัมภีร์ยุทธ, ปราณคุ้มกาย, กระบี่, ท่องยุทธภพ
-- สรรพนามคลาสสิก: "ข้า - ท่าน/เจ้า"`;
-        case 'system_game':
-          return `สไตล์: "ระบบ / ดันเจี้ยน / ผู้เล่น (System/Game)"
-- ข้อความแจ้งเตือน: [ติ๊ง! ตรวจพบภารกิจ], [เลเวลอัป]
-- สรรพนามทันสมัย: "ฉัน - นาย"`;
-        case 'scifi':
-          return `สไตล์: "ไซไฟ / มหากาพย์อวกาศ (Sci-Fi)"
-- ศัพท์วิทยาศาสตร์: ยานรบ, รูหนอน, วาร์ป, คลื่นแม่เหล็ก, พันธุกรรม`;
-        case 'horror':
-          return `สไตล์: "สยองขวัญ / เอาชีวิตรอด (Horror)"
-- เน้นบรรยายบรรยากาศ: วังเวง, เย็นเยียบ, เสียงลมหายใจ, กลิ่นคาว, เงาตะคุ่ม`;
-        default:
-          return `สไตล์: วรรณกรรมทั่วไป อ่านลื่นไหลเป็นธรรมชาติ`;
-      }
-    }
-
-    function cleanAndParseJSON(rawStr) {
-      if (!rawStr) throw new Error("ผลลัพธ์ว่างเปล่า");
-
-      let str = rawStr.replace(/```json/gi, '').replace(/```/g, '').trim();
-
-      str = str.replace(/(?<!\\)[\r\n\t]/g, (match) => {
-        if (match === '\n') return '\\n';
-        if (match === '\r') return '\\r';
-        if (match === '\t') return '\\t';
-        return match;
-      });
-
-      str = str.replace(/,\s*([\]}])/g, '$1');
-
-      try {
-        return JSON.parse(str);
-      } catch (err) {
-        const paragraphs = [];
-        let bookTitle = "";
-        let chapterTitle = "";
-
-        const bookMatch = rawStr.match(/"translatedBookTitle"\s*:\s*"([^"]+)"/);
-        if (bookMatch) bookTitle = bookMatch[1];
-
-        const chapMatch = rawStr.match(/"translatedChapterTitle"\s*:\s*"([^"]+)"/);
-        if (chapMatch) chapterTitle = chapMatch[1];
-
-        const pRegex = /\{\s*"th"\s*:\s*"((?:\\.|[^"\\])*)"\s*,\s*"src"\s*:\s*"((?:\\.|[^"\\])*)"\s*\}/g;
-        let pMatch;
-        while ((pMatch = pRegex.exec(rawStr)) !== null) {
-          paragraphs.push({
-            th: pMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'),
-            src: pMatch[2].replace(/\\n/g, '\n').replace(/\\"/g, '"')
-          });
-        }
-
-        if (paragraphs.length > 0) {
-          return {
-            translatedBookTitle: bookTitle,
-            translatedChapterTitle: chapterTitle,
-            paragraphs: paragraphs
-          };
-        }
-
-        throw new Error("โครงสร้าง JSON เสียหาย: " + err.message);
-      }
-    }
-
     // ==================== AUTO-GLOSSARY AI SCANNER ====================
     async function extractAndStoreAutoGlossary(rawText, modelToUse, signal = null) {
       const isAutoGlossaryEnabled = localStorage.getItem('nov_enable_auto_glossary') !== 'false';
@@ -1759,7 +1216,6 @@
 
       if (!key) throw new Error("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
 
-      // รวบรวมคำศัพท์ล็อกคำแปล
       const termList = Object.entries(glossary).map(([k,v]) => `${k}=${v.tgt || v}`).join(", ");
       const genreRule = getGenreInstruction(genre);
 
@@ -1853,12 +1309,10 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         try {
           activeAbortController = new AbortController();
 
-          // ขั้นตอนที่ 1: สแกนสกัดหาชื่อเฉพาะและบันทึกลงคลังคำศัพท์ล่วงหน้าทันที
           if (attempt === 1) {
             await extractAndStoreAutoGlossary(rawText, activeModel, activeAbortController.signal);
           }
 
-          // ขั้นตอนที่ 2: ดำเนินการแปลเนื้อหาโดยอิงศัพท์จากคลังที่อัปเดตใหม่
           const res = await executeApiCall(rawText, activeModel, rawChapTitle, rawBookTitle, activeAbortController.signal);
           activeAbortController = null;
           return res;
@@ -2426,7 +1880,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // AI Re-Query & Research Term
     async function researchGlossaryTerm(src) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
@@ -2484,6 +1937,443 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       localStorage.setItem('nov_gloss', JSON.stringify(glossary));
       renderGlossaryUI();
       renderVirtualWindow(currentChapterIndex);
+    }
+
+    // ==================== RE-TRANSLATE CHAPTER BY ID (แปลบทนั้นใหม่ตามคลังศัพท์ล่าสุด) ====================
+    async function retranslateSpecificChapter(e, bookId, chapId) {
+      e.stopPropagation();
+
+      const bookChaps = await dbGetChaptersByBook(bookId);
+      const targetChap = bookChaps.find(c => c.id === chapId);
+      if (!targetChap) return alert("ไม่พบบทนิยายนี้ในเครื่อง");
+
+      if (!confirm(`ต้องการแปล "${targetChap.title}" ใหม่อีกครั้งตามคลังศัพท์ล่าสุดใช่หรือไม่?`)) return;
+
+      // รวมข้อความจีนต้นฉบับเดิมที่มีบันทึกไว้ในย่อหน้า
+      let srcChineseText = "";
+      if (Array.isArray(targetChap.paragraphs) && targetChap.paragraphs.length > 0) {
+        srcChineseText = targetChap.paragraphs.map(p => p.src || "").filter(Boolean).join("\n\n");
+      }
+
+      if (!srcChineseText || srcChineseText.length < 20) {
+        if (!targetChap.sourceUrl) {
+          return alert("ไม่พบข้อความต้นฉบับเดิมและไม่มี URL ของบทนี้");
+        }
+        try {
+          const scraped = await scrapePage(targetChap.sourceUrl);
+          srcChineseText = scraped.text;
+        } catch (err) {
+          return alert("ดึงข้อความต้นฉบับไม่สำเร็จ: " + err.message);
+        }
+      }
+
+      const btnEl = e.target;
+      const originalText = btnEl.innerText;
+      btnEl.disabled = true;
+      btnEl.innerText = "⏳ แปลใหม่...";
+
+      try {
+        const result = await translateTextWithPingPong(srcChineseText, null, targetChap.title, currentBookTitle);
+        targetChap.paragraphs = result.paragraphs;
+        if (result.chapterTitle) targetChap.title = result.chapterTitle;
+
+        await dbSaveChapter(targetChap);
+
+        // หากกำลังเปิดอ่านบทนี้อยู่ ให้รีเฟรชหน้าจอทันที
+        if (currentBookId === bookId) {
+          const memChap = chapters.find(c => c.id === chapId);
+          if (memChap) {
+            memChap.paragraphs = targetChap.paragraphs;
+            memChap.title = targetChap.title;
+          }
+          renderVirtualWindow(currentChapterIndex, false);
+        }
+
+        refreshShelfViewOnly(bookId);
+        alert(`✓ แปล "${targetChap.title}" ใหม่ตามคลังศัพท์ล่าสุดเรียบร้อยแล้ว`);
+      } catch (err) {
+        alert("แปลใหม่ไม่สำเร็จ: " + err.message);
+      } finally {
+        btnEl.disabled = false;
+        btnEl.innerText = originalText;
+      }
+    }
+
+    function renderChaptersHtml(bookId, bookChaps, readingChapId) {
+      if (!bookChaps || bookChaps.length === 0) {
+        return '<div style="padding:8px 14px; font-size:11px; opacity:0.5;">ไม่มีตอน</div>';
+      }
+
+      let chapsHtml = '';
+      bookChaps.forEach((ch) => {
+        let isActive = false;
+        if (bookId === currentBookId && chapters[currentChapterIndex]) {
+          isActive = (ch.id === chapters[currentChapterIndex].id);
+        } else if (readingChapId) {
+          isActive = (ch.id === readingChapId);
+        }
+
+        const activeClass = isActive ? 'active' : '';
+
+        chapsHtml += `
+          <div class="chap-subitem ${activeClass}">
+            <input type="checkbox" class="chap-chk chk-book-${bookId}" value="${ch.id}" onchange="updateSelectedDeleteBtn('${bookId}')">
+            <div class="chap-name-btn" onclick="jumpToChapterById('${bookId}', '${ch.id}')">
+              📖 ${ch.title}
+            </div>
+            <div style="display:flex; gap:6px; align-items:center;">
+              <button class="chap-action-btn" style="background:rgba(37,99,235,0.1); color:#2563eb;" onclick="jumpToChapterById('${bookId}', '${ch.id}')">อ่าน</button>
+              <button class="chap-action-btn" style="background:rgba(16,185,129,0.1); color:#059669;" onclick="retranslateSpecificChapter(event, '${bookId}', '${ch.id}')" title="แปลบทนี้ใหม่ตามคลังคำศัพท์ล่าสุด">🔄 แปลใหม่</button>
+            </div>
+          </div>
+        `;
+      });
+      return chapsHtml;
+    }
+
+    function toggleBookAccordion(bookId) {
+      const list = document.getElementById(`shelf-chaps-${bookId}`);
+      const bar = document.getElementById(`shelf-sub-bar-${bookId}`);
+      if (list && bar) {
+        const isShown = (list.style.display === 'block');
+        list.style.display = isShown ? 'none' : 'block';
+        bar.style.display = isShown ? 'none' : 'flex';
+      }
+    }
+
+    function updateSelectedDeleteBtn(bookId) {
+      const chks = document.querySelectorAll(`.chk-book-${bookId}:checked`);
+      const delBtn = document.getElementById(`del-selected-btn-${bookId}`);
+      if (delBtn) {
+        if (chks.length > 0) {
+          delBtn.style.display = 'inline-flex';
+          delBtn.innerText = `ลบที่เลือก (${chks.length})`;
+        } else {
+          delBtn.style.display = 'none';
+        }
+      }
+    }
+
+    function toggleSelectAllChaps(bookId) {
+      const chks = document.querySelectorAll(`.chk-book-${bookId}`);
+      if (chks.length === 0) return;
+      const allChecked = Array.from(chks).every(c => c.checked);
+      chks.forEach(c => c.checked = !allChecked);
+      updateSelectedDeleteBtn(bookId);
+    }
+
+    function abortAllRunningProcesses() {
+      if (activeAbortController) {
+        activeAbortController.abort();
+        activeAbortController = null;
+      }
+      isPrefetching = false;
+      document.getElementById('prefetch-badge').style.display = 'none';
+      checkAndRefreshBottomStatus();
+    }
+
+    async function deleteSelectedChapters(bookId) {
+      const chks = document.querySelectorAll(`.chk-book-${bookId}:checked`);
+      const count = chks.length;
+      if (count === 0) return;
+
+      if (!confirm(`คุณต้องการลบตอนที่เลือกจำนวน ${count} ตอน ออกจากเครื่องใช่หรือไม่?`)) return;
+
+      abortAllRunningProcesses();
+
+      const idsToDelete = Array.from(chks).map(c => c.value);
+      await dbDeleteMultipleChapters(idsToDelete);
+
+      const remainingChaps = await dbGetChaptersByBook(bookId);
+      remainingChaps.sort((x, y) => x.order - y.order);
+
+      const books = await dbGetAllBooks();
+      const targetBook = books.find(b => b.bookId === bookId);
+
+      if (targetBook) {
+        if (remainingChaps.length > 0) {
+          let safeActiveId = targetBook.lastChapterId;
+          if (!remainingChaps.some(c => c.id === safeActiveId)) {
+            safeActiveId = remainingChaps[0].id;
+          }
+          const safeActiveChap = remainingChaps.find(c => c.id === safeActiveId) || remainingChaps[0];
+          const safeActiveIdx = remainingChaps.indexOf(safeActiveChap);
+          const latestChap = remainingChaps[remainingChaps.length - 1];
+
+          await dbSaveBook({
+            ...targetBook,
+            totalChapters: remainingChaps.length,
+            lastChapterId: safeActiveChap.id,
+            lastChapterTitle: safeActiveChap.title,
+            lastChapterIndex: safeActiveIdx,
+            lastUrl: latestChap.sourceUrl
+          });
+        } else {
+          await dbSaveBook({
+            ...targetBook,
+            totalChapters: 0,
+            lastChapterId: '',
+            lastChapterTitle: "ไม่มีตอน",
+            lastChapterIndex: 0,
+            lastUrl: ''
+          });
+        }
+      }
+
+      if (currentBookId === bookId) {
+        await loadBookFromDB(bookId);
+      } else {
+        refreshShelfViewOnly(bookId);
+      }
+    }
+
+    async function refreshShelfViewOnly(bookId) {
+      let liveChaps = await dbGetChaptersByBook(bookId);
+      applySortToChapters(liveChaps, bookSortModes[bookId] || 'time_desc');
+      const listEl = document.getElementById(`shelf-chaps-${bookId}`);
+      const metaEl = document.getElementById(`shelf-meta-${bookId}`);
+      const books = await dbGetAllBooks();
+      const targetBook = books.find(b => b.bookId === bookId);
+
+      if (listEl) {
+        listEl.innerHTML = renderChaptersHtml(bookId, liveChaps, targetBook?.lastChapterId);
+      }
+      if (metaEl && targetBook) {
+        metaEl.innerHTML = `อ่านค้างไว้: <b>${targetBook.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${liveChaps.length} ตอนที่บันทึกไว้`;
+      }
+      updateSelectedDeleteBtn(bookId);
+    }
+
+    async function fixBookNextUrl(bookId) {
+      const bookChaps = await dbGetChaptersByBook(bookId);
+      bookChaps.sort((x, y) => x.order - y.order);
+      if (bookChaps.length === 0) return;
+      const lastChap = bookChaps[bookChaps.length - 1];
+
+      const input = prompt(`แก้ไข URL ตอนถัดไปสำหรับ "${lastChap.title}":`, lastChap.nextUrl || "");
+      if (input && input.trim()) {
+        lastChap.nextUrl = input.trim();
+        await dbSaveChapter(lastChap);
+        if (currentBookId === bookId) {
+          nextUrlCalculated = lastChap.nextUrl;
+        }
+        alert("อัปเดต URL เรียบร้อยแล้ว ตอนนี้สามารถกด 'เริ่มแปลล่วงหน้า' ได้ทันที");
+        checkAndRefreshBottomStatus();
+      }
+    }
+
+    async function jumpToChapterById(bookId, chapId) {
+      await loadBookFromDB(bookId, chapId);
+      closeModal('bookshelf-modal');
+    }
+
+    async function loadBookFromDB(bookId, specifyChapIdOrIdx = null) {
+      const books = await dbGetAllBooks();
+      const targetBook = books.find(b => b.bookId === bookId);
+      if (!targetBook) return;
+
+      const loadedChaps = await dbGetChaptersByBook(bookId);
+      if (loadedChaps.length > 0) {
+        loadedChaps.sort((a, b) => a.order - b.order);
+        chapters = loadedChaps;
+        currentBookId = bookId;
+        currentBookTitle = targetBook.title;
+        isUserCustomTitle = targetBook.isUserCustomTitle || false;
+
+        if (typeof specifyChapIdOrIdx === 'string') {
+          const foundIdx = chapters.findIndex(c => c.id === specifyChapIdOrIdx);
+          currentChapterIndex = (foundIdx !== -1) ? foundIdx : 0;
+        } else if (typeof specifyChapIdOrIdx === 'number') {
+          currentChapterIndex = Math.min(specifyChapIdOrIdx, chapters.length - 1);
+        } else if (targetBook.lastChapterId) {
+          const foundIdx = chapters.findIndex(c => c.id === targetBook.lastChapterId);
+          currentChapterIndex = (foundIdx !== -1) ? foundIdx : Math.min(targetBook.lastChapterIndex || 0, chapters.length - 1);
+        } else {
+          currentChapterIndex = Math.min(targetBook.lastChapterIndex || 0, chapters.length - 1);
+        }
+
+        const currentActiveChap = chapters[currentChapterIndex];
+        const latestChap = chapters[chapters.length - 1];
+
+        currentUrl = currentActiveChap.sourceUrl || targetBook.lastUrl || "";
+        nextUrlCalculated = latestChap.nextUrl;
+        
+        renderVirtualWindow(currentChapterIndex, true);
+        refreshShelfViewOnly(bookId);
+      } else {
+        chapters = [{
+          id: "empty_chap",
+          title: "ไม่มีตอนในเครื่อง",
+          paragraphs: [{ th: "นิยายเรื่องนี้ยังไม่มีตอนที่บันทึกไว้ หรือถูกลบออกไปทั้งหมดแล้ว", src: "暂无内容" }]
+        }];
+        currentChapterIndex = 0;
+        renderVirtualWindow(0, true);
+        refreshShelfViewOnly(bookId);
+      }
+    }
+
+    async function removeBookFromShelf(e, bookId) {
+      e.stopPropagation();
+      if (!confirm("ต้องการลบนิยายเรื่องนี้และตอนที่เก็บไว้ทั้งหมดในเครื่องใช่หรือไม่?")) return;
+      abortAllRunningProcesses();
+      await dbDeleteBook(bookId);
+      openBookshelfModal();
+    }
+
+    function computeNextNumericUrl(url) {
+      if (!url) return null;
+      const match = url.match(/^(.*?)(\d+)(\.html?|\/)?$/i);
+      if (!match) return null;
+
+      const prefix = match[1];
+      const numStr = match[2];
+      const suffix = match[3] || '';
+
+      const nextNum = (BigInt(numStr) + 1n).toString();
+      const paddedNextNum = nextNum.padStart(numStr.length, '0');
+
+      return `${prefix}${paddedNextNum}${suffix}`;
+    }
+
+    async function scrapePage(url, signal = null) {
+      let rawText = "";
+      let rawChapTitle = "";
+      let rawBookTitle = "";
+
+      try {
+        const res = await fetch(`https://r.jina.ai/${url}`, { signal });
+        if (res.ok) {
+          const md = await res.text();
+          
+          if (md.includes('404 Not Found') || md.includes('页面不存在') || (md.includes('Just a moment...') && md.length < 1500)) {
+            throw new Error(`404`);
+          }
+
+          const lines = md.split('\n').map(l => l.trim());
+          const titleLine = lines.find(l => l.startsWith('Title:'));
+          if (titleLine) {
+            const fullTitle = titleLine.replace('Title:', '').trim();
+            const parts = fullTitle.split(/[-_]/);
+            if (parts.length >= 2) {
+              rawBookTitle = parts[0].trim();
+              rawChapTitle = parts[1].replace('-69书吧', '').trim();
+            } else {
+              rawChapTitle = fullTitle.replace('-69书吧', '').trim();
+            }
+          }
+
+          const filteredLines = lines.filter(l => {
+            if (!l || l.length < 2) return false;
+            if (l.startsWith('Title:') || l.startsWith('URL Source:') || l.startsWith('Published Time:') || l.startsWith('Markdown Content:')) return false;
+            if (l.startsWith('!') || l.startsWith('[') || l.startsWith('http')) return false;
+            if (!rawChapTitle && (l.includes('第') && l.includes('章'))) {
+              rawChapTitle = l;
+              return false;
+            }
+            return true;
+          });
+          rawText = filteredLines.join('\n\n');
+        } else if (res.status === 404) {
+          throw new Error('404');
+        }
+      } catch(e) {
+        if (e.name === 'AbortError') throw new Error("คำสั่งถูกยกเลิกแล้ว");
+        throw e;
+      }
+
+      if (!rawText || rawText.length < 40) {
+        throw new Error("404");
+      }
+
+      const nextUrl = computeNextNumericUrl(url);
+
+      return {
+        text: rawText,
+        nextUrl: nextUrl,
+        rawChapTitle: rawChapTitle || "บทนิยาย",
+        rawBookTitle: rawBookTitle || ""
+      };
+    }
+
+    function extractBookIdFromUrl(url) {
+      const m = url.match(/txt\/(\d+)\//);
+      if (m) return 'book_' + m[1];
+      const m2 = url.match(/book\/(\d+)/);
+      if (m2) return 'book_' + m2[1];
+      return 'book_' + btoa(url.split('?')[0]).substring(0, 16);
+    }
+
+    function getGenreInstruction(genre) {
+      switch (genre) {
+        case 'xianxia':
+          return `สไตล์: "เทพเซียน / บำเพ็ญเพียร (Xianxia)"
+- ใช้สรรพนาม: "ข้า - เจ้า", "ผู้อาวุโส - ศิษย์น้อง/ผู้น้อย" ห้ามหลุด "ฉัน/นาย/คุณ/ผม" เด็ดขาด
+- ศัพท์เต๋า: บำเพ็ญเพียร, ลมปราณ, แก่นทองคำ, ทัณฑ์สวรรค์, ตำหนัก, ยอดเขา`;
+        case 'wuxia':
+          return `สไตล์: "กำลังภายใน / ยุทธภพ (Wuxia)"
+- บรรยากาศยุทธจักร: สำนัก, คัมภีร์ยุทธ, ปราณคุ้มกาย, กระบี่, ท่องยุทธภพ
+- สรรพนามคลาสสิก: "ข้า - ท่าน/เจ้า"`;
+        case 'system_game':
+          return `สไตล์: "ระบบ / ดันเจี้ยน / ผู้เล่น (System/Game)"
+- ข้อความแจ้งเตือน: [ติ๊ง! ตรวจพบภารกิจ], [เลเวลอัป]
+- สรรพนามทันสมัย: "ฉัน - นาย"`;
+        case 'scifi':
+          return `สไตล์: "ไซไฟ / มหากาพย์อวกาศ (Sci-Fi)"
+- ศัพท์วิทยาศาสตร์: ยานรบ, รูหนอน, วาร์ป, คลื่นแม่เหล็ก, พันธุกรรม`;
+        case 'horror':
+          return `สไตล์: "สยองขวัญ / เอาชีวิตรอด (Horror)"
+- เน้นบรรยายบรรยากาศ: วังเวง, เย็นเยียบ, เสียงลมหายใจ, กลิ่นคาว, เงาตะคุ่ม`;
+        default:
+          return `สไตล์: วรรณกรรมทั่วไป อ่านลื่นไหลเป็นธรรมชาติ`;
+      }
+    }
+
+    function cleanAndParseJSON(rawStr) {
+      if (!rawStr) throw new Error("ผลลัพธ์ว่างเปล่า");
+
+      let str = rawStr.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+      str = str.replace(/(?<!\\)[\r\n\t]/g, (match) => {
+        if (match === '\n') return '\\n';
+        if (match === '\r') return '\\r';
+        if (match === '\t') return '\\t';
+        return match;
+      });
+
+      str = str.replace(/,\s*([\]}])/g, '$1');
+
+      try {
+        return JSON.parse(str);
+      } catch (err) {
+        const paragraphs = [];
+        let bookTitle = "";
+        let chapterTitle = "";
+
+        const bookMatch = rawStr.match(/"translatedBookTitle"\s*:\s*"([^"]+)"/);
+        if (bookMatch) bookTitle = bookMatch[1];
+
+        const chapMatch = rawStr.match(/"translatedChapterTitle"\s*:\s*"([^"]+)"/);
+        if (chapMatch) chapterTitle = chapMatch[1];
+
+        const pRegex = /\{\s*"th"\s*:\s*"((?:\\.|[^"\\])*)"\s*,\s*"src"\s*:\s*"((?:\\.|[^"\\])*)"\s*\}/g;
+        let pMatch;
+        while ((pMatch = pRegex.exec(rawStr)) !== null) {
+          paragraphs.push({
+            th: pMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"'),
+            src: pMatch[2].replace(/\\n/g, '\n').replace(/\\"/g, '"')
+          });
+        }
+
+        if (paragraphs.length > 0) {
+          return {
+            translatedBookTitle: bookTitle,
+            translatedChapterTitle: chapterTitle,
+            paragraphs: paragraphs
+          };
+        }
+
+        throw new Error("โครงสร้าง JSON เสียหาย: " + err.message);
+      }
     }
 
     // LIVE MODEL FETCHER
