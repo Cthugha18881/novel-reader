@@ -361,7 +361,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 380px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ลบบทเก่าได้อิสระ ไม่กระทบตอนใหม่ | ระบบยึดบทปลายสุดที่เหลืออยู่จริงเป็นตัวตั้งต้นเสมอ</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ตัดระบบแปลอัตโนมัติซุ่มเงียบ | ลบบทแล้วตัดขาดคำขอค้างท่อทั้งหมด 100%</p>
     </div>
   </div>
 
@@ -564,7 +564,7 @@
       });
     }
 
-    // ==================== APP STATE ====================
+    // ==================== APP STATE & ABORT CONTROLLERS ====================
     let currentTheme = 'sepia';
     let currentFontSize = 18;
     let currentUrl = "";
@@ -574,6 +574,9 @@
     let currentBookId = "default_novel";
     let currentBookTitle = "NovelTranslate";
     let isUserCustomTitle = false;
+
+    // ตัวตัดกระแสไฟหยุดการเรียก API ค้างท่อ
+    let activeAbortController = null;
 
     let retryAbortRequested = false;
     let batchCancelRequested = false;
@@ -596,7 +599,7 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบจัดการบทแบบอิสระ สามารถลบบทเก่าที่อ่านแล้วได้โดยไม่กระทบตอนใหม่", src: "已支持独立章节管理，清理旧章节不再影响后续进度" }
+          { th: "ระบบติดตั้งตัวตัดสายคำขอค้างท่อ (Abort Controller) และตัดการแอบแปลเบื้องหลังอัตโนมัติแล้ว", src: "已全面移除静默预加载并引入即时中断控制器" }
         ]
       }
     ];
@@ -967,7 +970,18 @@
       updateSelectedDeleteBtn(bookId);
     }
 
-    // ==================== CLEAN & INDEPENDENT DELETE ENGINES ====================
+    // ==================== STOP RUNNING BACKGROUND PROCESS IMMEDIATELY ====================
+    function abortAllRunningProcesses() {
+      // ตัดสาย HTTP/AI Call ที่กำลังค้างท่อทันที
+      if (activeAbortController) {
+        activeAbortController.abort();
+        activeAbortController = null;
+      }
+      isPrefetching = false;
+      document.getElementById('prefetch-badge').style.display = 'none';
+    }
+
+    // ลบหลายตอนพร้อมกัน + ตัดขาดคำขอผีสิงทันที
     async function deleteSelectedChapters(bookId) {
       const chks = document.querySelectorAll(`.chk-book-${bookId}:checked`);
       const count = chks.length;
@@ -975,12 +989,11 @@
 
       if (!confirm(`คุณต้องการลบตอนที่เลือกจำนวน ${count} ตอน ออกจากเครื่องใช่หรือไม่?`)) return;
 
-      isPrefetching = false;
+      abortAllRunningProcesses();
 
       const idsToDelete = Array.from(chks).map(c => c.value);
       await dbDeleteMultipleChapters(idsToDelete);
 
-      // ดึงตอนที่เหลืออยู่จริงมาเรียงตามลำดับ order เดิม (ไม่ลบตอนในอนาคตทิ้ง)
       const remainingChaps = await dbGetChaptersByBook(bookId);
       remainingChaps.sort((x, y) => x.order - y.order);
 
@@ -989,15 +1002,12 @@
 
       if (targetBook) {
         if (remainingChaps.length > 0) {
-          // หากตอนที่อ่านค้างไว้โดนลบ ให้ย้าย pointer ไปยังตอนแรกที่เหลืออยู่
           let safeActiveId = targetBook.lastChapterId;
           if (!remainingChaps.some(c => c.id === safeActiveId)) {
             safeActiveId = remainingChaps[0].id;
           }
           const safeActiveChap = remainingChaps.find(c => c.id === safeActiveId) || remainingChaps[0];
           const safeActiveIdx = remainingChaps.indexOf(safeActiveChap);
-
-          // หาบทปลายสุดที่มีเลขตอนสูงที่สุดจริงเพื่อใช้ต่อคิว
           const latestChap = remainingChaps[remainingChaps.length - 1];
 
           await dbSaveBook({
@@ -1006,7 +1016,7 @@
             lastChapterId: safeActiveChap.id,
             lastChapterTitle: safeActiveChap.title,
             lastChapterIndex: safeActiveIdx,
-            lastUrl: latestChap.sourceUrl // ชี้เป้า URL ของบทปลายสุดเสมอ
+            lastUrl: latestChap.sourceUrl
           });
         } else {
           await dbSaveBook({
@@ -1027,11 +1037,12 @@
       }
     }
 
+    // ลบบทเดียว + ตัดขาดคำขอผีสิงทันที
     async function deleteSingleChapter(e, bookId, chapId, chapTitle) {
       e.stopPropagation();
       if (!confirm(`ต้องการลบ "${chapTitle}" ออกจากเครื่องใช่หรือไม่?`)) return;
 
-      isPrefetching = false;
+      abortAllRunningProcesses();
 
       await dbDeleteSpecificChapter(chapId);
 
@@ -1117,6 +1128,7 @@
       closeModal('bookshelf-modal');
     }
 
+    // โหลดหนังสือขึ้นมาอ่าน (ตัดคำสั่งแอบสั่ง Prefetch ออกถาวร!)
     async function loadBookFromDB(bookId, specifyChapIdOrIdx = null) {
       const books = await dbGetAllBooks();
       const targetBook = books.find(b => b.bookId === bookId);
@@ -1151,7 +1163,7 @@
         
         refreshShelfViewOnly(bookId);
 
-        if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
+        // ตัด triggerPrefetch ออกตรงนี้ เพื่อไม่ให้เกิดการแอบแปลตอนใหม่เวลาสลับบทหรือลบบท!
       } else {
         chapters = [{
           id: "empty_chap",
@@ -1167,6 +1179,7 @@
     async function removeBookFromShelf(e, bookId) {
       e.stopPropagation();
       if (!confirm("ต้องการลบนิยายเรื่องนี้และตอนที่เก็บไว้ทั้งหมดในเครื่องใช่หรือไม่?")) return;
+      abortAllRunningProcesses();
       await dbDeleteBook(bookId);
       openBookshelfModal();
     }
@@ -1187,14 +1200,14 @@
       return `${prefix}${paddedNextNum}${suffix}`;
     }
 
-    // ==================== ROBUST CLIENT-SIDE SCRAPER ====================
-    async function scrapePage(url) {
+    // ==================== ROBUST CLIENT-SIDE SCRAPER WITH SIGNAL ====================
+    async function scrapePage(url, signal = null) {
       let rawText = "";
       let rawChapTitle = "";
       let rawBookTitle = "";
 
       try {
-        const res = await fetch(`https://r.jina.ai/${url}`);
+        const res = await fetch(`https://r.jina.ai/${url}`, { signal });
         if (res.ok) {
           const md = await res.text();
           
@@ -1228,6 +1241,7 @@
           rawText = filteredLines.join('\n\n');
         }
       } catch(e) {
+        if (e.name === 'AbortError') throw new Error("คำสั่งถูกยกเลิกแล้ว");
         throw new Error(`ดึงเนื้อหาไม่สำเร็จ: ${e.message}`);
       }
 
@@ -1327,8 +1341,8 @@
       }
     }
 
-    // ROBUST TRANSLATE CALL
-    async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "") {
+    // ROBUST TRANSLATE CALL WITH ABORT SIGNAL
+    async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "", signal = null) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
 
@@ -1364,6 +1378,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       
       const res = await fetch(endpoint, {
         method: 'POST',
+        signal: signal,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาที่ต้องแปล:\n${rawText}` }] }],
@@ -1426,8 +1441,16 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         }
 
         try {
-          return await executeApiCall(rawText, activeModel, rawChapTitle, rawBookTitle);
+          activeAbortController = new AbortController();
+          const res = await executeApiCall(rawText, activeModel, rawChapTitle, rawBookTitle, activeAbortController.signal);
+          activeAbortController = null;
+          return res;
         } catch (err) {
+          activeAbortController = null;
+          if (err.name === 'AbortError' || retryAbortRequested) {
+            throw new Error("ผู้ใช้สั่งหยุดการทำงาน");
+          }
+
           const errMsg = (err.message || "").toLowerCase();
           const isHighDemand = errMsg.includes("high demand") || 
                                errMsg.includes("503") || 
@@ -1457,6 +1480,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
     function abortCurrentRetry() {
       retryAbortRequested = true;
+      abortAllRunningProcesses();
       document.getElementById('cancel-retry-btn').style.display = 'none';
       const btnText = document.getElementById('next-btn-text');
       if (btnText) btnText.innerText = "ตอนถัดไป →";
@@ -1543,8 +1567,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
         await renderChapter();
         closeModal('import-modal');
-
-        if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
       } catch (err) {
         status.style.background = '#fef2f2';
         status.style.color = '#991b1b';
@@ -1555,74 +1577,12 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // PREFETCH & AUTO-SAVE BACKGROUND CHAPTER
-    async function triggerPrefetch(url) {
-      if (isPrefetching || !url) return;
-      
-      const bookChaps = await dbGetChaptersByBook(currentBookId);
-      if (bookChaps.some(c => c.sourceUrl === url)) {
-        document.getElementById('prefetch-badge').style.display = 'inline-block';
-        return;
-      }
-
-      isPrefetching = true;
-      try {
-        const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(url);
-        const result = await translateTextWithPingPong(text, null, rawChapTitle, rawBookTitle);
-        const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${bookChaps.length + 1}`;
-
-        const maxOrder = bookChaps.reduce((max, c) => Math.max(max, c.order || 0), 0);
-
-        const newChap = {
-          id: `${currentBookId}_chap_${Date.now()}`,
-          bookId: currentBookId,
-          order: maxOrder + 1,
-          title: chapTitle,
-          paragraphs: result.paragraphs,
-          sourceUrl: url,
-          nextUrl: nextUrl
-        };
-
-        await dbSaveChapter(newChap);
-
-        const books = await dbGetAllBooks();
-        const curBook = books.find(b => b.bookId === currentBookId);
-        if (curBook) {
-          const resolvedTitle = curBook.isUserCustomTitle ? curBook.title : (result.bookTitle || curBook.title);
-
-          await dbSaveBook({
-            ...curBook,
-            title: resolvedTitle,
-            totalChapters: maxOrder + 1,
-            lastChapterId: curBook.lastChapterId || chapters[currentChapterIndex]?.id,
-            lastChapterIndex: curBook.lastChapterIndex !== undefined ? curBook.lastChapterIndex : currentChapterIndex,
-            lastChapterTitle: curBook.lastChapterTitle || chapters[currentChapterIndex]?.title,
-            lastUrl: url,
-            updatedAt: Date.now()
-          });
-        }
-
-        chapters.push(newChap);
-        nextUrlCalculated = nextUrl;
-
-        document.getElementById('prefetch-badge').style.display = 'inline-block';
-      } catch(e) {
-        console.warn("Background prefetch failed:", e);
-      } finally {
-        isPrefetching = false;
-      }
-    }
-
-    // NEXT CHAPTER CLICK (หา maxOrder จาก DB เสมอ)
+    // NEXT CHAPTER CLICK (แปลเฉพาะเมื่อผู้ใช้กดสั่งจริง)
     async function handleNextChapterClick() {
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
         document.getElementById('prefetch-badge').style.display = 'none';
         await renderChapter();
-
-        const lastChap = chapters[chapters.length - 1];
-        const nextUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
-        if (nextUrl) triggerPrefetch(nextUrl);
         return;
       }
 
@@ -1664,8 +1624,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
           currentChapterIndex = chapters.length - 1;
           await renderChapter();
-
-          if (nextUrlCalculated) triggerPrefetch(nextUrlCalculated);
         } catch (err) {
           if (!retryAbortRequested) {
             alert(`ไม่สามารถดึงตอนถัดไปได้: ${err.message}\nอาจถึงตอนล่าสุดแล้ว หรือเลขตอนกระโดดข้าม`);
@@ -1712,7 +1670,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       bookChaps.sort((a, b) => a.order - b.order);
       if (bookChaps.length === 0) return alert("ไม่พบบทตั้งต้นของนิยายเรื่องนี้");
 
-      // หาบทปลายสุดที่มีอยู่จริงเสมอ
       const lastChap = bookChaps[bookChaps.length - 1];
       let targetUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
 
@@ -1836,6 +1793,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
     function cancelBatchTranslate() {
       if (isBatchRunning) {
         batchCancelRequested = true;
+        abortAllRunningProcesses();
         document.getElementById('batch-progress-desc').innerText = "กำลังสั่งหยุด...";
       }
     }
