@@ -357,7 +357,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 330px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ติดตั้ง Live Debug Inspector เพื่อตรวจสอบข้อมูลสถานะของ Worker</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*แตะที่ชื่อเรื่องเพื่อกางดูตอน และสามารถกดลบตอนเก่าทีละบทได้อิสระ</p>
     </div>
   </div>
 
@@ -585,7 +585,7 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI ฉบับ Live Debug Inspector", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบเปิดกล่องดีบั๊กรายงานสถานะการทำงานของ Cloudflare Worker ให้เห็นข้อมูลเชิงลึกทันที", src: "已内置实时调试检测模块" }
+          { th: "ระบบเชื่อมต่อ Cloudflare Worker โดยตรงเพื่อการดึงบทถัดไปอย่างต่อเนื่องและแม่นยำ", src: "已支持无感后端架构，实现真正自动化下一章跳转" }
         ]
       }
     ];
@@ -933,16 +933,21 @@
       openBookshelfModal();
     }
 
-    // ==================== INVISIBLE BACKEND SCRAPER WITH DEBUG ====================
+    // ==================== INVISIBLE BACKEND SCRAPER WITH FORCE WORKER ====================
     async function scrapePage(url) {
       let customWorkerUrl = (localStorage.getItem('nov_backend_url') || "").trim();
       customWorkerUrl = customWorkerUrl.replace(/\/+$/, '');
 
-      // 1. ดึงผ่าน Cloudflare Worker
+      // บังคับยิงผ่าน Cloudflare Worker ที่ระบุ
       if (customWorkerUrl) {
         try {
           const endpoint = customWorkerUrl + '/?url=' + encodeURIComponent(url);
           const res = await fetch(endpoint);
+          
+          if (!res.ok) {
+            throw new Error(`Worker HTTP ${res.status}: ตรวจสอบสิทธิ์หรือการ Deploy บน Cloudflare`);
+          }
+
           const data = await res.json();
           if (data.success && data.text) {
             return {
@@ -950,55 +955,17 @@
               nextUrl: data.nextUrl,
               rawChapTitle: data.chapterTitle || "บทนิยาย",
               rawBookTitle: data.bookTitle || "",
-              debug: data.debug || null
+              debug: data.debug || { engine: 'Cloudflare-Worker-Success', detectedNext: data.nextUrl }
             };
           } else if (data.error) {
             throw new Error(`Worker Error: ${data.error}`);
           }
         } catch(e) {
-          console.warn("Worker error, falling back to Client-side:", e);
+          throw new Error(`เชื่อมต่อ Cloudflare Worker ไม่สำเร็จ: ${e.message}`);
         }
+      } else {
+        throw new Error("ยังไม่ได้ตั้งค่า Cloudflare Worker URL กรุณาไปที่เมนู 'ตั้งค่า' แล้วใส่ URL ของ Worker");
       }
-
-      // 2. Fallback สำรอง
-      let rawText = "";
-      let rawChapTitle = "";
-      let rawBookTitle = "";
-      let realNextUrl = null;
-
-      try {
-        const res = await fetch(`https://r.jina.ai/${url}`);
-        if (res.ok) {
-          const md = await res.text();
-          const mdMatch = md.match(/\[(?:下一章|下一页|下一节)\]\((https?:\/\/[^\)]+)\)/i);
-          if (mdMatch && mdMatch[1]) realNextUrl = mdMatch[1].trim();
-
-          const lines = md.split('\n').map(l => l.trim());
-          const filteredLines = lines.filter(l => {
-            if (!l || l.length < 3) return false;
-            if (l.startsWith('Title:') || l.startsWith('URL Source:') || l.startsWith('Published Time:') || l.startsWith('Markdown Content:')) return false;
-            if (l.startsWith('!') || l.startsWith('[') || l.startsWith('http')) return false;
-            if (!rawChapTitle && (l.includes('第') && l.includes('章'))) {
-              rawChapTitle = l;
-              return false;
-            }
-            return true;
-          });
-          rawText = filteredLines.join('\n\n');
-        }
-      } catch(e) {}
-
-      if (!rawText || rawText.length < 40) {
-        throw new Error("ไม่สามารถดึงเนื้อหาจากเว็บนี้ได้ กรุณาตรวจสอบ Cloudflare Worker ในหน้าตั้งค่า");
-      }
-
-      return {
-        text: rawText,
-        nextUrl: realNextUrl,
-        rawChapTitle: rawChapTitle || "บทนิยาย",
-        rawBookTitle: rawBookTitle || "",
-        debug: { engine: 'Client-Jina-Fallback', detectedNext: realNextUrl }
-      };
     }
 
     function extractBookIdFromUrl(url) {
