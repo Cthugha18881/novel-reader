@@ -138,13 +138,34 @@
     }
     body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
 
-    /* INFINITE SCROLL BOTTOM LOADER */
-    #infinite-loader {
-      display: none; text-align: center; padding: 25px 0;
-      font-size: 13px; opacity: 0.7; font-weight: 500;
+    /* BOTTOM INFINITE STATUS BANNER */
+    #infinite-status-banner {
+      display: none;
+      margin: 30px 0 50px 0;
+      padding: 16px 20px;
+      border-radius: 12px;
+      background: rgba(37,99,235,0.06);
+      border: 1px dashed rgba(37,99,235,0.3);
+      text-align: center;
+      transition: all 0.2s ease;
     }
+    body.theme-dark #infinite-status-banner {
+      background: rgba(37,99,235,0.12);
+      border-color: rgba(96,165,250,0.3);
+    }
+    .spinner-icon {
+      display: inline-block;
+      width: 14px; height: 14px;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 
-    /* CHAPTER NAVIGATION */
+    /* CHAPTER NAVIGATION (โหมดปกติ) */
     .chap-nav {
       margin-top: 30px; padding-top: 18px;
       border-top: 1px solid rgba(0,0,0,0.08);
@@ -336,10 +357,10 @@
     <!-- Reading Paragraphs Container (Virtual Window) -->
     <div id="reading-content"></div>
 
-    <!-- Infinite Scroll Loading Indicator -->
-    <div id="infinite-loader">กำลังโหลดตอนถัดไปอัตโนมัติ...</div>
+    <!-- แถบสถานะแจ้งเตือนการแปลท้ายจอ (Infinite Status Banner) -->
+    <div id="infinite-status-banner"></div>
 
-    <!-- Chapter Navigation (แสดงเมื่อปิด Infinite Scroll หรือถึงตอนจบ) -->
+    <!-- Chapter Navigation (แสดงเมื่อปิด Infinite Scroll) -->
     <div class="chap-nav" id="manual-chap-nav">
       <button class="btn" onclick="prevChapter()">← ตอนก่อนหน้า</button>
       
@@ -615,7 +636,6 @@
     let currentBookTitle = "NovelTranslate";
     let isUserCustomTitle = false;
 
-    // Virtual Window: เก็บ index ของบทที่กำลังแสดงอยู่บนหน้าจอ (สูงสุด 3 บท)
     let renderedWindowIndices = []; 
     let isAppendingNextChapter = false;
     let chapterIntersectionObserver = null;
@@ -687,7 +707,6 @@
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
     // ==================== VIRTUAL SLIDING WINDOW RENDERER ====================
-    // สร้าง HTML ก้อนของบทหนึ่งบท
     function buildChapterBlockHtml(chap, chapIdx) {
       let parasHtml = '';
       chap.paragraphs.forEach((p, pIdx) => {
@@ -709,7 +728,19 @@
       `;
     }
 
-    // เรนเดอร์หน้าจอให้อยู่ในหน้าต่างขนาด 3 บท (Previous, Current, Next)
+    // อัปเดตแถบสถานะส่วนท้ายจอ
+    function updateInfiniteStatusBanner(htmlContent = '', isVisible = true) {
+      const banner = document.getElementById('infinite-status-banner');
+      if (!banner) return;
+      if (!isVisible || !htmlContent) {
+        banner.style.display = 'none';
+        banner.innerHTML = '';
+      } else {
+        banner.style.display = 'block';
+        banner.innerHTML = htmlContent;
+      }
+    }
+
     function renderVirtualWindow(targetIdx, scrollToTop = false) {
       const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
       const container = document.getElementById('reading-content');
@@ -722,20 +753,17 @@
       document.getElementById('display-chap-title').innerText = curChap.title;
 
       if (!isInfinite) {
-        // โหมดอ่านทีละหน้าแบบเดิม
         renderedWindowIndices = [currentChapterIndex];
         container.innerHTML = buildChapterBlockHtml(curChap, currentChapterIndex);
         document.getElementById('manual-chap-nav').style.display = 'flex';
-        document.getElementById('infinite-loader').style.display = 'none';
+        updateInfiniteStatusBanner('', false);
         if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
         saveReadingPointer(currentChapterIndex);
         return;
       }
 
-      // โหมดอ่านต่อเนื่องไร้รอยต่อ (Infinite Virtual Window)
       document.getElementById('manual-chap-nav').style.display = 'none';
 
-      // กำหนด Index ที่จะคงไว้บนจอ (ไม่เกิน 3 บท)
       const newIndices = [];
       if (currentChapterIndex > 0) newIndices.push(currentChapterIndex - 1);
       newIndices.push(currentChapterIndex);
@@ -749,8 +777,6 @@
       });
 
       container.innerHTML = combinedHtml;
-
-      // ติดตั้ง IntersectionObserver ตรวจจับว่าสายตากำลังมองบทไหนอยู่
       setupChapterIntersectionObserver();
 
       if (scrollToTop) {
@@ -760,9 +786,9 @@
       }
 
       saveReadingPointer(currentChapterIndex);
+      checkAndRefreshBottomStatus();
     }
 
-    // ต่อบทถัดไปเข้าท้ายจอแบบไร้รอยต่อ (Append Seamlessly)
     function appendNextChapterToWindow() {
       if (isAppendingNextChapter) return;
       const nextIdx = currentChapterIndex + 1;
@@ -771,14 +797,12 @@
       isAppendingNextChapter = true;
       const container = document.getElementById('reading-content');
 
-      // 1. เพิ่มบทใหม่เข้าท้ายจอ
       const nextChap = chapters[nextIdx];
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = buildChapterBlockHtml(nextChap, nextIdx);
       container.appendChild(tempDiv.firstElementChild);
       renderedWindowIndices.push(nextIdx);
 
-      // 2. ถ้าหน้าจอมีมากกว่า 3 บท ให้ตัดบทบนสุดทิ้ง (Sliding Prune) เพื่อรักษา DOM ให้เบาเสมอ
       if (renderedWindowIndices.length > 3) {
         const removeIdx = renderedWindowIndices.shift();
         const removeEl = document.getElementById(`chapter-block-${removeIdx}`);
@@ -787,9 +811,9 @@
 
       setupChapterIntersectionObserver();
       isAppendingNextChapter = false;
+      checkAndRefreshBottomStatus();
     }
 
-    // ตรวจจับบทที่อยู่ตรงระดับสายตาของผู้ใช้
     function setupChapterIntersectionObserver() {
       if (chapterIntersectionObserver) chapterIntersectionObserver.disconnect();
 
@@ -807,6 +831,7 @@
               currentChapterIndex = idx;
               document.getElementById('display-chap-title').innerText = chapters[idx].title;
               saveReadingPointer(idx);
+              checkAndRefreshBottomStatus();
             }
           }
         });
@@ -817,18 +842,77 @@
       });
     }
 
-    // ตรวจจับการเลื่อนจอถึงท้ายหน้าเพื่อต่อตอนถัดไป
+    // ตรวจสอบและแสดงสถานะที่ส่วนท้ายจอแบบชัดเจน
+    function checkAndRefreshBottomStatus() {
+      const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
+      if (!isInfinite) {
+        updateInfiniteStatusBanner('', false);
+        return;
+      }
+
+      // ถ้ายังมีตอนในคลังต่อท้ายอยู่ ให้ซ่อนสถานะ
+      if (currentChapterIndex < chapters.length - 1) {
+        updateInfiniteStatusBanner('', false);
+        return;
+      }
+
+      // ถ้าอ่านมาถึงตอนสุดท้ายในคลังแล้ว
+      const lastChap = chapters[chapters.length - 1];
+      const targetUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
+
+      if (isPrefetching) {
+        // กำลังแปลเบื้องหลังอยู่
+        updateInfiniteStatusBanner(`
+          <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
+            <span class="spinner-icon"></span> กำลังดึงและแปลตอนถัดไปให้อัตโนมัติ...
+          </div>
+          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px;">
+            เมื่อแปลเสร็จ เนื้อหาจะต่อท้ายสายตาของคุณทันที
+          </div>
+        `, true);
+      } else if (targetUrl) {
+        // มี URL แต่ยังไม่ได้เริ่มแปล หรือปิด prefetch ไว้
+        updateInfiniteStatusBanner(`
+          <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">
+            อ่านจบ "${lastChap.title}" แล้ว
+          </div>
+          <button class="btn btn-primary" style="padding: 6px 14px;" onclick="triggerReadingPrefetchIfEnabled(true)">
+            ⚡ แปลตอนถัดไปทันที
+          </button>
+        `, true);
+      } else {
+        // ไม่มี URL ถัดไป (เลขกระโดด หรืออ่านถึงตอนล่าสุดของเว็บ)
+        updateInfiniteStatusBanner(`
+          <div style="font-size: 13px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">
+            ⚠️ ไม่พบ URL ของตอนถัดไป (เลข URL อาจกระโดดข้าม)
+          </div>
+          <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="promptFixNextUrlFromBottom()">
+            🔗 วาง URL ตอนถัดไป
+          </button>
+        `, true);
+      }
+    }
+
+    function promptFixNextUrlFromBottom() {
+      const lastChap = chapters[chapters.length - 1];
+      const input = prompt(`กรุณาวาง URL ของตอนถัดไปสำหรับ "${lastChap.title}":`, "");
+      if (input && input.trim()) {
+        lastChap.nextUrl = input.trim();
+        dbSaveChapter(lastChap);
+        nextUrlCalculated = lastChap.nextUrl;
+        triggerReadingPrefetchIfEnabled(true);
+      }
+    }
+
     function setupScrollMonitor() {
       window.addEventListener('scroll', () => {
         const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
         if (!isInfinite) return;
 
-        // เมื่อเลื่อนถึงช่วง 600px ก่อนจะสุดขอบจอ
         if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 600) {
           if (currentChapterIndex < chapters.length - 1) {
             appendNextChapterToWindow();
           } else {
-            // ถ้าอ่านถึงบทปลายสุดแล้ว และมี URL ถัดไป ให้แอบเร่งหรือรอแปล
             const lastChap = chapters[chapters.length - 1];
             const targetUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
             if (targetUrl && !isPrefetching) {
@@ -839,7 +923,6 @@
       }, { passive: true });
     }
 
-    // บันทึกตำแหน่งอ่านจริง (Reading Pointer)
     async function saveReadingPointer(idx) {
       if (currentBookId === "default_novel" || !chapters[idx]) return;
       const targetChap = chapters[idx];
@@ -1126,6 +1209,7 @@
       }
       isPrefetching = false;
       document.getElementById('prefetch-badge').style.display = 'none';
+      checkAndRefreshBottomStatus();
     }
 
     async function deleteSelectedChapters(bookId) {
@@ -1265,6 +1349,7 @@
           nextUrlCalculated = lastChap.nextUrl;
         }
         alert("อัปเดต URL เรียบร้อยแล้ว ตอนนี้สามารถกด 'เริ่มแปลล่วงหน้า' ได้ทันที");
+        checkAndRefreshBottomStatus();
       }
     }
 
@@ -1304,7 +1389,6 @@
         currentUrl = currentActiveChap.sourceUrl || targetBook.lastUrl || "";
         nextUrlCalculated = latestChap.nextUrl || computeNextNumericUrl(latestChap.sourceUrl);
         
-        // เรนเดอร์ด้วย Virtual Window
         renderVirtualWindow(currentChapterIndex, true);
         refreshShelfViewOnly(bookId);
       } else {
@@ -1737,10 +1821,10 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // ON-DEMAND READING PREFETCH
-    async function triggerReadingPrefetchIfEnabled() {
+    // ON-DEMAND READING PREFETCH (เชื่อมต่อกับ Infinite Status Banner)
+    async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       const isPrefetchEnabled = localStorage.getItem('nov_enable_prefetch') !== 'false';
-      if (!isPrefetchEnabled) return;
+      if (!isPrefetchEnabled && !isManualClick) return;
 
       if (currentChapterIndex < chapters.length - 1) return;
 
@@ -1755,9 +1839,30 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
 
       isPrefetching = true;
+      checkAndRefreshBottomStatus();
+
       try {
+        updateInfiniteStatusBanner(`
+          <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
+            <span class="spinner-icon"></span> กำลังดึงเนื้อหาตอนถัดไปจากเว็บต้นฉบับ...
+          </div>
+        `, true);
+
         const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(targetUrl);
-        const result = await translateTextWithPingPong(text, null, rawChapTitle, rawBookTitle);
+        
+        updateInfiniteStatusBanner(`
+          <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
+            <span class="spinner-icon"></span> กำลังแปล "${rawChapTitle}" ผ่าน AI...
+          </div>
+        `, true);
+
+        const result = await translateTextWithPingPong(text, (msg) => {
+          updateInfiniteStatusBanner(`
+            <div style="font-size: 13px; font-weight: 500; color: #b45309;">
+              <span class="spinner-icon"></span> ${msg}
+            </div>
+          `, true);
+        }, rawChapTitle, rawBookTitle);
         
         const currentAll = await dbGetChaptersByBook(currentBookId);
         const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
@@ -1794,10 +1899,26 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         chapters.push(newChap);
         nextUrlCalculated = nextUrl;
         document.getElementById('prefetch-badge').style.display = 'inline-block';
+
+        // ต่อบทใหม่เข้าจอทันที
+        appendNextChapterToWindow();
       } catch (e) {
         console.warn("Reading prefetch failed or aborted:", e);
+        if (e.message && e.message.includes('404')) {
+          updateInfiniteStatusBanner(`
+            <div style="font-size: 13px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">
+              ⚠️ ไม่พบหน้านิยาย (เลข URL กระโดดข้าม)
+            </div>
+            <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="promptFixNextUrlFromBottom()">
+              🔗 วาง URL ตอนถัดไป
+            </button>
+          `, true);
+        } else {
+          checkAndRefreshBottomStatus();
+        }
       } finally {
         isPrefetching = false;
+        checkAndRefreshBottomStatus();
       }
     }
 
@@ -2014,6 +2135,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
 
       openBookshelfModal();
+      checkAndRefreshBottomStatus();
     }
 
     function cancelBatchTranslate() {
