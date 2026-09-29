@@ -98,7 +98,23 @@
     .book-heading { font-size: 13px; opacity: 0.8; font-weight: 600; text-transform: uppercase; }
     .chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; line-height: 1.3; }
 
-    /* READING PARAGRAPHS */
+    /* SEAMLESS CONTINUOUS READING CONTAINER */
+    .chapter-block {
+      margin-bottom: 50px;
+      position: relative;
+    }
+    .chapter-block-divider {
+      display: flex; align-items: center; justify-content: center;
+      margin: 45px 0 25px 0; border-top: 1px dashed rgba(0,0,0,0.15);
+      position: relative;
+    }
+    body.theme-dark .chapter-block-divider { border-top-color: rgba(255,255,255,0.15); }
+    .chapter-divider-pill {
+      position: absolute; top: -11px;
+      background: inherit; padding: 0 14px;
+      font-size: 12px; font-weight: 600; opacity: 0.6;
+    }
+
     #reading-content { line-height: 1.9; user-select: text; }
     .para-item {
       padding: 6px 8px;
@@ -111,12 +127,8 @@
       cursor: pointer;
       text-indent: 1.5em;
     }
-    .para-th:hover {
-      background-color: rgba(0,0,0,0.02);
-    }
-    body.theme-dark .para-th:hover {
-      background-color: rgba(255,255,255,0.02);
-    }
+    .para-th:hover { background-color: rgba(0,0,0,0.02); }
+    body.theme-dark .para-th:hover { background-color: rgba(255,255,255,0.02); }
 
     .para-src {
       display: none; margin-top: 8px; padding: 8px 12px;
@@ -125,6 +137,12 @@
       font-family: monospace; line-height: 1.6; user-select: text;
     }
     body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
+
+    /* INFINITE SCROLL BOTTOM LOADER */
+    #infinite-loader {
+      display: none; text-align: center; padding: 25px 0;
+      font-size: 13px; opacity: 0.7; font-weight: 500;
+    }
 
     /* CHAPTER NAVIGATION */
     .chap-nav {
@@ -216,7 +234,6 @@
     }
     body.theme-dark .batch-bar { background: rgba(255,255,255,0.03); border-top-color: rgba(255,255,255,0.08); }
 
-    /* CHAPTER SUB-LIST CONTROLS & SELECTION */
     .shelf-sub-toolbar {
       display: flex; justify-content: space-between; align-items: center;
       padding: 6px 14px; background: rgba(0,0,0,0.03); font-size: 11px;
@@ -316,11 +333,14 @@
       <button class="btn" onclick="exportTxt()" style="font-size: 11px; shrink: 0;">.TXT</button>
     </div>
 
-    <!-- Reading Paragraphs -->
+    <!-- Reading Paragraphs Container (Virtual Window) -->
     <div id="reading-content"></div>
 
-    <!-- Chapter Navigation -->
-    <div class="chap-nav">
+    <!-- Infinite Scroll Loading Indicator -->
+    <div id="infinite-loader">กำลังโหลดตอนถัดไปอัตโนมัติ...</div>
+
+    <!-- Chapter Navigation (แสดงเมื่อปิด Infinite Scroll หรือถึงตอนจบ) -->
+    <div class="chap-nav" id="manual-chap-nav">
       <button class="btn" onclick="prevChapter()">← ตอนก่อนหน้า</button>
       
       <div style="display: flex; gap: 6px;">
@@ -361,7 +381,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 380px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*ลบบทเก่าได้อิสระ ไม่กระทบตอนใหม่ | ระบบยึดบทปลายสุดที่เหลืออยู่จริงเป็นตัวตั้งต้นเสมอ</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*โหมดอ่านต่อเนื่องไร้รอยต่อรันด้วย Virtual Sliding Window ประหยัด RAM ไม่กระตุก</p>
     </div>
   </div>
 
@@ -439,35 +459,44 @@
           <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
           <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash-Lite</option>
         </select>
-        <p style="font-size: 10px; opacity: 0.6; margin-top: 3px;">*เมื่อเซิร์ฟเวอร์หนาแน่น ระบบจะสลับไปมาระหว่างตัวหลักและตัวสำรอง</p>
       </div>
 
       <div class="form-group">
         <label class="form-label">ลิมิตส่งซ้ำเมื่อเซิร์ฟเวอร์หนาแน่น (รอบ)</label>
         <input type="number" id="retry-limit" class="form-input" min="1" max="50" value="10" placeholder="10">
-        <p style="font-size: 10px; opacity: 0.6; margin-top: 3px;">*เว้นระยะรอส่งซ้ำทุกๆ 5 วินาที จนกว่าจะถึงลิมิต หรือกดยกเลิกเอง</p>
       </div>
 
       <div class="form-group">
         <label class="form-label">แนวเรื่อง / สไตล์สำนวนนิยาย (Genre)</label>
         <select id="novel-genre" class="form-input">
-          <option value="xianxia" selected>เซียนเซีย / เทพเซียนบำเพ็ญเพียร (เน้นศัพท์เต๋า ระดับลมปราณ สรรพนามข้า-เจ้า)</option>
-          <option value="wuxia">กำลังภายใน / ยุทธภพ (สำนวนคลาสสิก ยุทธจักร จอมยุทธ์ ท่องใต้หล้า)</option>
-          <option value="system_game">ระบบ / ดันเจี้ยน / เลเวลอัพ (กระชับ ทันสมัย หน้าต่างสเตตัสทับศัพท์)</option>
-          <option value="scifi">ไซไฟ / ยุคอวกาศ (ศัพท์ดาราศาสตร์ ฟิสิกส์ เทคโนโลยีอนาคต)</option>
-          <option value="horror">สยองขวัญ / ระทึกขวัญเอาชีวิตรอด (บรรยากาศกดดัน เยือกเย็น ชวนระแวง)</option>
-          <option value="modern_romance">ปัจจุบัน / สืบสวน / โรแมนติก (บทสนทนาเป็นธรรมชาติ ไหลลื่น)</option>
+          <option value="xianxia" selected>เซียนเซีย / เทพเซียนบำเพ็ญเพียร</option>
+          <option value="wuxia">กำลังภายใน / ยุทธภพ</option>
+          <option value="system_game">ระบบ / ดันเจี้ยน / เลเวลอัพ</option>
+          <option value="scifi">ไซไฟ / ยุคอวกาศ</option>
+          <option value="horror">สยองขวัญ / ระทึกขวัญเอาชีวิตรอด</option>
+          <option value="modern_romance">ปัจจุบัน / สืบสวน / โรแมนติก</option>
         </select>
       </div>
 
-      <!-- สวิตช์เปิด-ปิดระบบแปลล่วงหน้าเบื้องหลังขณะอ่านสด -->
+      <!-- สวิตช์: โหมดอ่านต่อเนื่องไร้รอยต่อ -->
       <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
+        <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
+          <input type="checkbox" id="enable-infinite-scroll" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
+          <span>เปิดใช้งานโหมดอ่านต่อเนื่องไร้รอยต่อ (Infinite Scroll)</span>
+        </label>
+        <p style="font-size: 10px; opacity: 0.6; margin-top: 4px; padding-left: 24px;">
+          *เลื่อนอ่านบทถัดไปได้ทันทีโดยไม่ต้องกดปุ่ม พร้อมระบบ Virtual Sliding Window ควบคุมไม่ให้หน้าจอหน่วง
+        </p>
+      </div>
+
+      <!-- สวิตช์: แปลบทถัดไปล่วงหน้า 1 ตอนในเบื้องหลัง -->
+      <div class="form-group" style="margin-top: 8px;">
         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
           <input type="checkbox" id="enable-live-prefetch" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
           <span>แปลบทถัดไปล่วงหน้า 1 ตอนในเบื้องหลังขณะอ่านสด</span>
         </label>
         <p style="font-size: 10px; opacity: 0.6; margin-top: 4px; padding-left: 24px;">
-          *ระบบจะแอบแปลตอนถัดไปรอไว้เฉพาะเมื่อคุณอ่านถึงบทปลายสุดแล้ว เพื่อให้อ่านได้ลื่นไหลต่อเนื่องโดยไม่ต้องรอ
+          *แปลบทถัดไปรอไว้เฉพาะเมื่อถึงบทปลายสุด เพื่อให้อ่านต่อได้ทันที
         </p>
       </div>
 
@@ -575,7 +604,7 @@
       });
     }
 
-    // ==================== APP STATE & ABORT CONTROLLERS ====================
+    // ==================== APP STATE & VIRTUAL WINDOW STATE ====================
     let currentTheme = 'sepia';
     let currentFontSize = 18;
     let currentUrl = "";
@@ -586,15 +615,18 @@
     let currentBookTitle = "NovelTranslate";
     let isUserCustomTitle = false;
 
-    let activeAbortController = null;
+    // Virtual Window: เก็บ index ของบทที่กำลังแสดงอยู่บนหน้าจอ (สูงสุด 3 บท)
+    let renderedWindowIndices = []; 
+    let isAppendingNextChapter = false;
+    let chapterIntersectionObserver = null;
 
+    let activeAbortController = null;
     let retryAbortRequested = false;
     let batchCancelRequested = false;
     let isBatchRunning = false;
     let isBatchComplete = false;
 
     let bookSortModes = {}; 
-
     let selectedWordBuffer = "";
     let isSelectedChinese = false;
 
@@ -608,8 +640,8 @@
         id: "guide_chap_1",
         title: "คู่มือเริ่มต้น",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบเปิดปิดการแปลเบื้องหลังขณะอ่านสดพร้อมใช้งานแล้ว สามารถตั้งค่าได้ที่เมนู 'ตั้งค่า'", src: "已支持阅读时按需静默预加载及开关控制" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI โหมดอ่านต่อเนื่องไร้รอยต่อ", src: "欢迎来到 NovelTranslate" },
+          { th: "ระบบ Virtual Sliding Window จะโหลดบทถัดไปอัตโนมัติและจำกัดจำนวนย่อหน้าบนหน้าจอเพื่อความลื่นไหลสูงสุด", src: "支持虚拟视窗滑动无限加载机制" }
         ]
       }
     ];
@@ -620,12 +652,13 @@
       await initDB();
       loadSettings();
       setupSelectionMonitor();
+      setupScrollMonitor();
       
       const lastBookId = localStorage.getItem('nov_last_book_id');
       if (lastBookId) {
         await loadBookFromDB(lastBookId);
       } else {
-        renderChapter();
+        renderVirtualWindow(0, true);
       }
       renderGlossary();
     });
@@ -653,70 +686,189 @@
     function openModal(id) { document.getElementById(id).classList.add('active'); }
     function closeModal(id) { document.getElementById(id).classList.remove('active'); }
 
-    // RENDER CONTENT
-    async function renderChapter() {
-      const chap = chapters[currentChapterIndex] || chapters[0];
-      document.getElementById('display-book-title').innerText = currentBookTitle;
-      document.getElementById('display-chap-title').innerText = chap.title;
-
-      const container = document.getElementById('reading-content');
-      container.innerHTML = "";
-      container.style.fontSize = currentFontSize + 'px';
-
-      chap.paragraphs.forEach((p, idx) => {
-        const pEl = document.createElement('div');
-        pEl.className = 'para-item';
-        pEl.id = `para-box-${idx}`;
-
-        pEl.innerHTML = `
-          <div class="para-th" onclick="toggleParagraphSrc(${idx})">${p.th || ""}</div>
-          <div class="para-src" id="src-${idx}">${p.src || "ไม่มีข้อความต้นฉบับ"}</div>
+    // ==================== VIRTUAL SLIDING WINDOW RENDERER ====================
+    // สร้าง HTML ก้อนของบทหนึ่งบท
+    function buildChapterBlockHtml(chap, chapIdx) {
+      let parasHtml = '';
+      chap.paragraphs.forEach((p, pIdx) => {
+        parasHtml += `
+          <div class="para-item" id="para-box-${chapIdx}-${pIdx}">
+            <div class="para-th" onclick="toggleParagraphSrc('${chapIdx}-${pIdx}')">${p.th || ""}</div>
+            <div class="para-src" id="src-${chapIdx}-${pIdx}">${p.src || "ไม่มีข้อความต้นฉบับ"}</div>
+          </div>
         `;
-        container.appendChild(pEl);
       });
 
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-
-      if (currentBookId !== "default_novel") {
-        await dbSaveBook({
-          bookId: currentBookId,
-          title: currentBookTitle,
-          isUserCustomTitle: isUserCustomTitle,
-          lastChapterId: chap.id,
-          lastChapterIndex: currentChapterIndex,
-          lastChapterTitle: chap.title,
-          totalChapters: chapters.length,
-          lastUrl: currentUrl,
-          updatedAt: Date.now()
-        });
-        localStorage.setItem('nov_last_book_id', currentBookId);
-      }
+      return `
+        <div class="chapter-block" id="chapter-block-${chapIdx}" data-index="${chapIdx}">
+          <div class="chapter-block-divider">
+            <span class="chapter-divider-pill">📖 ${chap.title}</span>
+          </div>
+          <div class="chapter-body">${parasHtml}</div>
+        </div>
+      `;
     }
 
-    // ==================== MANUAL EDIT TITLES (PRIORITY #1) ====================
+    // เรนเดอร์หน้าจอให้อยู่ในหน้าต่างขนาด 3 บท (Previous, Current, Next)
+    function renderVirtualWindow(targetIdx, scrollToTop = false) {
+      const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
+      const container = document.getElementById('reading-content');
+      container.style.fontSize = currentFontSize + 'px';
+
+      currentChapterIndex = Math.max(0, Math.min(targetIdx, chapters.length - 1));
+      const curChap = chapters[currentChapterIndex];
+
+      document.getElementById('display-book-title').innerText = currentBookTitle;
+      document.getElementById('display-chap-title').innerText = curChap.title;
+
+      if (!isInfinite) {
+        // โหมดอ่านทีละหน้าแบบเดิม
+        renderedWindowIndices = [currentChapterIndex];
+        container.innerHTML = buildChapterBlockHtml(curChap, currentChapterIndex);
+        document.getElementById('manual-chap-nav').style.display = 'flex';
+        document.getElementById('infinite-loader').style.display = 'none';
+        if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
+        saveReadingPointer(currentChapterIndex);
+        return;
+      }
+
+      // โหมดอ่านต่อเนื่องไร้รอยต่อ (Infinite Virtual Window)
+      document.getElementById('manual-chap-nav').style.display = 'none';
+
+      // กำหนด Index ที่จะคงไว้บนจอ (ไม่เกิน 3 บท)
+      const newIndices = [];
+      if (currentChapterIndex > 0) newIndices.push(currentChapterIndex - 1);
+      newIndices.push(currentChapterIndex);
+      if (currentChapterIndex < chapters.length - 1) newIndices.push(currentChapterIndex + 1);
+
+      renderedWindowIndices = newIndices;
+
+      let combinedHtml = '';
+      renderedWindowIndices.forEach(idx => {
+        combinedHtml += buildChapterBlockHtml(chapters[idx], idx);
+      });
+
+      container.innerHTML = combinedHtml;
+
+      // ติดตั้ง IntersectionObserver ตรวจจับว่าสายตากำลังมองบทไหนอยู่
+      setupChapterIntersectionObserver();
+
+      if (scrollToTop) {
+        const targetEl = document.getElementById(`chapter-block-${currentChapterIndex}`);
+        if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        else window.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+
+      saveReadingPointer(currentChapterIndex);
+    }
+
+    // ต่อบทถัดไปเข้าท้ายจอแบบไร้รอยต่อ (Append Seamlessly)
+    function appendNextChapterToWindow() {
+      if (isAppendingNextChapter) return;
+      const nextIdx = currentChapterIndex + 1;
+      if (nextIdx >= chapters.length) return;
+
+      isAppendingNextChapter = true;
+      const container = document.getElementById('reading-content');
+
+      // 1. เพิ่มบทใหม่เข้าท้ายจอ
+      const nextChap = chapters[nextIdx];
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = buildChapterBlockHtml(nextChap, nextIdx);
+      container.appendChild(tempDiv.firstElementChild);
+      renderedWindowIndices.push(nextIdx);
+
+      // 2. ถ้าหน้าจอมีมากกว่า 3 บท ให้ตัดบทบนสุดทิ้ง (Sliding Prune) เพื่อรักษา DOM ให้เบาเสมอ
+      if (renderedWindowIndices.length > 3) {
+        const removeIdx = renderedWindowIndices.shift();
+        const removeEl = document.getElementById(`chapter-block-${removeIdx}`);
+        if (removeEl) removeEl.remove();
+      }
+
+      setupChapterIntersectionObserver();
+      isAppendingNextChapter = false;
+    }
+
+    // ตรวจจับบทที่อยู่ตรงระดับสายตาของผู้ใช้
+    function setupChapterIntersectionObserver() {
+      if (chapterIntersectionObserver) chapterIntersectionObserver.disconnect();
+
+      const options = {
+        root: null,
+        rootMargin: '-20% 0px -60% 0px',
+        threshold: 0
+      };
+
+      chapterIntersectionObserver = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            const idx = parseInt(entry.target.getAttribute('data-index'), 10);
+            if (!isNaN(idx) && chapters[idx]) {
+              currentChapterIndex = idx;
+              document.getElementById('display-chap-title').innerText = chapters[idx].title;
+              saveReadingPointer(idx);
+            }
+          }
+        });
+      }, options);
+
+      document.querySelectorAll('.chapter-block').forEach(block => {
+        chapterIntersectionObserver.observe(block);
+      });
+    }
+
+    // ตรวจจับการเลื่อนจอถึงท้ายหน้าเพื่อต่อตอนถัดไป
+    function setupScrollMonitor() {
+      window.addEventListener('scroll', () => {
+        const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
+        if (!isInfinite) return;
+
+        // เมื่อเลื่อนถึงช่วง 600px ก่อนจะสุดขอบจอ
+        if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 600) {
+          if (currentChapterIndex < chapters.length - 1) {
+            appendNextChapterToWindow();
+          } else {
+            // ถ้าอ่านถึงบทปลายสุดแล้ว และมี URL ถัดไป ให้แอบเร่งหรือรอแปล
+            const lastChap = chapters[chapters.length - 1];
+            const targetUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
+            if (targetUrl && !isPrefetching) {
+              triggerReadingPrefetchIfEnabled();
+            }
+          }
+        }
+      }, { passive: true });
+    }
+
+    // บันทึกตำแหน่งอ่านจริง (Reading Pointer)
+    async function saveReadingPointer(idx) {
+      if (currentBookId === "default_novel" || !chapters[idx]) return;
+      const targetChap = chapters[idx];
+
+      const books = await dbGetAllBooks();
+      const curBook = books.find(b => b.bookId === currentBookId);
+
+      await dbSaveBook({
+        bookId: currentBookId,
+        title: currentBookTitle,
+        isUserCustomTitle: isUserCustomTitle,
+        lastChapterId: targetChap.id,
+        lastChapterIndex: idx,
+        lastChapterTitle: targetChap.title,
+        totalChapters: chapters.length,
+        lastUrl: targetChap.sourceUrl || currentUrl,
+        updatedAt: Date.now()
+      });
+      localStorage.setItem('nov_last_book_id', currentBookId);
+    }
+
+    // ==================== MANUAL EDIT TITLES ====================
     async function promptEditBookTitle() {
-      const newTitle = prompt("แก้ไขชื่อนิยายเรื่องนี้ (ชื่อที่ตั้งใหม่จะถูกล็อกไว้ถาวร AI จะไม่เปลี่ยนทับ):", currentBookTitle);
+      const newTitle = prompt("แก้ไขชื่อนิยายเรื่องนี้ (ชื่อที่ตั้งใหม่จะถูกล็อกไว้ถาวร):", currentBookTitle);
       if (newTitle !== null && newTitle.trim()) {
         currentBookTitle = newTitle.trim();
         isUserCustomTitle = true;
         document.getElementById('display-book-title').innerText = currentBookTitle;
-        
-        if (currentBookId !== "default_novel") {
-          const chap = chapters[currentChapterIndex];
-          const books = await dbGetAllBooks();
-          const targetBook = books.find(b => b.bookId === currentBookId);
-          await dbSaveBook({
-            bookId: currentBookId,
-            title: currentBookTitle,
-            isUserCustomTitle: true,
-            lastChapterId: chap?.id || '',
-            lastChapterIndex: currentChapterIndex,
-            lastChapterTitle: chap?.title || '',
-            totalChapters: chapters.length,
-            lastUrl: currentUrl,
-            updatedAt: Date.now()
-          });
-        }
+        saveReadingPointer(currentChapterIndex);
       }
     }
 
@@ -726,29 +878,16 @@
       if (newTitle !== null && newTitle.trim()) {
         chap.title = newTitle.trim();
         document.getElementById('display-chap-title').innerText = chap.title;
-        
-        if (currentBookId !== "default_novel") {
-          await dbSaveChapter(chap);
-          await dbSaveBook({
-            bookId: currentBookId,
-            title: currentBookTitle,
-            isUserCustomTitle: isUserCustomTitle,
-            lastChapterId: chap.id,
-            lastChapterIndex: currentChapterIndex,
-            lastChapterTitle: chap.title,
-            totalChapters: chapters.length,
-            lastUrl: currentUrl,
-            updatedAt: Date.now()
-          });
-        }
+        await dbSaveChapter(chap);
+        saveReadingPointer(currentChapterIndex);
       }
     }
 
-    function toggleParagraphSrc(idx) {
+    function toggleParagraphSrc(uniqueKey) {
       const selection = window.getSelection();
       if (selection && selection.toString().trim().length > 0) return;
 
-      const srcEl = document.getElementById(`src-${idx}`);
+      const srcEl = document.getElementById(`src-${uniqueKey}`);
       if (srcEl) {
         srcEl.style.display = (srcEl.style.display === 'block') ? 'none' : 'block';
       }
@@ -989,7 +1128,6 @@
       document.getElementById('prefetch-badge').style.display = 'none';
     }
 
-    // ลบหลายตอนพร้อมกัน
     async function deleteSelectedChapters(bookId) {
       const chks = document.querySelectorAll(`.chk-book-${bookId}:checked`);
       const count = chks.length;
@@ -1045,7 +1183,6 @@
       }
     }
 
-    // ลบบทเดียว
     async function deleteSingleChapter(e, bookId, chapId, chapTitle) {
       e.stopPropagation();
       if (!confirm(`ต้องการลบ "${chapTitle}" ออกจากเครื่องใช่หรือไม่?`)) return;
@@ -1166,8 +1303,9 @@
 
         currentUrl = currentActiveChap.sourceUrl || targetBook.lastUrl || "";
         nextUrlCalculated = latestChap.nextUrl || computeNextNumericUrl(latestChap.sourceUrl);
-        await renderChapter();
         
+        // เรนเดอร์ด้วย Virtual Window
+        renderVirtualWindow(currentChapterIndex, true);
         refreshShelfViewOnly(bookId);
       } else {
         chapters = [{
@@ -1176,7 +1314,7 @@
           paragraphs: [{ th: "นิยายเรื่องนี้ยังไม่มีตอนที่บันทึกไว้ หรือถูกลบออกไปทั้งหมดแล้ว", src: "暂无内容" }]
         }];
         currentChapterIndex = 0;
-        renderChapter();
+        renderVirtualWindow(0, true);
         refreshShelfViewOnly(bookId);
       }
     }
@@ -1498,7 +1636,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       closeModal('import-modal');
     }
 
-    // START TRANSLATE (SMART APPENDING FOR JUMP URL)
+    // START TRANSLATE
     async function startTranslateFirst() {
       const url = document.getElementById('import-url').value.trim();
       if (!url) return alert("กรุณาใส่ URL หน้านิยาย");
@@ -1585,10 +1723,9 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         });
         localStorage.setItem('nov_last_book_id', currentBookId);
 
-        await renderChapter();
+        renderVirtualWindow(currentChapterIndex, true);
         closeModal('import-modal');
 
-        // หากเปิดโหมดแปลเบื้องหลัง ให้แอบแปลบทถัดไปล่วงหน้า 1 ตอน
         triggerReadingPrefetchIfEnabled();
       } catch (err) {
         status.style.background = '#fef2f2';
@@ -1600,21 +1737,17 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // ==================== ON-DEMAND READING PREFETCH (แปลล่วงหน้า 1 ตอนเฉพาะตอนอ่านสด) ====================
+    // ON-DEMAND READING PREFETCH
     async function triggerReadingPrefetchIfEnabled() {
       const isPrefetchEnabled = localStorage.getItem('nov_enable_prefetch') !== 'false';
-      if (!isPrefetchEnabled) return; // ถ้าผู้ใช้ปิดไว้ในตั้งค่า จะไม่ทำงานเด็ดขาด
+      if (!isPrefetchEnabled) return;
 
-      // เงื่อนไข: ถ้ามีตอนถัดไปในคลังอยู่แล้ว จะไม่ทำอะไรทั้งสิ้น
-      if (currentChapterIndex < chapters.length - 1) {
-        return;
-      }
+      if (currentChapterIndex < chapters.length - 1) return;
 
       const lastChap = chapters[chapters.length - 1];
       const targetUrl = lastChap.nextUrl || computeNextNumericUrl(lastChap.sourceUrl);
       if (!targetUrl || isPrefetching) return;
 
-      // ตรวจสอบว่าใน IndexedDB มี URL นี้บันทึกไว้แล้วหรือยัง
       const bookChaps = await dbGetChaptersByBook(currentBookId);
       if (bookChaps.some(c => c.sourceUrl === targetUrl)) {
         document.getElementById('prefetch-badge').style.display = 'inline-block';
@@ -1668,20 +1801,16 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // NEXT CHAPTER CLICK (แปลเฉพาะเมื่อผู้ใช้กดสั่งจริง)
+    // NEXT CHAPTER CLICK (สำหรับโหมดอ่านทีละหน้า)
     async function handleNextChapterClick() {
-      // 1. ถ้าตอนถัดไปมีอยู่แล้วในคิว (อาจแปลสดไว้หรือ Prefetch เสร็จแล้ว) ให้เปิดอ่านทันที
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
         document.getElementById('prefetch-badge').style.display = 'none';
-        await renderChapter();
-
-        // เมื่อเปิดอ่านแล้ว ตรวจสอบว่าต้องแอบแปลบทถัดไปอีก 1 ตอนรอไว้หรือไม่
+        renderVirtualWindow(currentChapterIndex, true);
         triggerReadingPrefetchIfEnabled();
         return;
       }
 
-      // 2. ถ้ายังไม่มี ให้ดึงและแปลสด
       if (nextUrlCalculated) {
         const btnText = document.getElementById('next-btn-text');
         const nextBtn = document.getElementById('next-chap-btn');
@@ -1719,9 +1848,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
           chapters.push(newChap);
 
           currentChapterIndex = chapters.length - 1;
-          await renderChapter();
-
-          // แปลบทนี้เสร็จแล้ว แอบแปลบทถัดไปล่วงหน้า 1 ตอนรอไว้ (ถ้าเปิดใช้งาน)
+          renderVirtualWindow(currentChapterIndex, true);
           triggerReadingPrefetchIfEnabled();
         } catch (err) {
           if (!retryAbortRequested) {
@@ -1740,14 +1867,14 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    async function prevChapter() {
+    function prevChapter() {
       if (currentChapterIndex > 0) {
         currentChapterIndex--;
-        await renderChapter();
+        renderVirtualWindow(currentChapterIndex, true);
       }
     }
 
-    // ==================== REAL-TIME AUTO-SAVE BATCH PRE-TRANSLATE ====================
+    // ==================== BATCH PRE-TRANSLATE ====================
     function handleBatchActionClick() {
       if (isBatchComplete) {
         document.getElementById('batch-progress-box').style.display = 'none';
@@ -1859,7 +1986,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
           }
 
           refreshShelfViewOnly(bookId);
-
           targetUrl = nextUrl;
 
           if (i < count && !batchCancelRequested) {
@@ -1919,14 +2045,14 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       document.getElementById('gloss-src').value = "";
       document.getElementById('gloss-tgt').value = "";
       renderGlossary();
-      renderChapter();
+      renderVirtualWindow(currentChapterIndex);
     }
 
     function delGloss(k) {
       delete glossary[k];
       localStorage.setItem('nov_gloss', JSON.stringify(glossary));
       renderGlossary();
-      renderChapter();
+      renderVirtualWindow(currentChapterIndex);
     }
 
     // LIVE MODEL FETCHER
@@ -1950,22 +2076,15 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${key}`);
         const data = await res.json();
 
-        if (!res.ok) {
-          throw new Error(data.error?.message || "ไม่สามารถดึงรายชื่อโมเดลได้");
-        }
-
-        if (!data.models || !Array.isArray(data.models)) {
-          throw new Error("ไม่พบข้อมูลโมเดลในบัญชีนี้");
-        }
+        if (!res.ok) throw new Error(data.error?.message || "ไม่สามารถดึงรายชื่อโมเดลได้");
+        if (!data.models || !Array.isArray(data.models)) throw new Error("ไม่พบข้อมูลโมเดลในบัญชีนี้");
 
         const availableModels = data.models
           .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
           .map(m => m.name.replace(/^models\//, ''))
           .filter(name => name.toLowerCase().includes("gemini"));
 
-        if (availableModels.length === 0) {
-          throw new Error("ไม่พบโมเดล Gemini ที่พร้อมใช้งาน");
-        }
+        if (availableModels.length === 0) throw new Error("ไม่พบโมเดล Gemini ที่พร้อมใช้งาน");
 
         localStorage.setItem('nov_cached_models', JSON.stringify(availableModels));
         populateModelDropdowns(availableModels);
@@ -2018,7 +2137,11 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       const prefetchChk = document.getElementById('enable-live-prefetch');
       localStorage.setItem('nov_enable_prefetch', prefetchChk.checked ? 'true' : 'false');
 
+      const infiniteChk = document.getElementById('enable-infinite-scroll');
+      localStorage.setItem('nov_enable_infinite', infiniteChk.checked ? 'true' : 'false');
+
       closeModal('settings-modal');
+      renderVirtualWindow(currentChapterIndex);
       alert("บันทึกการตั้งค่าเรียบร้อยแล้ว");
     }
 
@@ -2063,9 +2186,11 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
       const prefetchVal = localStorage.getItem('nov_enable_prefetch');
       const prefetchChk = document.getElementById('enable-live-prefetch');
-      if (prefetchChk) {
-        prefetchChk.checked = (prefetchVal !== 'false');
-      }
+      if (prefetchChk) prefetchChk.checked = (prefetchVal !== 'false');
+
+      const infiniteVal = localStorage.getItem('nov_enable_infinite');
+      const infiniteChk = document.getElementById('enable-infinite-scroll');
+      if (infiniteChk) infiniteChk.checked = (infiniteVal !== 'false');
     }
 
     // EXPORT
