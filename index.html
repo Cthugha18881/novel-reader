@@ -67,53 +67,56 @@
       background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
     }
 
-    /* FLOATING FULLSCREEN TOGGLE BUTTON */
-    #fullscreen-btn {
-      position: fixed; top: 62px; right: 16px; z-index: 35;
-      width: 32px; height: 32px; border-radius: 50%;
-      background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.12);
-      backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center;
-      cursor: pointer; color: inherit; opacity: 0.65;
-      transition: opacity 0.2s, background-color 0.2s, transform 0.2s;
-    }
-    body.theme-dark #fullscreen-btn { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
-    #fullscreen-btn:hover { opacity: 1; transform: scale(1.05); background-color: rgba(0,0,0,0.1); }
-    body.theme-dark #fullscreen-btn:hover { background-color: rgba(255,255,255,0.15); }
-
-    /* FLOATING SCAN TERMS BUTTON (มุมขวาล่าง) */
-    #scan-terms-btn {
+    /* TOP-RIGHT FLOATING ACTION BUTTONS (FULLSCREEN & SCAN) */
+    .top-floating-btn {
       position: fixed;
-      bottom: 75px;
-      right: 18px;
+      top: 62px;
       z-index: 35;
-      width: 40px;
-      height: 40px;
+      width: 32px;
+      height: 32px;
       border-radius: 50%;
-      background: #2563eb;
-      color: #fff;
-      border: none;
-      box-shadow: 0 4px 12px rgba(37,99,235,0.35);
+      background: rgba(0,0,0,0.05);
+      border: 1px solid rgba(0,0,0,0.12);
+      backdrop-filter: blur(6px);
       display: flex;
       align-items: center;
       justify-content: center;
       cursor: pointer;
-      opacity: 0.85;
-      transition: opacity 0.2s, transform 0.2s;
-      font-size: 16px;
+      color: inherit;
+      opacity: 0.65;
+      transition: opacity 0.2s, background-color 0.2s, transform 0.2s, top 0.2s;
     }
-    @media (min-width: 768px) { #scan-terms-btn { bottom: 25px; } }
-    #scan-terms-btn:hover {
+    body.theme-dark .top-floating-btn {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(255,255,255,0.15);
+    }
+    .top-floating-btn:hover {
       opacity: 1;
-      transform: scale(1.08);
+      transform: scale(1.05);
+      background-color: rgba(0,0,0,0.1);
     }
-    #scan-terms-btn:active {
-      transform: scale(0.95);
+    body.theme-dark .top-floating-btn:hover {
+      background-color: rgba(255,255,255,0.15);
+    }
+
+    #fullscreen-btn {
+      right: 16px;
+    }
+
+    #scan-terms-btn {
+      right: 54px; /* วางไว้ทางด้านซ้ายของปุ่ม Fullscreen */
+      font-size: 13px;
     }
 
     body.is-fullscreen header { transform: translateY(-100%); opacity: 0; pointer-events: none; }
     body.is-fullscreen .mobile-dock { transform: translateY(100%); opacity: 0; pointer-events: none; }
-    body.is-fullscreen #fullscreen-btn { top: 14px; opacity: 0.4; }
-    body.is-fullscreen #fullscreen-btn:hover { opacity: 0.9; }
+    body.is-fullscreen .top-floating-btn {
+      top: 14px;
+      opacity: 0.4;
+    }
+    body.is-fullscreen .top-floating-btn:hover {
+      opacity: 0.9;
+    }
     body.is-fullscreen main { padding-top: 14px; }
 
     /* MAIN READING CANVAS */
@@ -342,14 +345,12 @@
     </div>
   </header>
 
-  <!-- FLOATING FULLSCREEN BUTTON (มุมขวาบน) -->
-  <button id="fullscreen-btn" onclick="toggleFullscreenMode()" title="โหมดอ่านเต็มจอ">
-    <span id="fullscreen-icon">⛶</span>
-  </button>
-
-  <!-- FLOATING SCAN TERMS BUTTON (มุมขวาล่าง) -->
-  <button id="scan-terms-btn" onclick="scanTermsInCurrentChapter()" title="สแกนหาคำศัพท์เฉพาะในบทนี้ที่ยังไม่มีในคลัง">
+  <!-- TOP-RIGHT FLOATING BUTTONS (SCAN TERMS & FULLSCREEN) -->
+  <button id="scan-terms-btn" class="top-floating-btn" onclick="scanTermsInCurrentChapter()" title="สแกนหาคำศัพท์เฉพาะในบทนี้ที่ยังไม่มีในคลัง">
     🔍+
+  </button>
+  <button id="fullscreen-btn" class="top-floating-btn" onclick="toggleFullscreenMode()" title="โหมดอ่านเต็มจอ">
+    <span id="fullscreen-icon">⛶</span>
   </button>
 
   <!-- BOTTOM FLOATING ACTION BAR FOR SELECTED WORD -->
@@ -736,7 +737,7 @@
         title: "คู่มือเริ่มต้น",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.1", src: "欢迎来到 NovelTranslate" },
-          { th: "คุณสามารถคลิกปุ่ม 🔍+ ที่มุมขวาล่างเพื่อสแกนหาคำศัพท์เฉพาะในบทนี้ที่ยังไม่มีในคลังได้ทันที", src: "已支持右下角单章快捷实体词智能提取" }
+          { th: "ปุ่มสแกนหาศัพท์เฉพาะ (🔍+) ย้ายไปอยู่ทางด้านซ้ายของปุ่มขยายเต็มจอที่มุมขวาบนเรียบร้อยแล้ว", src: "已调整实体词提取按钮至右上方位置" }
         ]
       }
     ];
@@ -1253,7 +1254,6 @@
       return 0;
     }
 
-    // ฟังก์ชันสำหรับปุ่มสแกนคำศัพท์ในบทปัจจุบัน (มุมขวาล่าง)
     async function scanTermsInCurrentChapter() {
       const curChap = chapters[currentChapterIndex];
       if (!curChap || !Array.isArray(curChap.paragraphs) || curChap.paragraphs.length === 0) {
@@ -1268,7 +1268,7 @@
       const originalText = btn.innerHTML;
 
       btn.disabled = true;
-      btn.innerHTML = `<span class="spinner-icon" style="margin:0;"></span>`;
+      btn.innerHTML = `<span class="spinner-icon" style="margin:0; width:12px; height:12px;"></span>`;
 
       const srcText = curChap.paragraphs.map(p => p.src || "").filter(Boolean).join("\n\n");
 
