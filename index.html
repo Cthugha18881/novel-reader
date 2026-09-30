@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v1.3</title>
+  <title>NovelTranslate AI v1.4</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -88,7 +88,7 @@
     body.is-fullscreen .top-floating-btn:hover { opacity: 0.9; }
     body.is-fullscreen main { padding-top: 14px; }
 
-    /* MAIN READING CANVAS */
+    /* MAIN CANVAS */
     main {
       flex: 1; width: 100%; max-width: 740px; margin: 0 auto;
       padding: 20px 16px 120px 16px; transition: padding 0.2s ease;
@@ -120,7 +120,7 @@
     .book-heading { font-size: 13px; opacity: 0.8; font-weight: 600; text-transform: uppercase; }
     .chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; line-height: 1.3; }
 
-    /* SEAMLESS CONTINUOUS READING CONTAINER */
+    /* CHAPTER RENDERING */
     .chapter-block { margin-bottom: 50px; position: relative; }
     .chapter-block-divider {
       display: flex; align-items: center; justify-content: center;
@@ -145,7 +145,6 @@
     }
     body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
 
-    /* INLINE TERM TAGGING HIGHLIGHT */
     .inline-term-highlight {
       border-bottom: 1.5px dotted rgba(37,99,235,0.7);
       cursor: pointer; border-radius: 2px;
@@ -156,14 +155,9 @@
       background-color: rgba(37,99,235,0.18);
       border-bottom-color: #2563eb;
     }
-    body.theme-dark .inline-term-highlight {
-      border-bottom-color: rgba(96,165,250,0.7);
-    }
-    body.theme-dark .inline-term-highlight:hover {
-      background-color: rgba(96,165,250,0.25);
-    }
+    body.theme-dark .inline-term-highlight { border-bottom-color: rgba(96,165,250,0.7); }
+    body.theme-dark .inline-term-highlight:hover { background-color: rgba(96,165,250,0.25); }
 
-    /* INLINE TERM QUICK POPOVER */
     #term-popover {
       display: none; position: fixed; z-index: 100;
       background: #1e293b; color: #fff; padding: 7px 12px; border-radius: 8px;
@@ -222,7 +216,7 @@
     }
     .modal-overlay.active { display: flex !important; }
     .modal-box {
-      width: 100%; max-width: 620px; border-radius: 12px;
+      width: 100%; max-width: 660px; border-radius: 12px;
       padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
       background-color: #fff; color: #1e293b;
     }
@@ -276,10 +270,19 @@
     body.theme-dark .gloss-badge { background: rgba(96,165,250,0.15); color: #93c5fd; }
 
     .gloss-scope-tag {
-      font-size: 9px; padding: 1px 4px; border-radius: 3px; font-weight: 600; cursor: pointer;
+      font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 600; cursor: pointer;
+      display: inline-flex; align-items: center; gap: 2px;
     }
     .gloss-scope-global { background: #dcfce7; color: #166534; }
     .gloss-scope-local { background: #fef3c7; color: #92400e; }
+
+    /* BATCH OPERATIONS BAR IN GLOSSARY */
+    .gloss-batch-toolbar {
+      display: none; align-items: center; justify-content: space-between;
+      padding: 8px 12px; margin-bottom: 8px; border-radius: 6px;
+      background: rgba(37,99,235,0.08); border: 1px solid rgba(37,99,235,0.2); font-size: 11px;
+    }
+    body.theme-dark .gloss-batch-toolbar { background: rgba(37,99,235,0.18); border-color: rgba(96,165,250,0.3); }
 
     /* BOOKSHELF & PROGRESS BOX */
     .book-item-container {
@@ -504,6 +507,20 @@
         <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="autoOrganizeGlossaryWithAI()" title="ให้ AI วิเคราะห์คำที่ยังไม่แยกหมวด แล้วย้ายเข้า 7 หมวดให้อัตโนมัติ">
           ✨ AI จัดหมวดหมู่
         </button>
+        <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-left: auto;" onclick="toggleSelectAllGlossary()">
+          เลือกทั้งหมด
+        </button>
+      </div>
+
+      <!-- Batch Toolbar -->
+      <div class="gloss-batch-toolbar" id="gloss-batch-toolbar">
+        <span id="gloss-batch-count" style="font-weight: 600;">เลือกไว้ 0 คำ</span>
+        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+          <button class="btn btn-primary" style="padding: 2px 7px; font-size: 10px;" onclick="batchResearchSelectedTerms()">🔄 รีเสิร์ชที่เลือก</button>
+          <button class="btn" style="padding: 2px 7px; font-size: 10px;" onclick="batchSetScopeGlobal(true)">🌐 ตั้งเป็นสากล</button>
+          <button class="btn" style="padding: 2px 7px; font-size: 10px;" onclick="batchAssignToCurrentBook()">🏷️ ผูกกับเรื่องนี้</button>
+          <button class="btn btn-danger" style="padding: 2px 7px; font-size: 10px;" onclick="batchDeleteSelectedTerms()">🗑️ ลบที่เลือก</button>
+        </div>
       </div>
 
       <!-- Live Search Box -->
@@ -540,6 +557,24 @@
       </div>
 
       <div id="glossary-list" style="max-height: 250px; overflow-y: auto;"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: QUICK BOOK ASSIGNMENT -->
+  <div class="modal-overlay" id="book-assign-modal" style="z-index: 60;">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-head">
+        <div class="modal-title">กำหนดเรื่องสำหรับคำศัพท์</div>
+        <button class="modal-close" onclick="closeModal('book-assign-modal')">✕</button>
+      </div>
+      <div style="font-size: 12px; margin-bottom: 8px;">
+        คำศัพท์: <b id="assign-term-title" style="color: #2563eb;">...</b>
+      </div>
+      <div id="assign-books-list" style="max-height: 200px; overflow-y: auto; margin-bottom: 12px; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 6px;"></div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end;">
+        <button class="btn" onclick="closeModal('book-assign-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveBookAssignment()">บันทึก</button>
+      </div>
     </div>
   </div>
 
@@ -753,6 +788,16 @@
       });
     }
 
+    function dbDeleteMultipleGlossaryItems(srcList) {
+      return new Promise((resolve) => {
+        if (!db || !srcList || srcList.length === 0) return resolve();
+        const tx = db.transaction('glossaries', 'readwrite');
+        const store = tx.objectStore('glossaries');
+        srcList.forEach(s => store.delete(s));
+        tx.oncomplete = () => resolve();
+      });
+    }
+
     // ==================== APP STATE & VARIABLES ====================
     let currentTheme = 'sepia';
     let currentFontSize = 18;
@@ -781,14 +826,15 @@
     let selectedParagraphContext = { th: "", src: "" };
 
     let currentGlossaryCategory = 'all';
+    let termBeingAssigned = null;
 
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v1.3",
+        title: "คู่มือเริ่มต้น v1.4",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.3", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบติดตั้งคลังศัพท์อัจฉริยะ 7 หมวดหมู่, Multi-Book Tagging, Reverse Word-Pairing และ Inline Term Tagging ครบวงจร", src: "已支持全新7大类别、标签化术语库与内联交互" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.4", src: "欢迎来到 NovelTranslate" },
+          { th: "ระบบรองรับการแสดงชื่อเรื่องจริงบนแท็กศัพท์, เลือกหลายคำพร้อมกัน (Batch Operations) และหน้าต่างกำหนดเรื่องให้อย่างสมบูรณ์", src: "已支持交互式标签管理与批量操作" }
         ]
       }
     ];
@@ -1267,11 +1313,8 @@
       }
     }
 
-    // TOGGLE PARAGRAPH SRC (ป้องกันการเปิดซ้อนเมื่อคลิกที่คำไฮไลต์)
     function toggleParagraphSrc(e, uniqueKey) {
-      if (e && e.target && e.target.closest('.inline-term-highlight')) {
-        return; // ไม่เปิดกล่องจีนถ้าคลิกที่คำไฮไลต์
-      }
+      if (e && e.target && e.target.closest('.inline-term-highlight')) return;
       const selection = window.getSelection();
       if (selection && selection.toString().trim().length > 0) return;
 
@@ -1281,7 +1324,7 @@
       }
     }
 
-    // SELECTION MONITOR WITH REVERSE WORD-PAIRING CAPABILITY
+    // SELECTION MONITOR
     function setupSelectionMonitor() {
       const checkSelection = () => {
         const sel = window.getSelection();
@@ -1404,7 +1447,7 @@
       const bookContextEl = document.getElementById('glossary-book-context');
       if (bookContextEl) {
         const authorLabel = currentAuthor ? ` | ผู้แต่ง: ${currentAuthor}` : '';
-        bookContextEl.innerText = `เรื่องปัจจุบัน: ${currentBookTitle}${authorLabel} (${currentBookId})`;
+        bookContextEl.innerText = `เรื่องปัจจุบัน: ${currentBookTitle}${authorLabel}`;
       }
       await renderGlossaryUI();
       openModal('glossary-modal');
@@ -1423,7 +1466,7 @@
         case 'title': return '🎖️ ตำแหน่ง';
         case 'location': return '🏔️ สถานที่';
         case 'skill': return '📜 ทักษะ/วิชา';
-        case 'equipment': return '🗡️ อุปกรณ์';
+        case 'equipment': return '🗡️️ อุปกรณ์';
         case 'resource': return '💊 ทรัพยากร';
         case 'realm': return '🧬 ลำดับขั้น';
         default: return '🏷 อื่นๆ';
@@ -1434,6 +1477,10 @@
       const list = document.getElementById('glossary-list');
       if (!list) return;
       list.innerHTML = "";
+
+      const books = await dbGetAllBooks();
+      const bookMap = new Map();
+      books.forEach(b => bookMap.set(b.bookId, b.title));
 
       let items = await dbGetAllGlossaryItems();
       const scopeFilter = document.getElementById('gloss-scope-filter').value;
@@ -1463,34 +1510,219 @@
 
       if (items.length === 0) {
         list.innerHTML = `<div style="text-align:center; padding:20px; opacity:0.5; font-size:12px;">ไม่พบคำศัพท์ที่ตรงกับเงื่อนไข</div>`;
+        updateGlossaryBatchToolbar();
         return;
       }
 
       items.forEach(data => {
         const isGlobal = data.scope === 'global';
-        const scopeBadge = isGlobal ? 
-          `<span class="gloss-scope-tag gloss-scope-global" onclick="toggleGlossaryScope('${data.src}')" title="คลิกเพื่อจำกัดเฉพาะเรื่อง">🌐 สากล</span>` : 
-          `<span class="gloss-scope-tag gloss-scope-local" onclick="toggleGlossaryScope('${data.src}')" title="คลิกเพื่อเปลี่ยนเป็นสากล">🏷️ เฉพาะเรื่อง (${data.books?.length || 0})</span>`;
+        const isCurrentAttached = Array.isArray(data.books) && data.books.includes(currentBookId);
+
+        let bookTagsHtml = '';
+        if (isGlobal) {
+          bookTagsHtml = `<span class="gloss-scope-tag gloss-scope-global" onclick="openBookAssignModal('${data.src}')" title="คำนี้ใช้ได้กับทุกเรื่อง (คลิกเพื่อแก้ไข)">🌐 สากล</span>`;
+        } else {
+          const bookNames = (data.books || []).map(bId => bookMap.get(bId) || 'ไม่ทราบชื่อเรื่อง');
+          const labelText = bookNames.length > 0 ? (bookNames.length === 1 ? bookNames[0] : `${bookNames[0]} (+${bookNames.length - 1})`) : 'ไม่มีแท็ก';
+          bookTagsHtml = `<span class="gloss-scope-tag gloss-scope-local" onclick="openBookAssignModal('${data.src}')" title="คลิกเพื่อจัดการเรื่องที่ใช้งาน: ${bookNames.join(', ')}">🏷️ ${labelText}</span>`;
+        }
+
+        const attachBtn = (!isGlobal && !isCurrentAttached) ? 
+          `<button class="btn" style="padding:1px 4px; font-size:9px; background:rgba(37,99,235,0.1); color:#2563eb;" onclick="quickAttachCurrentBook('${data.src}')" title="ดึงคำนี้มาใช้กับเรื่องปัจจุบัน">+ ใช้กับเรื่องนี้</button>` : '';
 
         const row = document.createElement('div');
         row.className = 'gloss-item-row';
         row.innerHTML = `
-          <div style="flex: 1; overflow: hidden;">
-            <div style="display:flex; align-items:center; gap:6px; flex-wrap: wrap;">
-              <span class="gloss-badge">${getCategoryLabel(data.category)}</span>
-              ${scopeBadge}
-              <b>${data.src}</b> ➔ <span id="gloss-tgt-val-${data.src}" style="color:#2563eb; font-weight:600;">${data.tgt}</span>
-              <span style="font-size:10px; opacity:0.5;">(ใช้ ${data.count || 1} ครั้ง)</span>
+          <div style="display:flex; align-items:center; gap:8px; flex:1; overflow:hidden;">
+            <input type="checkbox" class="gloss-item-chk" value="${data.src}" onchange="updateGlossaryBatchToolbar()" style="cursor:pointer; accent-color:#2563eb;">
+            <div style="flex: 1; overflow: hidden;">
+              <div style="display:flex; align-items:center; gap:5px; flex-wrap: wrap;">
+                <span class="gloss-badge">${getCategoryLabel(data.category)}</span>
+                ${bookTagsHtml}
+                ${attachBtn}
+                <b>${data.src}</b> ➔ <span id="gloss-tgt-val-${data.src}" style="color:#2563eb; font-weight:600;">${data.tgt}</span>
+                <span style="font-size:10px; opacity:0.4;">(${data.count || 1})</span>
+              </div>
             </div>
           </div>
-          <div style="display:flex; gap:4px; align-items:center;">
-            <button class="btn" style="padding:2px 6px; font-size:10px;" id="btn-research-${data.src}" onclick="researchGlossaryTerm('${data.src}')" title="ค้นหาคำแปลยอดนิยมตามลำดับขั้น 3-Tier">🔄 รีเสิร์ช</button>
-            <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="promptEditGlossary('${data.src}')">✎ แก้</button>
-            <button class="btn btn-danger" style="padding:2px 6px; font-size:10px;" onclick="delGloss('${data.src}')">ลบ</button>
+          <div style="display:flex; gap:4px; align-items:center; shrink: 0;">
+            <button class="btn" style="padding:2px 6px; font-size:10px;" id="btn-research-${data.src}" onclick="researchGlossaryTerm('${data.src}')" title="ค้นหาคำแปลยอดนิยมตามลำดับขั้น 3-Tier">🔄</button>
+            <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="promptEditGlossary('${data.src}')">✎</button>
+            <button class="btn btn-danger" style="padding:2px 6px; font-size:10px;" onclick="delGloss('${data.src}')">✕</button>
           </div>
         `;
         list.appendChild(row);
       });
+
+      updateGlossaryBatchToolbar();
+    }
+
+    // BATCH SELECTION IN GLOSSARY
+    function updateGlossaryBatchToolbar() {
+      const chks = document.querySelectorAll('.gloss-item-chk:checked');
+      const bar = document.getElementById('gloss-batch-toolbar');
+      const countEl = document.getElementById('gloss-batch-count');
+      if (bar) {
+        if (chks.length > 0) {
+          bar.style.display = 'flex';
+          countEl.innerText = `เลือกไว้ ${chks.length} คำ`;
+        } else {
+          bar.style.display = 'none';
+        }
+      }
+    }
+
+    function toggleSelectAllGlossary() {
+      const chks = document.querySelectorAll('.gloss-item-chk');
+      if (chks.length === 0) return;
+      const allChecked = Array.from(chks).every(c => c.checked);
+      chks.forEach(c => c.checked = !allChecked);
+      updateGlossaryBatchToolbar();
+    }
+
+    async function batchDeleteSelectedTerms() {
+      const chks = document.querySelectorAll('.gloss-item-chk:checked');
+      if (chks.length === 0) return;
+      if (!confirm(`ต้องการลบคำศัพท์ที่เลือกจำนวน ${chks.length} คำใช่หรือไม่?`)) return;
+
+      const srcList = Array.from(chks).map(c => c.value);
+      await dbDeleteMultipleGlossaryItems(srcList);
+      await renderGlossaryUI();
+      renderVirtualWindow(currentChapterIndex);
+    }
+
+    async function batchSetScopeGlobal(isGlobal) {
+      const chks = document.querySelectorAll('.gloss-item-chk:checked');
+      if (chks.length === 0) return;
+
+      const items = await dbGetAllGlossaryItems();
+      const srcList = Array.from(chks).map(c => c.value);
+
+      for (const s of srcList) {
+        const it = items.find(x => x.src === s);
+        if (it) {
+          it.scope = isGlobal ? 'global' : 'tagged';
+          it.updatedAt = Date.now();
+          await dbSaveGlossaryItem(it);
+        }
+      }
+      await renderGlossaryUI();
+      renderVirtualWindow(currentChapterIndex);
+    }
+
+    async function batchAssignToCurrentBook() {
+      const chks = document.querySelectorAll('.gloss-item-chk:checked');
+      if (chks.length === 0) return;
+
+      const items = await dbGetAllGlossaryItems();
+      const srcList = Array.from(chks).map(c => c.value);
+
+      for (const s of srcList) {
+        const it = items.find(x => x.src === s);
+        if (it) {
+          if (!Array.isArray(it.books)) it.books = [];
+          if (!it.books.includes(currentBookId)) {
+            it.books.push(currentBookId);
+            it.updatedAt = Date.now();
+            await dbSaveGlossaryItem(it);
+          }
+        }
+      }
+      await renderGlossaryUI();
+      renderVirtualWindow(currentChapterIndex);
+    }
+
+    async function batchResearchSelectedTerms() {
+      const chks = document.querySelectorAll('.gloss-item-chk:checked');
+      if (chks.length === 0) return;
+
+      const count = chks.length;
+      if (!confirm(`ต้องการเริ่มให้ AI รีเสิร์ชคำศัพท์ที่เลือกจำนวน ${count} คำแบบเรียงคิวอัตโนมัติใช่หรือไม่?`)) return;
+
+      const srcList = Array.from(chks).map(c => c.value);
+      const countEl = document.getElementById('gloss-batch-count');
+
+      for (let i = 0; i < srcList.length; i++) {
+        const src = srcList[i];
+        countEl.innerText = `กำลังรีเสิร์ช (${i+1}/${count}): ${src}...`;
+        await researchGlossaryTermDirect(src);
+        if (i < srcList.length - 1) {
+          await new Promise(r => setTimeout(r, 1200));
+        }
+      }
+
+      await renderGlossaryUI();
+      renderVirtualWindow(currentChapterIndex);
+      alert(`✓ รีเสิร์ชคำศัพท์เสร็จสมบูรณ์ทั้ง ${count} คำ`);
+    }
+
+    // QUICK BOOK PICKER MODAL
+    async function openBookAssignModal(src) {
+      termBeingAssigned = src;
+      const titleEl = document.getElementById('assign-term-title');
+      const container = document.getElementById('assign-books-list');
+      titleEl.innerText = src;
+      container.innerHTML = '<div style="text-align:center; padding:10px;">กำลังโหลด...</div>';
+      openModal('book-assign-modal');
+
+      const items = await dbGetAllGlossaryItems();
+      const cur = items.find(x => x.src === src);
+      if (!cur) return closeModal('book-assign-modal');
+
+      const books = await dbGetAllBooks();
+      let html = `
+        <label style="display:flex; align-items:center; gap:8px; padding:6px; border-bottom:1px solid rgba(0,0,0,0.06); cursor:pointer; font-weight:600;">
+          <input type="checkbox" id="assign-global-chk" ${cur.scope === 'global' ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
+          <span>🌐 ใช้งานได้กับทุกเรื่อง (Global)</span>
+        </label>
+      `;
+
+      books.forEach(b => {
+        const isChecked = Array.isArray(cur.books) && cur.books.includes(b.bookId);
+        html += `
+          <label style="display:flex; align-items:center; gap:8px; padding:6px; cursor:pointer; font-size:12px;">
+            <input type="checkbox" class="assign-book-chk" value="${b.bookId}" ${isChecked ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
+            <span>📚 ${b.title}</span>
+          </label>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    async function saveBookAssignment() {
+      if (!termBeingAssigned) return;
+      const items = await dbGetAllGlossaryItems();
+      const cur = items.find(x => x.src === termBeingAssigned);
+      if (!cur) return closeModal('book-assign-modal');
+
+      const isGlobal = document.getElementById('assign-global-chk').checked;
+      const chks = document.querySelectorAll('.assign-book-chk:checked');
+      const selectedBooks = Array.from(chks).map(c => c.value);
+
+      cur.scope = isGlobal ? 'global' : 'tagged';
+      cur.books = selectedBooks;
+      cur.updatedAt = Date.now();
+
+      await dbSaveGlossaryItem(cur);
+      closeModal('book-assign-modal');
+      await renderGlossaryUI();
+      renderVirtualWindow(currentChapterIndex);
+    }
+
+    async function quickAttachCurrentBook(src) {
+      const items = await dbGetAllGlossaryItems();
+      const cur = items.find(x => x.src === src);
+      if (cur) {
+        if (!Array.isArray(cur.books)) cur.books = [];
+        if (!cur.books.includes(currentBookId)) {
+          cur.books.push(currentBookId);
+          cur.updatedAt = Date.now();
+          await dbSaveGlossaryItem(cur);
+          await renderGlossaryUI();
+          renderVirtualWindow(currentChapterIndex);
+        }
+      }
     }
 
     async function addGlossary() {
@@ -1521,18 +1753,6 @@
       renderVirtualWindow(currentChapterIndex);
     }
 
-    async function toggleGlossaryScope(src) {
-      const items = await dbGetAllGlossaryItems();
-      const it = items.find(x => x.src === src);
-      if (!it) return;
-
-      it.scope = (it.scope === 'global') ? 'tagged' : 'global';
-      it.updatedAt = Date.now();
-      await dbSaveGlossaryItem(it);
-      await renderGlossaryUI();
-      renderVirtualWindow(currentChapterIndex);
-    }
-
     async function promptEditGlossary(src) {
       const items = await dbGetAllGlossaryItems();
       const cur = items.find(x => x.src === src);
@@ -1551,18 +1771,12 @@
       }
     }
 
-    // TIERED RESEARCH ENGINE (แก้ไขไม่ให้กล่องกระพริบและไม่ทำให้คำหายจากจอ)
-    async function researchGlossaryTerm(src) {
+    // TIERED RESEARCH ENGINE (HELPER)
+    async function researchGlossaryTermDirect(src) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
       const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
-
-      if (!key) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
-
-      const tgtEl = document.getElementById(`gloss-tgt-val-${src}`);
-      const btnEl = document.getElementById(`btn-research-${src}`);
-      if (btnEl) btnEl.disabled = true;
-      if (tgtEl) tgtEl.innerText = "กำลังรีเสิร์ช...";
+      if (!key) return;
 
       const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
       const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
@@ -1602,7 +1816,7 @@
           })
         });
 
-        if (!res.ok) throw new Error("ยิง API ไม่สำเร็จ");
+        if (!res.ok) return;
         const data = await res.json();
         const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
 
@@ -1611,19 +1825,29 @@
           const cur = items.find(x => x.src === src);
           if (cur) {
             cur.tgt = parsed.tgt.trim();
-            // คงหมวดเดิมไว้เพื่อไม่ให้คำกระโดดหายไปจากมุมมองปัจจุบัน
             cur.updatedAt = Date.now();
             await dbSaveGlossaryItem(cur);
-            if (tgtEl) tgtEl.innerText = cur.tgt;
           }
         }
+      } catch (err) {}
+    }
+
+    async function researchGlossaryTerm(src) {
+      const key = (localStorage.getItem('nov_gemini_key') || "").trim();
+      if (!key) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+
+      const tgtEl = document.getElementById(`gloss-tgt-val-${src}`);
+      const btnEl = document.getElementById(`btn-research-${src}`);
+      if (btnEl) btnEl.disabled = true;
+      if (tgtEl) tgtEl.innerText = "กำลังรีเสิร์ช...";
+
+      try {
+        await researchGlossaryTermDirect(src);
+        const items = await dbGetAllGlossaryItems();
+        const cur = items.find(x => x.src === src);
+        if (cur && tgtEl) tgtEl.innerText = cur.tgt;
       } catch (err) {
         alert("รีเสิร์ชไม่สำเร็จ: " + err.message);
-        if (tgtEl) {
-          const items = await dbGetAllGlossaryItems();
-          const cur = items.find(x => x.src === src);
-          if (cur) tgtEl.innerText = cur.tgt;
-        }
       } finally {
         if (btnEl) btnEl.disabled = false;
       }
