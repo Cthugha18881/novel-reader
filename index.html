@@ -66,7 +66,7 @@
       background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
     }
 
-    /* TOP-RIGHT FLOATING BUTTONS (3 BUTTONS IN A ROW) */
+    /* TOP-RIGHT FLOATING BUTTONS */
     .top-floating-btn {
       position: fixed; top: 62px; z-index: 35; width: 32px; height: 32px; border-radius: 50%;
       background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.12);
@@ -147,27 +147,28 @@
 
     /* INLINE TERM TAGGING HIGHLIGHT */
     .inline-term-highlight {
-      border-bottom: 1.5px dotted rgba(37,99,235,0.6);
+      border-bottom: 1.5px dotted rgba(37,99,235,0.7);
       cursor: pointer; border-radius: 2px;
       transition: background-color 0.15s, border-color 0.15s;
+      position: relative; z-index: 10;
     }
     .inline-term-highlight:hover {
-      background-color: rgba(37,99,235,0.12);
+      background-color: rgba(37,99,235,0.18);
       border-bottom-color: #2563eb;
     }
     body.theme-dark .inline-term-highlight {
-      border-bottom-color: rgba(96,165,250,0.6);
+      border-bottom-color: rgba(96,165,250,0.7);
     }
     body.theme-dark .inline-term-highlight:hover {
-      background-color: rgba(96,165,250,0.2);
+      background-color: rgba(96,165,250,0.25);
     }
 
     /* INLINE TERM QUICK POPOVER */
     #term-popover {
-      display: none; position: fixed; z-index: 60;
-      background: #1e293b; color: #fff; padding: 8px 12px; border-radius: 8px;
-      font-size: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);
-      animation: fadeIn 0.15s ease-out; gap: 8px; align-items: center;
+      display: none; position: fixed; z-index: 100;
+      background: #1e293b; color: #fff; padding: 7px 12px; border-radius: 8px;
+      font-size: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+      animation: fadeIn 0.15s ease-out; gap: 8px; align-items: center; pointer-events: auto;
     }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -761,7 +762,7 @@
     let lastChapterContext = "";
     let currentBookId = "default_novel";
     let currentBookTitle = "NovelTranslate";
-    let currentAuthor = ""; // เก็บชื่อผู้แต่งสำหรับ Tiered Resolution
+    let currentAuthor = "";
     let isUserCustomTitle = false;
 
     let renderedWindowIndices = []; 
@@ -787,7 +788,7 @@
         title: "คู่มือเริ่มต้น v1.3",
         paragraphs: [
           { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.3", src: "欢迎来到 NovelTranslate" },
-          { th: "ติดตั้งระบบ Tiered Research และปุ่ม 🔄 แปลบทปัจจุบันใหม่บนมุมขวาบนเรียบร้อยแล้ว", src: "已支持分层术语检索与快捷重译" }
+          { th: "ระบบติดตั้งคลังศัพท์อัจฉริยะ 7 หมวดหมู่, Multi-Book Tagging, Reverse Word-Pairing และ Inline Term Tagging ครบวงจร", src: "已支持全新7大类别、标签化术语库与内联交互" }
         ]
       }
     ];
@@ -950,15 +951,16 @@
       const editBtn = document.getElementById('popover-edit-btn');
 
       textSpan.innerHTML = `<b>${src}</b> ➔ <span style="color:#38bdf8;">${tgt}</span>`;
-      editBtn.onclick = () => {
+      editBtn.onclick = (ev) => {
+        ev.stopPropagation();
         popover.style.display = 'none';
         promptEditGlossary(src);
       };
 
       popover.style.display = 'flex';
       const rect = e.target.getBoundingClientRect();
-      popover.style.top = `${rect.bottom + window.scrollY + 6}px`;
-      popover.style.left = `${Math.min(window.innerWidth - 220, Math.max(10, rect.left))}px`;
+      popover.style.top = `${rect.bottom + 6}px`;
+      popover.style.left = `${Math.min(window.innerWidth - 240, Math.max(10, rect.left))}px`;
     }
 
     function setupPopoverDelegation() {
@@ -985,7 +987,7 @@
         const highlightedTh = applyInlineTermHighlighting(p.th || "", activeTerms);
         parasHtml += `
           <div class="para-item" id="para-box-${chapIdx}-${pIdx}">
-            <div class="para-th" onclick="toggleParagraphSrc('${chapIdx}-${pIdx}')" data-th="${encodeURIComponent(p.th || '')}" data-src="${encodeURIComponent(p.src || '')}">${highlightedTh}</div>
+            <div class="para-th" onclick="toggleParagraphSrc(event, '${chapIdx}-${pIdx}')" data-th="${encodeURIComponent(p.th || '')}" data-src="${encodeURIComponent(p.src || '')}">${highlightedTh}</div>
             <div class="para-src" id="src-${chapIdx}-${pIdx}">${p.src || "ไม่มีข้อความต้นฉบับ"}</div>
           </div>
         `;
@@ -1265,7 +1267,11 @@
       }
     }
 
-    function toggleParagraphSrc(uniqueKey) {
+    // TOGGLE PARAGRAPH SRC (ป้องกันการเปิดซ้อนเมื่อคลิกที่คำไฮไลต์)
+    function toggleParagraphSrc(e, uniqueKey) {
+      if (e && e.target && e.target.closest('.inline-term-highlight')) {
+        return; // ไม่เปิดกล่องจีนถ้าคลิกที่คำไฮไลต์
+      }
       const selection = window.getSelection();
       if (selection && selection.toString().trim().length > 0) return;
 
@@ -1420,7 +1426,7 @@
         case 'equipment': return '🗡️ อุปกรณ์';
         case 'resource': return '💊 ทรัพยากร';
         case 'realm': return '🧬 ลำดับขั้น';
-        default: return '🏷️️ อื่นๆ';
+        default: return '🏷 อื่นๆ';
       }
     }
 
@@ -1473,12 +1479,12 @@
             <div style="display:flex; align-items:center; gap:6px; flex-wrap: wrap;">
               <span class="gloss-badge">${getCategoryLabel(data.category)}</span>
               ${scopeBadge}
-              <b>${data.src}</b> ➔ <span style="color:#2563eb; font-weight:600;">${data.tgt}</span>
+              <b>${data.src}</b> ➔ <span id="gloss-tgt-val-${data.src}" style="color:#2563eb; font-weight:600;">${data.tgt}</span>
               <span style="font-size:10px; opacity:0.5;">(ใช้ ${data.count || 1} ครั้ง)</span>
             </div>
           </div>
           <div style="display:flex; gap:4px; align-items:center;">
-            <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="researchGlossaryTerm('${data.src}')" title="ค้นหาคำแปลยอดนิยมตามลำดับขั้น 3-Tier">🔄 รีเสิร์ช</button>
+            <button class="btn" style="padding:2px 6px; font-size:10px;" id="btn-research-${data.src}" onclick="researchGlossaryTerm('${data.src}')" title="ค้นหาคำแปลยอดนิยมตามลำดับขั้น 3-Tier">🔄 รีเสิร์ช</button>
             <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="promptEditGlossary('${data.src}')">✎ แก้</button>
             <button class="btn btn-danger" style="padding:2px 6px; font-size:10px;" onclick="delGloss('${data.src}')">ลบ</button>
           </div>
@@ -1545,13 +1551,18 @@
       }
     }
 
-    // TIERED RESEARCH ENGINE FOR GLOSSARY TERM
+    // TIERED RESEARCH ENGINE (แก้ไขไม่ให้กล่องกระพริบและไม่ทำให้คำหายจากจอ)
     async function researchGlossaryTerm(src) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
       const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
 
       if (!key) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+
+      const tgtEl = document.getElementById(`gloss-tgt-val-${src}`);
+      const btnEl = document.getElementById(`btn-research-${src}`);
+      if (btnEl) btnEl.disabled = true;
+      if (tgtEl) tgtEl.innerText = "กำลังรีเสิร์ช...";
 
       const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
       const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
@@ -1600,15 +1611,21 @@
           const cur = items.find(x => x.src === src);
           if (cur) {
             cur.tgt = parsed.tgt.trim();
-            if (parsed.category) cur.category = parsed.category;
+            // คงหมวดเดิมไว้เพื่อไม่ให้คำกระโดดหายไปจากมุมมองปัจจุบัน
             cur.updatedAt = Date.now();
             await dbSaveGlossaryItem(cur);
-            await renderGlossaryUI();
-            renderVirtualWindow(currentChapterIndex);
+            if (tgtEl) tgtEl.innerText = cur.tgt;
           }
         }
       } catch (err) {
         alert("รีเสิร์ชไม่สำเร็จ: " + err.message);
+        if (tgtEl) {
+          const items = await dbGetAllGlossaryItems();
+          const cur = items.find(x => x.src === src);
+          if (cur) tgtEl.innerText = cur.tgt;
+        }
+      } finally {
+        if (btnEl) btnEl.disabled = false;
       }
     }
 
@@ -2851,7 +2868,6 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
             }
           }
 
-          // สแกนหานามปากกาผู้แต่ง (Author Anchor)
           const authorLine = lines.find(l => l.includes('作者：') || l.includes('作者:'));
           if (authorLine) {
             const m = authorLine.match(/作者[：:]\s*([^\s]+)/);
