@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v1.9</title>
+  <title>NovelTranslate AI v2.0</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -384,7 +384,7 @@
     </div>
   </header>
 
-  <!-- TOP-RIGHT FLOATING BUTTONS (RETRANSLATE, SCAN & FULLSCREEN) -->
+  <!-- TOP-RIGHT FLOATING BUTTONS -->
   <button id="retranslate-chap-btn" class="top-floating-btn" onclick="retranslateCurrentActiveChapter()" title="แปลบทปัจจุบันนี้ใหม่ตามคลังศัพท์ล่าสุด">
     🔄
   </button>
@@ -433,10 +433,9 @@
       <button class="btn" onclick="exportTxt()" style="font-size: 11px; shrink: 0;">.TXT</button>
     </div>
 
-    <!-- Reading Paragraphs Container (Virtual Window) -->
+    <!-- Reading Paragraphs Container -->
     <div id="reading-content"></div>
 
-    <!-- แถบสถานะแจ้งเตือนการแปลท้ายจอ -->
     <div id="infinite-status-banner"></div>
 
     <!-- Chapter Navigation -->
@@ -878,7 +877,6 @@
     let currentUrl = "";
     let nextUrlCalculated = "";
     let isPrefetching = false;
-    let lastChapterContext = "";
     let currentBookId = "default_novel";
     let currentBookTitle = "NovelTranslate";
     let currentAuthor = "";
@@ -908,11 +906,12 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v1.9",
+        title: "คู่มือเริ่มต้น v2.0",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.9", src: "欢迎来到 NovelTranslate" },
-          { th: "ติดตั้งระบบแก้ไขคำในบทที่แปลแล้วทั้งหมดอัตโนมัติ (Retroactive Term Sync) เมื่อเปลี่ยนคำแปลในคลัง ทุกบทจะอัปเดตตามทันที", src: "已支持术语修改全局自动同步与级联替换" }
-        ]
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.0", src: "欢迎来到 NovelTranslate" },
+          { th: "ติดตั้งระบบ Narrative Rolling Summary และ Scene-Adaptive Translation เต็มรูปแบบ", src: "已完全支持情景自适应与上下文滚动摘要" }
+        ],
+        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.0"
       }
     ];
     let currentChapterIndex = 0;
@@ -1015,7 +1014,6 @@
       localStorage.setItem('nov_font_size', currentFontSize);
     }
 
-    // MODAL OPEN / CLOSE WITH BODY SCROLL LOCK
     function openModal(id) { 
       const modal = document.getElementById(id);
       if (modal) {
@@ -2016,7 +2014,6 @@
         cur.updatedAt = Date.now();
         await dbSaveGlossaryItem(cur);
 
-        // ซิงค์คำแปลเก่า ➔ คำแปลใหม่ ทั่วทั้งนิยายอัตโนมัติ
         if (oldTgt && oldTgt !== cur.tgt) {
           await syncUpdatedTermAcrossChapters(src, oldTgt, cur.tgt);
         }
@@ -2088,7 +2085,6 @@
             cur.updatedAt = Date.now();
             await dbSaveGlossaryItem(cur);
 
-            // ซิงค์คำแปลใหม่ทั่วทั้งเรื่อง
             if (oldTgt && oldTgt !== cur.tgt) {
               await syncUpdatedTermAcrossChapters(src, oldTgt, cur.tgt);
             }
@@ -2367,10 +2363,15 @@ ${JSON.stringify(termList)}
         }
       }
 
+      // ดึงสรุปบทก่อนหน้า (Lookback-1)
+      const prevChap = bookChaps.find(c => c.order === (targetChap.order - 1));
+      const prevSummary = prevChap?.summary || "";
+
       try {
-        const result = await translateTextWithPingPong(srcChineseText, null, targetChap.title, currentBookTitle);
+        const result = await translateTextWithPingPong(srcChineseText, null, targetChap.title, currentBookTitle, prevSummary);
         targetChap.paragraphs = result.paragraphs;
         if (result.chapterTitle) targetChap.title = result.chapterTitle;
+        if (result.summary) targetChap.summary = result.summary;
 
         await dbSaveChapter(targetChap);
 
@@ -2378,6 +2379,7 @@ ${JSON.stringify(termList)}
         if (memChap) {
           memChap.paragraphs = targetChap.paragraphs;
           memChap.title = targetChap.title;
+          memChap.summary = targetChap.summary;
         }
         await renderVirtualWindow(currentChapterIndex, false);
         refreshShelfViewOnly(currentBookId);
@@ -2398,7 +2400,7 @@ ${JSON.stringify(termList)}
       const genreRule = getGenreInstruction(genre);
 
       const prompt = `คุณคือบรรณาธิการอาวุโสของสำนักพิมพ์นิยายแปลภาษาไทย
-หน้าที่: ตรวจแก้คำผิด ขัดเกลาสำนวนภาษาไทย และแก้ปัญหาไวยากรณ์จีนตกค้างให้สละสลวย ไหลลื่น เป็นธรรมชาติ
+หน้าที่: ตรวจแก้คำผิด ขัดเกลาสำนวนภาษาไทย ถอดรหัสสำนวนจีน และแก้ปัญหาไวยากรณ์จีนตกค้างให้สละสลวย ไหลลื่น เป็นธรรมชาติ
 
 แนวเรื่อง: "${genre}"
 ${genreRule}
@@ -2461,8 +2463,8 @@ ${genreRule}
       return paragraphs;
     }
 
-    // ==================== TRANSLATE CALL WITH TIERED INSTRUCTIONS ====================
-    async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "", signal = null, onStatusUpdate = null) {
+    // ==================== TRANSLATE CALL WITH TIERED INSTRUCTIONS & ROLLING CONTEXT ====================
+    async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "", prevSummary = "", signal = null, onStatusUpdate = null) {
       const activeKey = getActiveApiKey();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
 
@@ -2475,10 +2477,21 @@ ${genreRule}
       const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
       const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
 
-      const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลเนื้อหาต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย
-ข้อมูลอ้างอิง: ${bookCtx} ${authorCtx}
+      // จัดระเบียบ Prompt เพื่อรองรับ Prompt Caching และ Scene-Adaptive Translation
+      const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลเนื้อหาภาษาจีนต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย เป็นธรรมชาติ
 
+สไตล์และบรรยากาศหลักของแนวเรื่อง:
 ${genreRule}
+
+กฎการปรับแต่งโทนอารมณ์ตามฉาก (Scene-Adaptive Translation) และถอดรหัสสำนวน:
+1. **ฉากต่อสู้/ระทึกขวัญ:** ใช้ประโยคสั้น กระชับ ใช้คำกริยาแสดงความรวดเร็วและหนักหน่วง ตัดคำเชื่อมเยิ่นเย้อเพื่อสร้างจังหวะที่ดุเดือด
+2. **ฉากบทสนทนา/อุบาย:** ถ่ายทอดคารมให้เฉียบคม รักษาบุคลิกและระดับความสัมพันธ์ของตัวละครให้คงที่
+3. **ฉากฝึกตน/บรรยายปรัชญา:** ใช้ศัพท์แสงวรรณกรรมที่ลึกซึ้ง ให้ความรู้สึกขลังและสง่างาม
+4. **สำนวนจีน 4 ตัวอักษร (成语):** ห้ามแปลตรงตัวแบบคำต่อคำจนขัดหู ให้ถอดความหมายเป็นสำนวนไทยหรือภาษาเขียนที่สละสลวยและเข้าใจง่ายทันที แต่ **คำใน [Glossary] ต้องคงเดิม 100% เหนือกฎสำนวน**
+
+ข้อมูลบริบท:
+- ${bookCtx} ${authorCtx}
+${prevSummary ? `- เหตุการณ์ในตอนก่อนหน้า: "${prevSummary}"` : ''}
 
 กฎการเทียบเคียงและล็อกคำศัพท์ (3-Tier Priority):
 1. Tier 1 (ตรงเรื่อง): หากเป็นชื่อตัวละครหรือสถานที่ในนิยายเรื่อง "${currentBookTitle}" ให้ใช้คำแปล/ทับศัพท์ที่ตรงกับฉบับแปลไทย
@@ -2491,15 +2504,15 @@ ${genreRule}
    - ชื่อเรื่องต้นฉบับ: "${rawBookTitle}"
 2. ห้ามรวบย่อหน้ารวมกันเป็นก้อนเดียวเด็ดขาด แยกย่อหน้าแปลให้ตรงกับต้นฉบับแบบ 1 ต่อ 1
 3. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
-4. ล็อกสรรพนามของตัวละครให้สอดคล้องกัน ห้ามสลับไปมา
-5. ในบทสนทนา ให้ใช้เครื่องหมายอัญประกาศ ' หรือ “ ” ห้ามใช้เครื่องหมาย " ซ้ำซ้อน และห้ามใส่ Control Characters ดิบ
+4. ในบทสนทนา ให้ใช้เครื่องหมายอัญประกาศ ' หรือ “ ” ห้ามใช้เครื่องหมาย " ซ้ำซ้อน และห้ามใส่ Control Characters ดิบ
+5. สรุปเหตุการณ์สำคัญของบทนี้ในฟิลด์ "chapter_summary" ความยาว 1-2 ประโยค เพื่อใช้ต่อบริบทในบทถัดไป
 6. สกัด "used_entities" (ชื่อเฉพาะสำคัญที่ปรากฏในบทนี้) แนบกลับมาด้วยเพื่อบันทึกลงคลังศัพท์
-${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${lastChapterContext}"` : ''}
 
 ผลลัพธ์ต้องส่งกลับเป็น JSON Object ตามโครงสร้างนี้เท่านั้น:
 {
   "translatedBookTitle": "คำแปลชื่อเรื่องภาษาไทย",
   "translatedChapterTitle": "คำแปลชื่อตอนภาษาไทย",
+  "chapter_summary": "สรุปสั้นๆ 1-2 ประโยคว่าในบทนี้เกิดอะไรขึ้นบ้างเพื่อส่งต่อบริบท",
   "paragraphs": [
     {"th": "คำแปลไทยของย่อหน้านั้น", "src": "ข้อความจีนของย่อหน้านั้น"}
   ],
@@ -2532,6 +2545,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
       let paragraphs = Array.isArray(parsedResult) ? parsedResult : (parsedResult.paragraphs || []);
       let translatedChapTitle = parsedResult.translatedChapterTitle || rawChapTitle;
       let translatedBookTitle = parsedResult.translatedBookTitle || rawBookTitle;
+      let chapterSummary = parsedResult.chapter_summary || "";
 
       if (Array.isArray(parsedResult.used_entities) && parsedResult.used_entities.length > 0) {
         const existingItems = await dbGetAllGlossaryItems();
@@ -2577,14 +2591,10 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         }
       });
 
-      if (formattedParas.length > 0) {
-        const lastTwo = formattedParas.slice(-2).map(item => item.th).join(" ");
-        lastChapterContext = lastTwo.substring(0, 150);
-      }
-
       return {
         bookTitle: translatedBookTitle,
         chapterTitle: translatedChapTitle,
+        summary: chapterSummary,
         paragraphs: formattedParas
       };
     }
@@ -2606,7 +2616,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
     }
 
     // PING-PONG AUTO-RETRY WITH MULTI-KEY FAILOVER
-    async function translateTextWithPingPong(rawText, onStatusUpdate = null, rawChapTitle = "", rawBookTitle = "") {
+    async function translateTextWithPingPong(rawText, onStatusUpdate = null, rawChapTitle = "", rawBookTitle = "", prevSummary = "") {
       retryAbortRequested = false;
 
       const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
@@ -2622,7 +2632,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
             await extractAndStoreAutoGlossary(rawText, primaryModel, activeAbortController.signal);
           }
 
-          const res = await executeApiCall(rawText, primaryModel, rawChapTitle, rawBookTitle, activeAbortController.signal, onStatusUpdate);
+          const res = await executeApiCall(rawText, primaryModel, rawChapTitle, rawBookTitle, prevSummary, activeAbortController.signal, onStatusUpdate);
           activeAbortController = null;
           return res;
         } catch (err) {
@@ -2699,14 +2709,18 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
 
         status.innerText = `พบ "${rawChapTitle}" กำลังวิเคราะห์ชื่อเฉพาะและแปลผ่าน AI...`;
 
+        const existingChaps = await dbGetChaptersByBook(targetBookId);
+        const maxOrder = existingChaps.reduce((max, c) => Math.max(max, c.order || 0), 0);
+
+        // ดึงสรุปบทก่อนหน้า (Lookback-1)
+        const prevChap = existingChaps.find(c => c.order === maxOrder);
+        const prevSummary = prevChap?.summary || "";
+
         const result = await translateTextWithPingPong(text, (msg) => {
           status.style.background = '#fffbeb';
           status.style.color = '#b45309';
           status.innerText = msg;
-        }, rawChapTitle, rawBookTitle);
-
-        const existingChaps = await dbGetChaptersByBook(targetBookId);
-        const maxOrder = existingChaps.reduce((max, c) => Math.max(max, c.order || 0), 0);
+        }, rawChapTitle, rawBookTitle, prevSummary);
 
         const books = await dbGetAllBooks();
         const existingBook = books.find(b => b.bookId === targetBookId);
@@ -2730,6 +2744,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
           order: maxOrder + 1,
           title: chapTitle,
           paragraphs: result.paragraphs,
+          summary: result.summary || "",
           sourceUrl: url,
           nextUrl: nextUrl
         };
@@ -2816,13 +2831,16 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
           </div>
         `, true);
 
+        // ดึงสรุปบทก่อนหน้า (Lookback-1)
+        const prevSummary = lastChap?.summary || "";
+
         const result = await translateTextWithPingPong(text, (msg) => {
           updateInfiniteStatusBanner(`
             <div style="font-size: 13px; font-weight: 500; color: #b45309;">
               <span class="spinner-icon"></span> ${msg}
             </div>
           `, true);
-        }, rawChapTitle, rawBookTitle);
+        }, rawChapTitle, rawBookTitle, prevSummary);
         
         const currentAll = await dbGetChaptersByBook(currentBookId);
         if (currentAll.some(c => c.sourceUrl === targetUrl)) {
@@ -2840,6 +2858,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
           order: maxOrder + 1,
           title: chapTitle,
           paragraphs: result.paragraphs,
+          summary: result.summary || "",
           sourceUrl: targetUrl,
           nextUrl: nextUrl
         };
@@ -2907,9 +2926,12 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
           nextUrlCalculated = nextUrl;
           if (author) currentAuthor = author;
 
+          const lastChap = chapters[chapters.length - 1];
+          const prevSummary = lastChap?.summary || "";
+
           const result = await translateTextWithPingPong(text, (msg) => {
             btnText.innerText = msg.substring(0, 30) + "...";
-          }, rawChapTitle, rawBookTitle);
+          }, rawChapTitle, rawBookTitle, prevSummary);
 
           const currentAll = await dbGetChaptersByBook(currentBookId);
           const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
@@ -2922,6 +2944,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
             order: maxOrder + 1,
             title: chapTitle,
             paragraphs: result.paragraphs,
+            summary: result.summary || "",
             sourceUrl: currentUrl,
             nextUrl: nextUrl
           };
@@ -2976,7 +2999,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
       bookChaps.sort((a, b) => a.order - b.order);
       if (bookChaps.length === 0) return alert("ไม่พบบทตั้งต้นของนิยายเรื่องนี้");
 
-      const lastChap = bookChaps[bookChaps.length - 1];
+      let lastChap = bookChaps[bookChaps.length - 1];
       let targetUrl = lastChap.nextUrl;
 
       if (!targetUrl) {
@@ -3017,9 +3040,11 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
           const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl);
           if (author) currentAuthor = author;
           
+          const prevSummary = lastChap?.summary || "";
+
           const result = await translateTextWithPingPong(text, (msg) => {
             progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 32)}...`;
-          }, rawChapTitle, rawBookTitle);
+          }, rawChapTitle, rawBookTitle, prevSummary);
 
           const currentAll = await dbGetChaptersByBook(bookId);
           const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
@@ -3032,12 +3057,14 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
             order: maxOrder + 1,
             title: chapTitle,
             paragraphs: result.paragraphs,
+            summary: result.summary || "",
             sourceUrl: targetUrl,
             nextUrl: nextUrl
           };
 
           await dbSaveChapter(newChap);
           successCount++;
+          lastChap = newChap;
 
           const books = await dbGetAllBooks();
           const targetBook = books.find(b => b.bookId === bookId);
@@ -3407,7 +3434,8 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         chapters = [{
           id: "empty_chap",
           title: "ไม่มีตอนในเครื่อง",
-          paragraphs: [{ th: "นิยายเรื่องนี้ยังไม่มีตอนที่บันทึกไว้ หรือถูกลบออกไปทั้งหมดแล้ว", src: "暂无内容" }]
+          paragraphs: [{ th: "นิยายเรื่องนี้ยังไม่มีตอนที่บันทึกไว้ หรือถูกลบออกไปทั้งหมดแล้ว", src: "暂无内容" }],
+          summary: ""
         }];
         currentChapterIndex = 0;
         renderVirtualWindow(0, true);
@@ -3555,12 +3583,16 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         const paragraphs = [];
         let bookTitle = "";
         let chapterTitle = "";
+        let summary = "";
 
         const bookMatch = rawStr.match(/"translatedBookTitle"\s*:\s*"([^"]+)"/);
         if (bookMatch) bookTitle = bookMatch[1];
 
         const chapMatch = rawStr.match(/"translatedChapterTitle"\s*:\s*"([^"]+)"/);
         if (chapMatch) chapterTitle = chapMatch[1];
+
+        const sumMatch = rawStr.match(/"chapter_summary"\s*:\s*"([^"]+)"/);
+        if (sumMatch) summary = sumMatch[1];
 
         const pRegex = /\{\s*"th"\s*:\s*"((?:\\.|[^"\\])*)"\s*,\s*"src"\s*:\s*"((?:\\.|[^"\\])*)"\s*\}/g;
         let pMatch;
@@ -3575,6 +3607,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
           return {
             translatedBookTitle: bookTitle,
             translatedChapterTitle: chapterTitle,
+            chapter_summary: summary,
             paragraphs: paragraphs
           };
         }
