@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v1.7</title>
+  <title>NovelTranslate AI v1.8</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -18,7 +18,6 @@
       transition: background-color 0.2s, color 0.2s;
     }
 
-    /* PREVENT SCROLL CHAINING WHEN MODAL IS OPEN */
     body.modal-open {
       overflow: hidden !important;
       touch-action: none;
@@ -517,12 +516,10 @@
         <button class="modal-close" onclick="closeModal('glossary-modal')">✕</button>
       </div>
 
-      <!-- Scope Filter & Tools -->
+      <!-- Scope Filter & Tools (เปลี่ยนมาใช้ Dynamic Book Selector) -->
       <div class="glossary-filter-bar">
-        <select id="gloss-scope-filter" class="form-input" style="width: auto; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
-          <option value="current">เฉพาะเรื่องนี้ (Current Book)</option>
-          <option value="global">คำสากลทั้งหมด (Global Terms)</option>
-          <option value="all">คำทั้งหมดในคลัง (All Terms)</option>
+        <select id="gloss-scope-filter" class="form-input" style="width: auto; max-width: 210px; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
+          <!-- ตัวเลือกเรื่องจะถูกสร้างจาก IndexedDB อัตโนมัติ -->
         </select>
 
         <select id="gloss-sort-select" class="form-input" style="width: auto; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
@@ -562,7 +559,7 @@
       <div class="gloss-category-tabs">
         <button class="cat-tab-btn active" onclick="switchGlossaryCategory('all', event)">ทั้งหมด</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('character', event)">👤 บุคคล/สิ่งมีชีวิต</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('title', event)">🎖️️ ตำแหน่ง/ฐานะ</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('title', event)">🎖️ ตำแหน่ง/ฐานะ</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('location', event)">🏔️ สถานที่/องค์กร</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('skill', event)">📜 ทักษะ/วิชา</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('equipment', event)">🗡️ อุปกรณ์/เทคโน</button>
@@ -611,7 +608,7 @@
     </div>
   </div>
 
-  <!-- MODAL 3: SETTINGS (MULTI-KEY POOL) -->
+  <!-- MODAL 3: SETTINGS -->
   <div class="modal-overlay" id="settings-modal">
     <div class="modal-box">
       <div class="modal-head">
@@ -620,7 +617,6 @@
       </div>
 
       <div class="modal-scrollable-body">
-        <!-- API KEYS POOL (MULTI-KEY) -->
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label class="form-label" style="margin: 0;">Google Gemini API Keys (คลังคีย์หมุนเวียน)</label>
@@ -661,7 +657,6 @@
           </select>
         </div>
 
-        <!-- ADVANCED POLISH PASS TOGGLE -->
         <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
           <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
             <input type="checkbox" id="enable-proofread-pass" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
@@ -852,7 +847,6 @@
     let currentAuthor = "";
     let isUserCustomTitle = false;
 
-    // API Key Pool Management
     let apiKeyPool = [];
     let currentApiKeyIndex = 0;
 
@@ -877,10 +871,10 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v1.7",
+        title: "คู่มือเริ่มต้น v1.8",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.7", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบติดตั้งคลัง API Key หมุนเวียนอัตโนมัติ (Multi-Key Pool) และล็อกการเลื่อนหน้าจอด้านหลังเวลาเปิดหน้าต่างย่อยเรียบร้อยแล้ว", src: "已支持多Key自动轮换与弹窗防背景滚动" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.8", src: "欢迎来到 NovelTranslate" },
+          { th: "ติดตั้งระบบเลือกเรื่องตามชื่อจริงในคลังศัพท์ (Dynamic Book Selector) แยกหมวดเด็ดขาด ไม่ปนคำสากล", src: "已支持动态作品下拉筛选" }
         ]
       }
     ];
@@ -997,7 +991,6 @@
       const modal = document.getElementById(id);
       if (modal) {
         modal.classList.remove('active'); 
-        // ถ้าไม่มี modal ตัวอื่นเปิดค้างอยู่ ให้ปลดล็อก scroll
         if (!document.querySelector('.modal-overlay.active')) {
           document.body.classList.remove('modal-open');
         }
@@ -1603,8 +1596,41 @@
         const authorLabel = currentAuthor ? ` | ผู้แต่ง: ${currentAuthor}` : '';
         bookContextEl.innerText = `เรื่องปัจจุบัน: ${currentBookTitle}${authorLabel}`;
       }
+      await refreshGlossaryScopeDropdown();
       await renderGlossaryUI();
       openModal('glossary-modal');
+    }
+
+    async function refreshGlossaryScopeDropdown() {
+      const selectEl = document.getElementById('gloss-scope-filter');
+      if (!selectEl) return;
+
+      const previousVal = selectEl.value;
+      const books = await dbGetAllBooks();
+
+      let optionsHtml = '';
+
+      // 1. เพิ่มตัวเลือกสำหรับแต่ละเรื่องที่มีในเครื่อง
+      books.forEach(b => {
+        const isCurrent = (b.bookId === currentBookId);
+        const label = isCurrent ? `📚 ${b.title} (เรื่องปัจจุบัน)` : `📚 ${b.title}`;
+        optionsHtml += `<option value="book_${b.bookId}">${label}</option>`;
+      });
+
+      // 2. ตัวเลือกคำสากล และคำทั้งหมด
+      optionsHtml += `
+        <option value="global">🌐 คำสากลเท่านั้น (Global)</option>
+        <option value="all">📦 คำทั้งหมดในคลัง (All Terms)</option>
+      `;
+
+      selectEl.innerHTML = optionsHtml;
+
+      // คืนค่าตัวเลือกเดิม หรือตั้งเป็นเรื่องปัจจุบันเป็นค่าเริ่มต้น
+      if (previousVal && selectEl.querySelector(`option[value="${previousVal}"]`)) {
+        selectEl.value = previousVal;
+      } else {
+        selectEl.value = `book_${currentBookId}`;
+      }
     }
 
     function switchGlossaryCategory(cat, e) {
@@ -1618,7 +1644,7 @@
       switch(cat) {
         case 'character': return '👤 บุคคล/สัตว์';
         case 'title': return '🎖️ ตำแหน่ง';
-        case 'location': return '🏔️️ สถานที่';
+        case 'location': return '🏔️ สถานที่';
         case 'skill': return '📜 ทักษะ/วิชา';
         case 'equipment': return '🗡️ อุปกรณ์';
         case 'resource': return '💊 ทรัพยากร';
@@ -1637,12 +1663,15 @@
       books.forEach(b => bookMap.set(b.bookId, b.title));
 
       let items = await dbGetAllGlossaryItems();
-      const scopeFilter = document.getElementById('gloss-scope-filter').value;
+      const scopeFilter = document.getElementById('gloss-scope-filter')?.value || `book_${currentBookId}`;
       const sortMode = document.getElementById('gloss-sort-select').value;
       const query = document.getElementById('gloss-search-input').value.trim().toLowerCase();
 
-      if (scopeFilter === 'current') {
-        items = items.filter(it => it.scope === 'global' || (Array.isArray(it.books) && it.books.includes(currentBookId)));
+      // การกรองตามตัวเลือกเรื่องแบบแม่นยำ (Strict Isolation)
+      if (scopeFilter.startsWith('book_')) {
+        const targetBId = scopeFilter.replace('book_', '');
+        // ดึงเฉพาะคำที่ผูกกับเรื่องนี้เท่านั้น ไม่ดึงคำสากลมาปน
+        items = items.filter(it => Array.isArray(it.books) && it.books.includes(targetBId));
       } else if (scopeFilter === 'global') {
         items = items.filter(it => it.scope === 'global');
       }
@@ -1663,7 +1692,7 @@
       else if (sortMode === 'len_desc') items.sort((a, b) => b.src.length - a.src.length);
 
       if (items.length === 0) {
-        list.innerHTML = `<div style="text-align:center; padding:20px; opacity:0.5; font-size:12px;">ไม่พบคำศัพท์ที่ตรงกับเงื่อนไข</div>`;
+        list.innerHTML = `<div style="text-align:center; padding:20px; opacity:0.5; font-size:12px;">ไม่พบคำศัพท์ที่ตรงกับเงื่อนไขในหมวดหมู่นี้</div>`;
         updateGlossaryBatchToolbar();
         return;
       }
@@ -1886,6 +1915,7 @@
       }
 
       closeModal('book-assign-modal');
+      await refreshGlossaryScopeDropdown();
       await renderGlossaryUI();
       renderVirtualWindow(currentChapterIndex);
     }
@@ -2440,9 +2470,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
 
       const data = await res.json();
       if (!res.ok) {
-        if (res.status === 429) {
-          rotateApiKey(); // สลับ Key อัตโนมัติเมื่อโควต้าหมด
-        }
+        if (res.status === 429) rotateApiKey();
         throw new Error(data.error?.message || `HTTP ${res.status}: ยิง API ไม่สำเร็จ`);
       }
 
@@ -3502,7 +3530,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // LIVE MODEL FETCHER (USING PRIMARY KEY IN POOL)
+    // LIVE MODEL FETCHER
     async function fetchLiveModels() {
       const activeKey = getActiveApiKey();
       const statusText = document.getElementById('fetch-status-text');
@@ -3558,7 +3586,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
       });
     }
 
-    // SETTINGS MANAGEMENT (MULTI-KEY POOL SAVING)
+    // SETTINGS MANAGEMENT
     function saveSettings() {
       const keysRaw = document.getElementById('gemini-keys-area').value;
       const parsedKeys = keysRaw.split('\n').map(k => k.trim()).filter(k => k.length > 5);
@@ -3595,7 +3623,6 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
     }
 
     function loadSettings() {
-      // โหลด API Keys Pool
       try {
         const poolRaw = localStorage.getItem('nov_gemini_keys_pool');
         if (poolRaw) {
