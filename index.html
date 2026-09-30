@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v1.8</title>
+  <title>NovelTranslate AI v1.9</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -516,10 +516,9 @@
         <button class="modal-close" onclick="closeModal('glossary-modal')">✕</button>
       </div>
 
-      <!-- Scope Filter & Tools (เปลี่ยนมาใช้ Dynamic Book Selector) -->
+      <!-- Scope Filter & Tools (Dynamic Book Selector) -->
       <div class="glossary-filter-bar">
         <select id="gloss-scope-filter" class="form-input" style="width: auto; max-width: 210px; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
-          <!-- ตัวเลือกเรื่องจะถูกสร้างจาก IndexedDB อัตโนมัติ -->
         </select>
 
         <select id="gloss-sort-select" class="form-input" style="width: auto; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
@@ -835,6 +834,44 @@
       });
     }
 
+    // ==================== RETROACTIVE TERM SYNC ENGINE ====================
+    async function syncUpdatedTermAcrossChapters(src, oldTgt, newTgt) {
+      if (!oldTgt || !newTgt || oldTgt === newTgt) return;
+
+      const targetBookChaps = await dbGetChaptersByBook(currentBookId);
+      if (targetBookChaps.length === 0) return;
+
+      const escapeOld = escapeRegExp(oldTgt);
+      const regex = new RegExp(escapeOld, 'g');
+      let changedChapCount = 0;
+
+      for (const chap of targetBookChaps) {
+        let isModified = false;
+        if (Array.isArray(chap.paragraphs)) {
+          chap.paragraphs.forEach(p => {
+            if (p.th && p.th.includes(oldTgt)) {
+              p.th = p.th.replace(regex, newTgt);
+              isModified = true;
+            }
+          });
+        }
+
+        if (isModified) {
+          await dbSaveChapter(chap);
+          changedChapCount++;
+
+          const memChap = chapters.find(c => c.id === chap.id);
+          if (memChap) {
+            memChap.paragraphs = chap.paragraphs;
+          }
+        }
+      }
+
+      if (changedChapCount > 0) {
+        console.log(`[TermSync] Replaced "${oldTgt}" ➔ "${newTgt}" across ${changedChapCount} chapters.`);
+      }
+    }
+
     // ==================== APP STATE & VARIABLES ====================
     let currentTheme = 'sepia';
     let currentFontSize = 18;
@@ -871,10 +908,10 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v1.8",
+        title: "คู่มือเริ่มต้น v1.9",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.8", src: "欢迎来到 NovelTranslate" },
-          { th: "ติดตั้งระบบเลือกเรื่องตามชื่อจริงในคลังศัพท์ (Dynamic Book Selector) แยกหมวดเด็ดขาด ไม่ปนคำสากล", src: "已支持动态作品下拉筛选" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.9", src: "欢迎来到 NovelTranslate" },
+          { th: "ติดตั้งระบบแก้ไขคำในบทที่แปลแล้วทั้งหมดอัตโนมัติ (Retroactive Term Sync) เมื่อเปลี่ยนคำแปลในคลัง ทุกบทจะอัปเดตตามทันที", src: "已支持术语修改全局自动同步与级联替换" }
         ]
       }
     ];
@@ -1610,14 +1647,12 @@
 
       let optionsHtml = '';
 
-      // 1. เพิ่มตัวเลือกสำหรับแต่ละเรื่องที่มีในเครื่อง
       books.forEach(b => {
         const isCurrent = (b.bookId === currentBookId);
         const label = isCurrent ? `📚 ${b.title} (เรื่องปัจจุบัน)` : `📚 ${b.title}`;
         optionsHtml += `<option value="book_${b.bookId}">${label}</option>`;
       });
 
-      // 2. ตัวเลือกคำสากล และคำทั้งหมด
       optionsHtml += `
         <option value="global">🌐 คำสากลเท่านั้น (Global)</option>
         <option value="all">📦 คำทั้งหมดในคลัง (All Terms)</option>
@@ -1625,7 +1660,6 @@
 
       selectEl.innerHTML = optionsHtml;
 
-      // คืนค่าตัวเลือกเดิม หรือตั้งเป็นเรื่องปัจจุบันเป็นค่าเริ่มต้น
       if (previousVal && selectEl.querySelector(`option[value="${previousVal}"]`)) {
         selectEl.value = previousVal;
       } else {
@@ -1667,10 +1701,8 @@
       const sortMode = document.getElementById('gloss-sort-select').value;
       const query = document.getElementById('gloss-search-input').value.trim().toLowerCase();
 
-      // การกรองตามตัวเลือกเรื่องแบบแม่นยำ (Strict Isolation)
       if (scopeFilter.startsWith('book_')) {
         const targetBId = scopeFilter.replace('book_', '');
-        // ดึงเฉพาะคำที่ผูกกับเรื่องนี้เท่านั้น ไม่ดึงคำสากลมาปน
         items = items.filter(it => Array.isArray(it.books) && it.books.includes(targetBId));
       } else if (scopeFilter === 'global') {
         items = items.filter(it => it.scope === 'global');
@@ -1946,6 +1978,8 @@
       const booksList = existing && Array.isArray(existing.books) ? existing.books : [];
       if (!booksList.includes(currentBookId)) booksList.push(currentBookId);
 
+      const oldTgt = existing ? existing.tgt : null;
+
       await dbSaveGlossaryItem({
         src: s,
         tgt: t,
@@ -1956,6 +1990,10 @@
         overrides: existing?.overrides || {},
         updatedAt: Date.now()
       });
+
+      if (oldTgt && oldTgt !== t) {
+        await syncUpdatedTermAcrossChapters(s, oldTgt, t);
+      }
 
       document.getElementById('gloss-src').value = "";
       document.getElementById('gloss-tgt').value = "";
@@ -1968,6 +2006,7 @@
       const cur = items.find(x => x.src === src);
       if (!cur) return;
 
+      const oldTgt = cur.tgt;
       const newTgt = prompt(`แก้ไขคำแปลไทยสำหรับ "${src}":`, cur.tgt);
       if (newTgt !== null && newTgt.trim()) {
         const catPrompt = prompt(`เปลี่ยนหมวดหมู่ (character / title / location / skill / equipment / resource / realm):`, cur.category);
@@ -1976,6 +2015,12 @@
         if (catPrompt && validCats.includes(catPrompt.trim())) cur.category = catPrompt.trim();
         cur.updatedAt = Date.now();
         await dbSaveGlossaryItem(cur);
+
+        // ซิงค์คำแปลเก่า ➔ คำแปลใหม่ ทั่วทั้งนิยายอัตโนมัติ
+        if (oldTgt && oldTgt !== cur.tgt) {
+          await syncUpdatedTermAcrossChapters(src, oldTgt, cur.tgt);
+        }
+
         await renderGlossaryUI();
         renderVirtualWindow(currentChapterIndex);
       }
@@ -2037,10 +2082,16 @@
           const items = await dbGetAllGlossaryItems();
           const cur = items.find(x => x.src === src);
           if (cur) {
+            const oldTgt = cur.tgt;
             cur.tgt = parsed.tgt.trim();
             if (parsed.category) cur.category = parsed.category;
             cur.updatedAt = Date.now();
             await dbSaveGlossaryItem(cur);
+
+            // ซิงค์คำแปลใหม่ทั่วทั้งเรื่อง
+            if (oldTgt && oldTgt !== cur.tgt) {
+              await syncUpdatedTermAcrossChapters(src, oldTgt, cur.tgt);
+            }
           }
           return parsed;
         }
@@ -2065,6 +2116,7 @@
           const items = await dbGetAllGlossaryItems();
           const cur = items.find(x => x.src === src);
           if (cur && tgtEl) tgtEl.innerText = cur.tgt;
+          renderVirtualWindow(currentChapterIndex, false);
         }
       } catch (err) {
         alert("รีเสิร์ชไม่สำเร็จ: " + err.message);
@@ -2430,7 +2482,7 @@ ${genreRule}
 
 กฎการเทียบเคียงและล็อกคำศัพท์ (3-Tier Priority):
 1. Tier 1 (ตรงเรื่อง): หากเป็นชื่อตัวละครหรือสถานที่ในนิยายเรื่อง "${currentBookTitle}" ให้ใช้คำแปล/ทับศัพท์ที่ตรงกับฉบับแปลไทย
-2. Tier 2 (ผู้แต่ง/จักรวาลเดียวกัน): หากเป็นระดับพลังหรือวิชา ให้เทียบเคียงกับผลงานอื่นของ ${authorCtx} ในจักรวาลเดียวกัน
+2. Tier 2 (ผู้แต่ง/จักรวาลเดียวกัน): หากไม่พบในเรื่องนี้ ให้เทียบเคียงกับศัพท์ที่ใช้ในผลงานอื่นของ ${authorCtx} ในจักรวาลเดียวกัน
 3. Tier 3 (มาตรฐานแนวเรื่อง): หากเป็นคำใหม่ ให้ใช้คำแปลที่สละสลวยตามมาตรฐานวรรณกรรมนิยายแนว "${genre}"
 
 กฎเหล็กเรื่องการจัดย่อหน้าและโครงสร้าง (สำคัญสูงสุด):
@@ -3647,6 +3699,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         const desktopBtn = document.getElementById('desktop-theme-btn');
         if (mobileBtn) mobileBtn.innerText = themeText;
         if (desktopBtn) desktopBtn.innerText = themeText;
+        localStorage.setItem('nov_theme', currentTheme);
       }
 
       if (localStorage.getItem('nov_font_size')) {
