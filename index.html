@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v1.1</title>
+  <title>NovelTranslate AI v1.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -28,8 +28,7 @@
       position: sticky; top: 0; z-index: 40;
       display: flex; align-items: center; justify-content: space-between;
       padding: 10px 16px; border-bottom: 1px solid rgba(0,0,0,0.08);
-      backdrop-filter: blur(8px);
-      background-color: inherit;
+      backdrop-filter: blur(8px); background-color: inherit;
       transition: transform 0.2s ease, opacity 0.2s ease;
     }
     body.theme-dark header { border-bottom-color: rgba(255,255,255,0.1); }
@@ -67,56 +66,25 @@
       background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
     }
 
-    /* TOP-RIGHT FLOATING ACTION BUTTONS (FULLSCREEN & SCAN) */
+    /* TOP-RIGHT FLOATING BUTTONS */
     .top-floating-btn {
-      position: fixed;
-      top: 62px;
-      z-index: 35;
-      width: 32px;
-      height: 32px;
-      border-radius: 50%;
-      background: rgba(0,0,0,0.05);
-      border: 1px solid rgba(0,0,0,0.12);
-      backdrop-filter: blur(6px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      cursor: pointer;
-      color: inherit;
-      opacity: 0.65;
+      position: fixed; top: 62px; z-index: 35; width: 32px; height: 32px; border-radius: 50%;
+      background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.12);
+      backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center;
+      cursor: pointer; color: inherit; opacity: 0.65;
       transition: opacity 0.2s, background-color 0.2s, transform 0.2s, top 0.2s;
     }
-    body.theme-dark .top-floating-btn {
-      background: rgba(255,255,255,0.08);
-      border-color: rgba(255,255,255,0.15);
-    }
-    .top-floating-btn:hover {
-      opacity: 1;
-      transform: scale(1.05);
-      background-color: rgba(0,0,0,0.1);
-    }
-    body.theme-dark .top-floating-btn:hover {
-      background-color: rgba(255,255,255,0.15);
-    }
+    body.theme-dark .top-floating-btn { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
+    .top-floating-btn:hover { opacity: 1; transform: scale(1.05); background-color: rgba(0,0,0,0.1); }
+    body.theme-dark .top-floating-btn:hover { background-color: rgba(255,255,255,0.15); }
 
-    #fullscreen-btn {
-      right: 16px;
-    }
-
-    #scan-terms-btn {
-      right: 54px; /* วางไว้ทางด้านซ้ายของปุ่ม Fullscreen */
-      font-size: 13px;
-    }
+    #fullscreen-btn { right: 16px; }
+    #scan-terms-btn { right: 54px; font-size: 13px; }
 
     body.is-fullscreen header { transform: translateY(-100%); opacity: 0; pointer-events: none; }
     body.is-fullscreen .mobile-dock { transform: translateY(100%); opacity: 0; pointer-events: none; }
-    body.is-fullscreen .top-floating-btn {
-      top: 14px;
-      opacity: 0.4;
-    }
-    body.is-fullscreen .top-floating-btn:hover {
-      opacity: 0.9;
-    }
+    body.is-fullscreen .top-floating-btn { top: 14px; opacity: 0.4; }
+    body.is-fullscreen .top-floating-btn:hover { opacity: 0.9; }
     body.is-fullscreen main { padding-top: 14px; }
 
     /* MAIN READING CANVAS */
@@ -176,6 +144,32 @@
     }
     body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
 
+    /* INLINE TERM TAGGING HIGHLIGHT */
+    .inline-term-highlight {
+      border-bottom: 1.5px dotted rgba(37,99,235,0.6);
+      cursor: pointer; border-radius: 2px;
+      transition: background-color 0.15s, border-color 0.15s;
+    }
+    .inline-term-highlight:hover {
+      background-color: rgba(37,99,235,0.12);
+      border-bottom-color: #2563eb;
+    }
+    body.theme-dark .inline-term-highlight {
+      border-bottom-color: rgba(96,165,250,0.6);
+    }
+    body.theme-dark .inline-term-highlight:hover {
+      background-color: rgba(96,165,250,0.2);
+    }
+
+    /* INLINE TERM QUICK POPOVER */
+    #term-popover {
+      display: none; position: fixed; z-index: 60;
+      background: #1e293b; color: #fff; padding: 8px 12px; border-radius: 8px;
+      font-size: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      animation: fadeIn 0.15s ease-out; gap: 8px; align-items: center;
+    }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
     #infinite-status-banner {
       display: none; margin: 30px 0 50px 0; padding: 16px 20px; border-radius: 12px;
       background: rgba(37,99,235,0.06); border: 1px dashed rgba(37,99,235,0.3);
@@ -206,7 +200,7 @@
 
     #selection-bar {
       display: none; position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
-      z-index: 45; width: calc(100% - 24px); max-width: 440px;
+      z-index: 45; width: calc(100% - 24px); max-width: 480px;
       background: #1e293b; color: #fff; padding: 10px 14px; border-radius: 10px;
       box-shadow: 0 10px 25px rgba(0,0,0,0.35); align-items: center; justify-content: space-between;
       animation: slideUp 0.15s ease-out;
@@ -214,7 +208,7 @@
     @media (min-width: 768px) { #selection-bar { bottom: 20px; } }
     @keyframes slideUp { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
 
-    .sel-info { display: flex; flex-direction: column; overflow: hidden; max-width: 65%; }
+    .sel-info { display: flex; flex-direction: column; overflow: hidden; max-width: 50%; }
     .sel-tag { font-size: 10px; opacity: 0.6; text-transform: uppercase; font-weight: 600; }
     .sel-text { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #38bdf8; }
 
@@ -226,7 +220,7 @@
     }
     .modal-overlay.active { display: flex !important; }
     .modal-box {
-      width: 100%; max-width: 580px; border-radius: 12px;
+      width: 100%; max-width: 620px; border-radius: 12px;
       padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
       background-color: #fff; color: #1e293b;
     }
@@ -255,23 +249,35 @@
       display: flex; gap: 4px; margin-bottom: 10px; overflow-x: auto; padding-bottom: 4px;
     }
     .cat-tab-btn {
-      padding: 4px 10px; font-size: 11px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.1);
+      padding: 4px 9px; font-size: 11px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.1);
       background: transparent; color: inherit; cursor: pointer; white-space: nowrap;
     }
     body.theme-dark .cat-tab-btn { border-color: rgba(255,255,255,0.15); }
     .cat-tab-btn.active {
       background: #2563eb !important; color: #fff !important; border-color: #2563eb !important; font-weight: 600;
     }
+
+    .glossary-filter-bar {
+      display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;
+    }
+
     .gloss-item-row {
       display: flex; align-items: center; justify-content: space-between; padding: 8px 6px;
       border-bottom: 1px solid rgba(0,0,0,0.06); gap: 6px; font-size: 12px;
     }
     body.theme-dark .gloss-item-row { border-bottom-color: rgba(255,255,255,0.06); }
+    
     .gloss-badge {
       font-size: 9px; padding: 1px 5px; border-radius: 4px; font-weight: 600;
       background: rgba(37,99,235,0.1); color: #2563eb;
     }
     body.theme-dark .gloss-badge { background: rgba(96,165,250,0.15); color: #93c5fd; }
+
+    .gloss-scope-tag {
+      font-size: 9px; padding: 1px 4px; border-radius: 3px; font-weight: 600; cursor: pointer;
+    }
+    .gloss-scope-global { background: #dcfce7; color: #166534; }
+    .gloss-scope-local { background: #fef3c7; color: #92400e; }
 
     /* BOOKSHELF & PROGRESS BOX */
     .book-item-container {
@@ -345,13 +351,19 @@
     </div>
   </header>
 
-  <!-- TOP-RIGHT FLOATING BUTTONS (SCAN TERMS & FULLSCREEN) -->
+  <!-- TOP-RIGHT FLOATING BUTTONS (SCAN & FULLSCREEN) -->
   <button id="scan-terms-btn" class="top-floating-btn" onclick="scanTermsInCurrentChapter()" title="สแกนหาคำศัพท์เฉพาะในบทนี้ที่ยังไม่มีในคลัง">
     🔍+
   </button>
   <button id="fullscreen-btn" class="top-floating-btn" onclick="toggleFullscreenMode()" title="โหมดอ่านเต็มจอ">
     <span id="fullscreen-icon">⛶</span>
   </button>
+
+  <!-- INLINE TERM QUICK POPOVER -->
+  <div id="term-popover">
+    <span id="popover-text">จีน ➔ ไทย</span>
+    <button class="btn btn-primary" style="padding: 2px 7px; font-size: 10px;" id="popover-edit-btn">✎ แก้ไข</button>
+  </div>
 
   <!-- BOTTOM FLOATING ACTION BAR FOR SELECTED WORD -->
   <div id="selection-bar">
@@ -360,8 +372,9 @@
       <span class="sel-text" id="sel-preview-text">...</span>
     </div>
     <div style="display: flex; gap: 6px;">
-      <button class="btn" style="color:#fff; border-color:rgba(255,255,255,0.2); padding: 4px 8px;" onclick="dismissSelectionBar()">ปิด</button>
-      <button class="btn btn-primary" style="padding: 4px 10px;" onclick="addFromSelectionBar()">+ เพิ่มลงคลัง</button>
+      <button class="btn" style="color:#fff; border-color:rgba(255,255,255,0.2); padding: 4px 6px; font-size: 11px;" onclick="dismissSelectionBar()">ปิด</button>
+      <button class="btn" id="reverse-pair-btn" style="color:#38bdf8; border-color:#38bdf8; padding: 4px 8px; font-size: 11px;" onclick="findChineseForSelection()" title="ให้ AI ค้นหาอักษรจีนต้นฉบับจากย่อหน้านี้">🔍 หาคำจีน</button>
+      <button class="btn btn-primary" style="padding: 4px 8px; font-size: 11px;" onclick="addFromSelectionBar()">+ ใส่คลัง</button>
     </div>
   </div>
 
@@ -455,40 +468,71 @@
     </div>
   </div>
 
-  <!-- MODAL 2: CATEGORIZED AUTO-GLOSSARY -->
+  <!-- MODAL 2: UNIVERSAL CATEGORIZED GLOSSARY -->
   <div class="modal-overlay" id="glossary-modal">
     <div class="modal-box">
       <div class="modal-head">
-        <div class="modal-title">คลังคำศัพท์เฉพาะ (Smart Glossary)</div>
+        <div>
+          <div class="modal-title">คลังคำศัพท์สากล (Smart Glossary Engine)</div>
+          <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;" id="glossary-book-context">เรื่องปัจจุบัน: ...</div>
+        </div>
         <button class="modal-close" onclick="closeModal('glossary-modal')">✕</button>
       </div>
 
-      <!-- Category Filter Tabs -->
+      <!-- Scope Filter & Tools -->
+      <div class="glossary-filter-bar">
+        <select id="gloss-scope-filter" class="form-input" style="width: auto; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
+          <option value="current">เฉพาะเรื่องนี้ (Current Book)</option>
+          <option value="global">คำสากลทั้งหมด (Global Terms)</option>
+          <option value="all">คำทั้งหมดในคลัง (All Terms)</option>
+        </select>
+
+        <select id="gloss-sort-select" class="form-input" style="width: auto; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
+          <option value="count_desc">ความถี่มากสุด ↓</option>
+          <option value="time_desc">เพิ่มล่าสุด ↓</option>
+          <option value="time_asc">เก่าสุด ↑</option>
+          <option value="th_asc">ชื่อไทย ก-ฮ ↓</option>
+          <option value="th_desc">ชื่อไทย ฮ-ก ↑</option>
+          <option value="len_desc">อักษรจีนยาวสุด ↓</option>
+        </select>
+
+        <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="autoOrganizeGlossaryWithAI()" title="ให้ AI วิเคราะห์คำที่ยังไม่แยกหมวด แล้วย้ายเข้า 7 หมวดให้อัตโนมัติ">
+          ✨ AI จัดหมวดหมู่
+        </button>
+      </div>
+
+      <!-- Live Search Box -->
+      <div style="margin-bottom: 8px;">
+        <input type="text" id="gloss-search-input" class="form-input" placeholder="🔍 ค้นหาคำศัพท์ (พิมพ์ได้ทั้งภาษาไทยและจีน)..." oninput="renderGlossaryUI()">
+      </div>
+
+      <!-- 7 Universal Category Tabs -->
       <div class="gloss-category-tabs">
         <button class="cat-tab-btn active" onclick="switchGlossaryCategory('all', event)">ทั้งหมด</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('character', event)">👤 ตัวละคร</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('location', event)">🏔 สถานที่</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('skill', event)">📜 วิชา/ทักษะ</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('item', event)">🗡️ สิ่งของ/โอสถ</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('other', event)">🏷️ อื่นๆ</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('character', event)">👤 บุคคล/สิ่งมีชีวิต</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('title', event)">🎖️ ตำแหน่ง/ฐานะ</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('location', event)">🏔️ สถานที่/องค์กร</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('skill', event)">📜 ทักษะ/วิชา</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('equipment', event)">🗡️ อุปกรณ์/เทคโน</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('resource', event)">💊 ทรัพยากร/โอสถ</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('realm', event)">🧬 ลำดับขั้น/สเตตัส</button>
       </div>
 
       <!-- Add Manual Term Form -->
       <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
         <input type="text" id="gloss-src" class="form-input" placeholder="คำจีน (เช่น 林动)" style="flex: 1; min-width: 100px;">
         <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปลไทย (เช่น หลินตง)" style="flex: 1; min-width: 100px;">
-        <select id="gloss-cat" class="form-input" style="width: 110px;">
-          <option value="character">ตัวละคร</option>
-          <option value="location">สถานที่</option>
-          <option value="skill">วิชา/ทักษะ</option>
-          <option value="item">สิ่งของ</option>
-          <option value="other" selected>อื่นๆ</option>
+        <select id="gloss-cat" class="form-input" style="width: 130px;">
+          <option value="character" selected>บุคคล/สิ่งมีชีวิต</option>
+          <option value="title">ตำแหน่ง/ฐานะ</option>
+          <option value="location">สถานที่/องค์กร</option>
+          <option value="skill">ทักษะ/วิชา</option>
+          <option value="equipment">อุปกรณ์/เทคโน</option>
+          <option value="resource">ทรัพยากร/โอสถ</option>
+          <option value="realm">ลำดับขั้น/สเตตัส</option>
         </select>
         <button class="btn btn-primary" onclick="addGlossary()">+ เพิ่ม</button>
       </div>
-      <p style="font-size: 11px; opacity: 0.6; margin-bottom: 8px;">
-        *AI ตรวจจับและบันทึกชื่อเฉพาะให้อัตโนมัติ | กด 🔄 เพื่อให้ AI รีเสิร์ชสำนวนแปลยอดนิยมในเน็ต
-      </p>
 
       <div id="glossary-list" style="max-height: 250px; overflow-y: auto;"></div>
     </div>
@@ -554,9 +598,6 @@
           <input type="checkbox" id="enable-infinite-scroll" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
           <span>เปิดใช้งานโหมดอ่านต่อเนื่องไร้รอยต่อ (Infinite Scroll)</span>
         </label>
-        <p style="font-size: 10px; opacity: 0.6; margin-top: 4px; padding-left: 24px;">
-          *เมื่อเปิด: จะเลื่อนอ่านบทถัดไปอัตโนมัติ | เมื่อปิด: จะอ่านทีละหน้า และต้องกดปุ่ม 'ตอนถัดไป' เองเสมอ
-        </p>
       </div>
 
       <div class="form-group" style="margin-top: 8px;">
@@ -564,19 +605,13 @@
           <input type="checkbox" id="enable-live-prefetch" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
           <span>แปลบทถัดไปล่วงหน้า 1 ตอนในเบื้องหลังขณะอ่านสด</span>
         </label>
-        <p style="font-size: 10px; opacity: 0.6; margin-top: 4px; padding-left: 24px;">
-          *แอบแปลบทถัดไปรอไว้ เพื่อให้เวลากดปุ่มอ่านไม่ต้องรอนาน
-        </p>
       </div>
 
       <div class="form-group" style="margin-top: 8px;">
         <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
           <input type="checkbox" id="enable-auto-glossary" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
-          <span>เปิดใช้งานระบบ Auto-Glossary (ดึงชื่อเฉพาะและค้นคำแปลให้อัตโนมัติ)</span>
+          <span>เปิดใช้งานระบบ Auto-Glossary (สกัดชื่อเฉพาะอัตโนมัติ)</span>
         </label>
-        <p style="font-size: 10px; opacity: 0.6; margin-top: 4px; padding-left: 24px;">
-          *ตรวจจับชื่อตัวละคร สถานที่ และวิชาใหม่ แล้วบันทึกเข้าคลังศัพท์ล็อกคำแปลไว้ตลอดทั้งเรื่อง
-        </p>
       </div>
 
       <div style="margin-top: 14px;">
@@ -587,7 +622,7 @@
 
   <script>
     // ==================== INDEXEDDB ENGINE ====================
-    const DB_NAME = 'NovelTranslateDB';
+    const DB_NAME = 'NovelTranslateDB_v12';
     const DB_VERSION = 1;
     let db = null;
 
@@ -602,6 +637,10 @@
           if (!d.objectStoreNames.contains('chapters')) {
             const chapStore = d.createObjectStore('chapters', { keyPath: 'id' });
             chapStore.createIndex('bookId', 'bookId', { unique: false });
+          }
+          if (!d.objectStoreNames.contains('glossaries')) {
+            const glossStore = d.createObjectStore('glossaries', { keyPath: 'src' });
+            glossStore.createIndex('category', 'category', { unique: false });
           }
         };
         req.onsuccess = (e) => {
@@ -657,9 +696,7 @@
         const chapStore = tx.objectStore('chapters');
         const index = chapStore.index('bookId');
         const req = index.getAllKeys(bookId);
-        req.onsuccess = () => {
-          (req.result || []).forEach(k => chapStore.delete(k));
-        };
+        req.onsuccess = () => { (req.result || []).forEach(k => chapStore.delete(k)); };
         tx.oncomplete = () => resolve();
       });
     }
@@ -683,7 +720,35 @@
       });
     }
 
-    // ==================== APP STATE & GLOSSARY DATA ====================
+    // ==================== GLOSSARY DB OPERATIONS ====================
+    function dbSaveGlossaryItem(item) {
+      return new Promise((resolve) => {
+        if (!db) return resolve();
+        const tx = db.transaction('glossaries', 'readwrite');
+        tx.objectStore('glossaries').put(item);
+        tx.oncomplete = () => resolve();
+      });
+    }
+
+    function dbGetAllGlossaryItems() {
+      return new Promise((resolve) => {
+        if (!db) return resolve([]);
+        const tx = db.transaction('glossaries', 'readonly');
+        const req = tx.objectStore('glossaries').getAll();
+        req.onsuccess = () => resolve(req.result || []);
+      });
+    }
+
+    function dbDeleteGlossaryItem(src) {
+      return new Promise((resolve) => {
+        if (!db) return resolve();
+        const tx = db.transaction('glossaries', 'readwrite');
+        tx.objectStore('glossaries').delete(src);
+        tx.oncomplete = () => resolve();
+      });
+    }
+
+    // ==================== APP STATE & VARIABLES ====================
     let currentTheme = 'sepia';
     let currentFontSize = 18;
     let currentUrl = "";
@@ -707,37 +772,17 @@
     let bookSortModes = {}; 
     let selectedWordBuffer = "";
     let isSelectedChinese = false;
+    let selectedParagraphContext = { th: "", src: "" };
 
-    let glossary = {};
     let currentGlossaryCategory = 'all';
-
-    function loadGlossaryFromStorage() {
-      try {
-        const raw = JSON.parse(localStorage.getItem('nov_gloss') || '{}');
-        glossary = {};
-        for (const [k, v] of Object.entries(raw)) {
-          if (typeof v === 'string') {
-            glossary[k] = { tgt: v, category: 'other' };
-          } else {
-            glossary[k] = v;
-          }
-        }
-      } catch(e) {
-        glossary = {
-          "林动": { tgt: "หลินตง", category: "character" },
-          "九品": { tgt: "ขั้นเก้า", category: "other" }
-        };
-      }
-    }
-    loadGlossaryFromStorage();
 
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น",
+        title: "คู่มือเริ่มต้น v1.2",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.1", src: "欢迎来到 NovelTranslate" },
-          { th: "ปุ่มสแกนหาศัพท์เฉพาะ (🔍+) ย้ายไปอยู่ทางด้านซ้ายของปุ่มขยายเต็มจอที่มุมขวาบนเรียบร้อยแล้ว", src: "已调整实体词提取按钮至右上方位置" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.2", src: "欢迎来到 NovelTranslate" },
+          { th: "ระบบติดตั้งคลังศัพท์อัจฉริยะ 7 หมวดหมู่, Multi-Book Tagging, Reverse Word-Pairing และ Inline Term Tagging ครบวงจร", src: "已支持全新7大类别、标签化术语库与内联交互" }
         ]
       }
     ];
@@ -746,6 +791,7 @@
     // INIT
     window.addEventListener('DOMContentLoaded', async () => {
       await initDB();
+      await migrateOldGlossaryIfNeeded();
       loadSettings();
       setupSelectionMonitor();
       setupScrollMonitor();
@@ -757,8 +803,31 @@
       } else {
         renderVirtualWindow(0, true);
       }
-      renderGlossaryUI();
     });
+
+    async function migrateOldGlossaryIfNeeded() {
+      const oldRaw = localStorage.getItem('nov_gloss');
+      if (oldRaw) {
+        try {
+          const parsed = JSON.parse(oldRaw);
+          for (const [src, val] of Object.entries(parsed)) {
+            const tgt = typeof val === 'string' ? val : val.tgt;
+            const cat = typeof val === 'object' && val.category ? val.category : 'character';
+            await dbSaveGlossaryItem({
+              src: src,
+              tgt: tgt,
+              category: cat,
+              scope: 'global',
+              books: [],
+              count: 1,
+              overrides: {},
+              updatedAt: Date.now()
+            });
+          }
+          localStorage.removeItem('nov_gloss');
+        } catch(e) {}
+      }
+    }
 
     // FULLSCREEN FOCUS MODE
     function toggleFullscreenMode() {
@@ -766,20 +835,14 @@
 
       if (!isCurrentlyFullscreen) {
         const elem = document.documentElement;
-        if (elem.requestFullscreen) {
-          elem.requestFullscreen().catch(() => {});
-        } else if (elem.webkitRequestFullscreen) {
-          elem.webkitRequestFullscreen();
-        }
+        if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
+        else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
         document.body.classList.add('is-fullscreen');
         document.getElementById('fullscreen-icon').innerText = '🗗';
         document.getElementById('fullscreen-btn').title = 'ออกจากโหมดเต็มจอ';
       } else {
-        if (document.exitFullscreen) {
-          document.exitFullscreen().catch(() => {});
-        } else if (document.webkitExitFullscreen) {
-          document.webkitExitFullscreen();
-        }
+        if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+        else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
         document.body.classList.remove('is-fullscreen');
         document.getElementById('fullscreen-icon').innerText = '⛶';
         document.getElementById('fullscreen-btn').title = 'โหมดอ่านเต็มจอ';
@@ -806,9 +869,7 @@
       const themes = ['sepia', 'light', 'dark'];
       currentTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length];
       document.getElementById('app-body').className = 'theme-' + currentTheme;
-      if (document.body.classList.contains('is-fullscreen')) {
-        document.body.classList.add('is-fullscreen');
-      }
+      if (document.body.classList.contains('is-fullscreen')) document.body.classList.add('is-fullscreen');
       
       const themeText = currentTheme === 'sepia' ? 'ถนอมสายตา' : (currentTheme === 'light' ? 'สว่าง' : 'มืด');
       const mobileBtn = document.getElementById('mobile-theme-btn');
@@ -834,13 +895,72 @@
       if (modal) modal.classList.remove('active'); 
     }
 
+    // ==================== INLINE TERM HIGHLIGHTING ENGINE ====================
+    async function getActiveGlossaryForCurrentBook() {
+      const allItems = await dbGetAllGlossaryItems();
+      const activeMap = {};
+      allItems.forEach(item => {
+        if (item.scope === 'global' || (Array.isArray(item.books) && item.books.includes(currentBookId))) {
+          const resolvedTgt = (item.overrides && item.overrides[currentBookId]) ? item.overrides[currentBookId] : item.tgt;
+          activeMap[item.src] = { ...item, resolvedTgt };
+        }
+      });
+      return activeMap;
+    }
+
+    function escapeRegExp(string) {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    function applyInlineTermHighlighting(plainThText, activeTerms) {
+      if (!plainThText) return "";
+      const termEntries = Object.values(activeTerms);
+      if (termEntries.length === 0) return plainThText;
+
+      termEntries.sort((a, b) => b.resolvedTgt.length - a.resolvedTgt.length);
+
+      let processed = plainThText;
+      termEntries.forEach(t => {
+        if (!t.resolvedTgt || t.resolvedTgt.length < 2) return;
+        const regex = new RegExp(`(${escapeRegExp(t.resolvedTgt)})`, 'g');
+        processed = processed.replace(regex, `<span class="inline-term-highlight" data-src="${t.src}" data-tgt="${t.resolvedTgt}" onclick="showTermPopover(event, '${t.src}', '${t.resolvedTgt}')">$1</span>`);
+      });
+      return processed;
+    }
+
+    function showTermPopover(e, src, tgt) {
+      e.stopPropagation();
+      const popover = document.getElementById('term-popover');
+      const textSpan = document.getElementById('popover-text');
+      const editBtn = document.getElementById('popover-edit-btn');
+
+      textSpan.innerHTML = `<b>${src}</b> ➔ <span style="color:#38bdf8;">${tgt}</span>`;
+      editBtn.onclick = () => {
+        popover.style.display = 'none';
+        promptEditGlossary(src);
+      };
+
+      popover.style.display = 'flex';
+      const rect = e.target.getBoundingClientRect();
+      popover.style.top = `${rect.bottom + window.scrollY + 6}px`;
+      popover.style.left = `${Math.min(window.innerWidth - 220, Math.max(10, rect.left))}px`;
+    }
+
+    document.addEventListener('click', (e) => {
+      const popover = document.getElementById('term-popover');
+      if (popover && !popover.contains(e.target) && !e.target.classList.contains('inline-term-highlight')) {
+        popover.style.display = 'none';
+      }
+    });
+
     // ==================== VIRTUAL SLIDING WINDOW RENDERER ====================
-    function buildChapterBlockHtml(chap, chapIdx) {
+    async function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
       let parasHtml = '';
       chap.paragraphs.forEach((p, pIdx) => {
+        const highlightedTh = applyInlineTermHighlighting(p.th || "", activeTerms);
         parasHtml += `
           <div class="para-item" id="para-box-${chapIdx}-${pIdx}">
-            <div class="para-th" onclick="toggleParagraphSrc('${chapIdx}-${pIdx}')">${p.th || ""}</div>
+            <div class="para-th" onclick="toggleParagraphSrc('${chapIdx}-${pIdx}')" data-th="${encodeURIComponent(p.th || '')}" data-src="${encodeURIComponent(p.src || '')}">${highlightedTh}</div>
             <div class="para-src" id="src-${chapIdx}-${pIdx}">${p.src || "ไม่มีข้อความต้นฉบับ"}</div>
           </div>
         `;
@@ -868,7 +988,7 @@
       }
     }
 
-    function renderVirtualWindow(targetIdx, scrollToTop = false) {
+    async function renderVirtualWindow(targetIdx, scrollToTop = false) {
       const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
       const container = document.getElementById('reading-content');
       container.style.fontSize = currentFontSize + 'px';
@@ -879,13 +999,15 @@
       document.getElementById('display-book-title').innerText = currentBookTitle;
       document.getElementById('display-chap-title').innerText = curChap.title;
 
+      const activeTerms = await getActiveGlossaryForCurrentBook();
+
       if (!isInfinite) {
         if (chapterIntersectionObserver) {
           chapterIntersectionObserver.disconnect();
           chapterIntersectionObserver = null;
         }
         renderedWindowIndices = [currentChapterIndex];
-        container.innerHTML = buildChapterBlockHtml(curChap, currentChapterIndex);
+        container.innerHTML = await buildChapterBlockHtml(curChap, currentChapterIndex, activeTerms);
         document.getElementById('manual-chap-nav').style.display = 'flex';
         updateInfiniteStatusBanner('', false);
         if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -903,9 +1025,9 @@
       renderedWindowIndices = newIndices;
 
       let combinedHtml = '';
-      renderedWindowIndices.forEach(idx => {
-        combinedHtml += buildChapterBlockHtml(chapters[idx], idx);
-      });
+      for (const idx of renderedWindowIndices) {
+        combinedHtml += await buildChapterBlockHtml(chapters[idx], idx, activeTerms);
+      }
 
       container.innerHTML = combinedHtml;
       setupChapterIntersectionObserver();
@@ -921,7 +1043,7 @@
       checkProactivePrefetch();
     }
 
-    function appendNextChapterToWindow() {
+    async function appendNextChapterToWindow() {
       const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
       if (!isInfinite) return;
 
@@ -937,9 +1059,10 @@
 
       isAppendingNextChapter = true;
       const container = document.getElementById('reading-content');
+      const activeTerms = await getActiveGlossaryForCurrentBook();
 
       const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = buildChapterBlockHtml(nextChap, nextIdx);
+      tempDiv.innerHTML = await buildChapterBlockHtml(nextChap, nextIdx, activeTerms);
       container.appendChild(tempDiv.firstElementChild);
       
       if (!renderedWindowIndices.includes(nextIdx)) {
@@ -1047,9 +1170,7 @@
       }
     }
 
-    function triggerManualFetchNext() {
-      triggerReadingPrefetchIfEnabled(true);
-    }
+    function triggerManualFetchNext() { triggerReadingPrefetchIfEnabled(true); }
 
     function promptFixNextUrlFromBottom() {
       const lastChap = chapters[chapters.length - 1];
@@ -1069,11 +1190,8 @@
         if (!isInfinite) return;
 
         if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 1200) {
-          if (currentChapterIndex < chapters.length - 1) {
-            appendNextChapterToWindow();
-          } else {
-            checkProactivePrefetch();
-          }
+          if (currentChapterIndex < chapters.length - 1) appendNextChapterToWindow();
+          else checkProactivePrefetch();
         }
       }, { passive: true });
     }
@@ -1131,7 +1249,7 @@
       }
     }
 
-    // SELECTION MONITOR
+    // SELECTION MONITOR WITH REVERSE WORD-PAIRING CAPABILITY
     function setupSelectionMonitor() {
       const checkSelection = () => {
         const sel = window.getSelection();
@@ -1143,9 +1261,21 @@
 
           const tag = document.getElementById('sel-tag-label');
           const preview = document.getElementById('sel-preview-text');
+          const pairBtn = document.getElementById('reverse-pair-btn');
 
           tag.innerText = isSelectedChinese ? "คำจีนที่เลือก:" : "คำไทยที่เลือก:";
           preview.innerText = text;
+          
+          let paraThEl = sel.anchorNode;
+          while (paraThEl && !paraThEl.classList?.contains('para-th')) {
+            paraThEl = paraThEl.parentElement;
+          }
+          if (paraThEl) {
+            selectedParagraphContext.th = decodeURIComponent(paraThEl.getAttribute('data-th') || "");
+            selectedParagraphContext.src = decodeURIComponent(paraThEl.getAttribute('data-src') || "");
+          }
+
+          pairBtn.style.display = isSelectedChinese ? 'none' : 'inline-flex';
           document.getElementById('selection-bar').style.display = 'flex';
         }
       };
@@ -1172,12 +1302,354 @@
 
       openGlossaryModal();
       setTimeout(() => {
-        if (isSelectedChinese) {
-          document.getElementById('gloss-tgt').focus();
-        } else {
-          document.getElementById('gloss-src').focus();
-        }
+        if (isSelectedChinese) document.getElementById('gloss-tgt').focus();
+        else document.getElementById('gloss-src').focus();
       }, 150);
+    }
+
+    // ==================== AI REVERSE WORD-PAIRING TOOL ====================
+    async function findChineseForSelection() {
+      const key = (localStorage.getItem('nov_gemini_key') || "").trim();
+      const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
+
+      if (!key) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
+      if (!selectedParagraphContext.src) return alert("ไม่พบบริบทข้อความภาษาจีนของย่อหน้านี้");
+
+      const pairBtn = document.getElementById('reverse-pair-btn');
+      const originalText = pairBtn.innerText;
+      pairBtn.disabled = true;
+      pairBtn.innerText = "กำลังหา...";
+
+      const prompt = `คุณคือนักแปลภาษาจีน-ไทยมืออาชีพ
+ผู้ใช้อ่านคำแปลไทยและลากคลุมคำว่า: "${selectedWordBuffer}"
+จากประโยคแปลไทย: "${selectedParagraphContext.th}"
+
+และนี่คือข้อความภาษาจีนต้นฉบับของย่อหน้านี้:
+"${selectedParagraphContext.src}"
+
+จงระบุว่าคำว่า "${selectedWordBuffer}" ในภาษาไทย ตรงกับตัวอักษรจีนคำไหนในข้อความต้นฉบับด้านบน
+ตอบกลับเป็น JSON เท่านั้นในรูปแบบ:
+{
+  "chineseWord": "ตัวอักษรจีนที่ตรงกับคำนี้",
+  "category": "character|title|location|skill|equipment|resource|realm"
+}`;
+
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent?key=${key}`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { response_mime_type: "application/json" }
+          })
+        });
+
+        if (!res.ok) throw new Error("ยิง API ไม่สำเร็จ");
+        const data = await res.json();
+        const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
+
+        if (parsed.chineseWord) {
+          dismissSelectionBar();
+          document.getElementById('gloss-src').value = parsed.chineseWord.trim();
+          document.getElementById('gloss-tgt').value = selectedWordBuffer;
+          if (parsed.category) document.getElementById('gloss-cat').value = parsed.category;
+          openGlossaryModal();
+          setTimeout(() => document.getElementById('gloss-tgt').focus(), 150);
+        } else {
+          alert("ไม่พบคำจีนที่ตรงกัน กรุณาพิมพ์ด้วยตนเอง");
+        }
+      } catch (err) {
+        alert("ค้นหาคำจีนไม่สำเร็จ: " + err.message);
+      } finally {
+        pairBtn.disabled = false;
+        pairBtn.innerText = originalText;
+      }
+    }
+
+    // ==================== UNIVERSAL CATEGORIZED GLOSSARY UI ====================
+    async function openGlossaryModal() {
+      const bookContextEl = document.getElementById('glossary-book-context');
+      if (bookContextEl) bookContextEl.innerText = `เรื่องปัจจุบัน: ${currentBookTitle} (${currentBookId})`;
+      await renderGlossaryUI();
+      openModal('glossary-modal');
+    }
+
+    function switchGlossaryCategory(cat, e) {
+      currentGlossaryCategory = cat;
+      document.querySelectorAll('.cat-tab-btn').forEach(b => b.classList.remove('active'));
+      if (e && e.target) e.target.classList.add('active');
+      renderGlossaryUI();
+    }
+
+    function getCategoryLabel(cat) {
+      switch(cat) {
+        case 'character': return '👤 บุคคล/สัตว์';
+        case 'title': return '🎖️ ตำแหน่ง';
+        case 'location': return '🏔️ สถานที่';
+        case 'skill': return '📜 ทักษะ/วิชา';
+        case 'equipment': return '🗡️ อุปกรณ์';
+        case 'resource': return '💊 ทรัพยากร';
+        case 'realm': return '🧬 ลำดับขั้น';
+        default: return '🏷️ อื่นๆ';
+      }
+    }
+
+    async function renderGlossaryUI() {
+      const list = document.getElementById('glossary-list');
+      if (!list) return;
+      list.innerHTML = "";
+
+      let items = await dbGetAllGlossaryItems();
+      const scopeFilter = document.getElementById('gloss-scope-filter').value;
+      const sortMode = document.getElementById('gloss-sort-select').value;
+      const query = document.getElementById('gloss-search-input').value.trim().toLowerCase();
+
+      // 1. กรองตาม Scope (เฉพาะเรื่องนี้ / Global / ทั้งหมด)
+      if (scopeFilter === 'current') {
+        items = items.filter(it => it.scope === 'global' || (Array.isArray(it.books) && it.books.includes(currentBookId)));
+      } else if (scopeFilter === 'global') {
+        items = items.filter(it => it.scope === 'global');
+      }
+
+      // 2. กรองตามหมวดหมู่ 7 หมวด
+      if (currentGlossaryCategory !== 'all') {
+        items = items.filter(it => it.category === currentGlossaryCategory);
+      }
+
+      // 3. กรองตามคำค้นหา (Live Search)
+      if (query) {
+        items = items.filter(it => it.src.toLowerCase().includes(query) || it.tgt.toLowerCase().includes(query));
+      }
+
+      // 4. จัดเรียง (Multi-Sort)
+      if (sortMode === 'count_desc') items.sort((a, b) => (b.count || 1) - (a.count || 1));
+      else if (sortMode === 'time_desc') items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+      else if (sortMode === 'time_asc') items.sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
+      else if (sortMode === 'th_asc') items.sort((a, b) => a.tgt.localeCompare(b.tgt, 'th'));
+      else if (sortMode === 'th_desc') items.sort((a, b) => b.tgt.localeCompare(a.tgt, 'th'));
+      else if (sortMode === 'len_desc') items.sort((a, b) => b.src.length - a.src.length);
+
+      if (items.length === 0) {
+        list.innerHTML = `<div style="text-align:center; padding:20px; opacity:0.5; font-size:12px;">ไม่พบคำศัพท์ที่ตรงกับเงื่อนไข</div>`;
+        return;
+      }
+
+      items.forEach(data => {
+        const isCurrentAttached = Array.isArray(data.books) && data.books.includes(currentBookId);
+        const isGlobal = data.scope === 'global';
+        const scopeBadge = isGlobal ? 
+          `<span class="gloss-scope-tag gloss-scope-global" onclick="toggleGlossaryScope('${data.src}')" title="คลิกเพื่อจำกัดเฉพาะเรื่อง">🌐 สากล</span>` : 
+          `<span class="gloss-scope-tag gloss-scope-local" onclick="toggleGlossaryScope('${data.src}')" title="คลิกเพื่อเปลี่ยนเป็นสากล">🏷️ เฉพาะเรื่อง (${data.books?.length || 0})</span>`;
+
+        const row = document.createElement('div');
+        row.className = 'gloss-item-row';
+        row.innerHTML = `
+          <div style="flex: 1; overflow: hidden;">
+            <div style="display:flex; align-items:center; gap:6px; flex-wrap: wrap;">
+              <span class="gloss-badge">${getCategoryLabel(data.category)}</span>
+              ${scopeBadge}
+              <b>${data.src}</b> ➔ <span style="color:#2563eb; font-weight:600;">${data.tgt}</span>
+              <span style="font-size:10px; opacity:0.5;">(ใช้ ${data.count || 1} ครั้ง)</span>
+            </div>
+          </div>
+          <div style="display:flex; gap:4px; align-items:center;">
+            <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="researchGlossaryTerm('${data.src}')" title="ค้นหาคำแปลยอดนิยมในเน็ต">🔄 รีเสิร์ช</button>
+            <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="promptEditGlossary('${data.src}')">✎ แก้</button>
+            <button class="btn btn-danger" style="padding:2px 6px; font-size:10px;" onclick="delGloss('${data.src}')">ลบ</button>
+          </div>
+        `;
+        list.appendChild(row);
+      });
+    }
+
+    async function addGlossary() {
+      const s = document.getElementById('gloss-src').value.trim();
+      const t = document.getElementById('gloss-tgt').value.trim();
+      const cat = document.getElementById('gloss-cat').value;
+
+      if (!s || !t) return alert("กรุณาใส่ทั้งคำจีนและคำแปลไทย");
+
+      const existing = (await dbGetAllGlossaryItems()).find(it => it.src === s);
+      const booksList = existing && Array.isArray(existing.books) ? existing.books : [];
+      if (!booksList.includes(currentBookId)) booksList.push(currentBookId);
+
+      await dbSaveGlossaryItem({
+        src: s,
+        tgt: t,
+        category: cat,
+        scope: existing ? existing.scope : 'tagged',
+        books: booksList,
+        count: existing ? (existing.count || 1) + 1 : 1,
+        overrides: existing?.overrides || {},
+        updatedAt: Date.now()
+      });
+
+      document.getElementById('gloss-src').value = "";
+      document.getElementById('gloss-tgt').value = "";
+      await renderGlossaryUI();
+      renderVirtualWindow(currentChapterIndex);
+    }
+
+    async function toggleGlossaryScope(src) {
+      const items = await dbGetAllGlossaryItems();
+      const it = items.find(x => x.src === src);
+      if (!it) return;
+
+      it.scope = (it.scope === 'global') ? 'tagged' : 'global';
+      it.updatedAt = Date.now();
+      await dbSaveGlossaryItem(it);
+      await renderGlossaryUI();
+      renderVirtualWindow(currentChapterIndex);
+    }
+
+    async function promptEditGlossary(src) {
+      const items = await dbGetAllGlossaryItems();
+      const cur = items.find(x => x.src === src);
+      if (!cur) return;
+
+      const newTgt = prompt(`แก้ไขคำแปลไทยสำหรับ "${src}":`, cur.tgt);
+      if (newTgt !== null && newTgt.trim()) {
+        const catPrompt = prompt(`เปลี่ยนหมวดหมู่ (character / title / location / skill / equipment / resource / realm):`, cur.category);
+        const validCats = ['character','title','location','skill','equipment','resource','realm'];
+        cur.tgt = newTgt.trim();
+        if (catPrompt && validCats.includes(catPrompt.trim())) cur.category = catPrompt.trim();
+        cur.updatedAt = Date.now();
+        await dbSaveGlossaryItem(cur);
+        await renderGlossaryUI();
+        renderVirtualWindow(currentChapterIndex);
+      }
+    }
+
+    async function researchGlossaryTerm(src) {
+      const key = (localStorage.getItem('nov_gemini_key') || "").trim();
+      const genre = localStorage.getItem('nov_genre') || "xianxia";
+      const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
+
+      if (!key) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+
+      const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนแนว "${genre}"
+จงวิเคราะห์คำศัพท์เฉพาะภาษาจีนคำนี้: "${src}"
+สืบค้นเทียบเคียงกับคลังคำแปลนิยายจีนออนไลน์และนิยายแปลไทยที่ได้รับความนิยมสูงที่สุด
+จงส่งกลับคำแปลภาษาไทยที่ถูกต้อง สละสลวย และเลือก 1 ใน 7 หมวดหมู่นี้:
+- "character": บุคคล, สิ่งมีชีวิต, สัตว์อสูร
+- "title": ตำแหน่ง, ฐานะ, คำเรียกขาน
+- "location": สถานที่, สำนัก, เมือง, ดินแดน
+- "skill": ทักษะ, วิชา, เคล็ดวิชา
+- "equipment": อุปกรณ์, อาวุธ, เทคโนโลยี
+- "resource": ทรัพยากร, โอสถ, สมุนไพร, แร่
+- "realm": ลำดับขั้น, ขอบเขตพลัง, สเตตัส
+
+ตอบกลับเป็น JSON เท่านั้น:
+{
+  "tgt": "คำแปลไทยยอดนิยมและสละสลวยที่สุด",
+  "category": "character|title|location|skill|equipment|resource|realm"
+}`;
+
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent?key=${key}`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { response_mime_type: "application/json" }
+          })
+        });
+
+        if (!res.ok) throw new Error("ยิง API ไม่สำเร็จ");
+        const data = await res.json();
+        const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
+
+        if (parsed.tgt) {
+          const items = await dbGetAllGlossaryItems();
+          const cur = items.find(x => x.src === src);
+          if (cur) {
+            cur.tgt = parsed.tgt.trim();
+            if (parsed.category) cur.category = parsed.category;
+            cur.updatedAt = Date.now();
+            await dbSaveGlossaryItem(cur);
+            await renderGlossaryUI();
+            renderVirtualWindow(currentChapterIndex);
+          }
+        }
+      } catch (err) {
+        alert("รีเสิร์ชไม่สำเร็จ: " + err.message);
+      }
+    }
+
+    async function autoOrganizeGlossaryWithAI() {
+      const key = (localStorage.getItem('nov_gemini_key') || "").trim();
+      const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
+      const genre = localStorage.getItem('nov_genre') || "xianxia";
+
+      if (!key) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
+
+      let items = await dbGetAllGlossaryItems();
+      if (items.length === 0) return alert("ไม่มีคำศัพท์ในคลัง");
+
+      if (!confirm(`ต้องการให้ AI วิเคราะห์และจัดหมวดหมู่คำศัพท์ทั้งหมด ${items.length} คำ ลงใน 7 หมวดหมู่อัตโนมัติใช่หรือไม่?`)) return;
+
+      const termList = items.map(it => ({ src: it.src, tgt: it.tgt }));
+      const prompt = `คุณคือบรรณาธิการนิยายแนว "${genre}"
+จงวิเคราะห์รายการคำศัพท์เฉพาะเหล่านี้ และจัดกลุ่มคำศัพท์แต่ละคำลงใน 1 ใน 7 หมวดหมู่ที่เหมาะสมที่สุด:
+- "character": บุคคล, ตัวละคร, สัตว์อสูร, เผ่าพันธุ์
+- "title": ตำแหน่ง, ฐานะ, คำเรียกขาน
+- "location": สถานที่, สำนัก, ตระกูล, เมือง, ดวงดาว
+- "skill": ทักษะ, วิชา, เคล็ดวิชา, เวทมนตร์
+- "equipment": อาวุธ, สมบัติวิเศษ, อุปกรณ์เทคโน
+- "resource": เม็ดยาโอสถ, สมุนไพร, แร่, วัตถุดิบ
+- "realm": ขอบเขตพลัง, ลำดับขั้น, เลเวล, แรงก์
+
+รายการคำศัพท์:
+${JSON.stringify(termList)}
+
+ตอบกลับเป็น JSON เท่านั้น:
+{
+  "classified": [
+    { "src": "คำจีน", "category": "character|title|location|skill|equipment|resource|realm" }
+  ]
+}`;
+
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent?key=${key}`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { response_mime_type: "application/json" }
+          })
+        });
+
+        if (!res.ok) throw new Error("ยิง API ไม่สำเร็จ");
+        const data = await res.json();
+        const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
+
+        let updatedCount = 0;
+        if (Array.isArray(parsed.classified)) {
+          for (const c of parsed.classified) {
+            const it = items.find(x => x.src === c.src);
+            if (it && it.category !== c.category) {
+              it.category = c.category;
+              it.updatedAt = Date.now();
+              await dbSaveGlossaryItem(it);
+              updatedCount++;
+            }
+          }
+        }
+        await renderGlossaryUI();
+        alert(`✓ จัดระเบียบเสร็จสมบูรณ์! อัปเดตหมวดหมู่คำศัพท์ไปทั้งหมด ${updatedCount} คำ`);
+      } catch (err) {
+        alert("จัดหมวดหมู่อัตโนมัติไม่สำเร็จ: " + err.message);
+      }
+    }
+
+    async function delGloss(src) {
+      if (!confirm(`ต้องการลบคำว่า "${src}" ออกจากคลังศัพท์ใช่หรือไม่?`)) return;
+      await dbDeleteGlossaryItem(src);
+      await renderGlossaryUI();
+      renderVirtualWindow(currentChapterIndex);
     }
 
     // ==================== AUTO-GLOSSARY SCAN FOR SPECIFIC TEXT ====================
@@ -1189,27 +1661,28 @@
       const genre = localStorage.getItem('nov_genre') || "xianxia";
       if (!key) return 0;
 
-      const existingTerms = Object.keys(glossary);
-      const sampleText = rawText.substring(0, 4500);
+      const existingItems = await dbGetAllGlossaryItems();
+      const existingTerms = existingItems.map(x => x.src);
 
       const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนแนว "${genre}"
-จงวิเคราะห์ข้อความภาษาจีนต่อไปนี้ และสกัดหา "ชื่อเฉพาะใหม่" ที่สำคัญอย่างยิ่งต่อความต่อเนื่องของเรื่อง โดยแบ่งออกเป็น 5 หมวด:
-- "character": ชื่อบุคคล, นามตัวละคร, ฉายาเฉพาะ
-- "location": ชื่อเมือง, ภูเขา, สำนัก, ดินแดน, วิหาร
-- "skill": ชื่อวิชา, ทักษะยุทธ, คัมภีร์, เคล็ดวิชา
-- "item": ชื่ออาวุธ, เม็ดยาโอสถ, สมบัติวิเศษ
-- "other": ขอบเขตลมปราณ, เผ่าพันธุ์, ตำแหน่งเฉพาะ
+จงวิเคราะห์ข้อความภาษาจีนต่อไปนี้อย่างละเอียด และสกัดหา "ชื่อเฉพาะใหม่" ทั้งหมดที่สำคัญต่อความต่อเนื่อง โดยจัดลง 7 หมวดหมู่:
+- "character": บุคคล, ตัวละคร, สัตว์อสูร, เผ่าพันธุ์
+- "title": ตำแหน่ง, ฐานะ, คำเรียกขาน
+- "location": สำนัก, เมือง, ภูเขา, ตระกูล, ดินแดน
+- "skill": วิชา, ทักษะยุทธ, คัมภีร์, สกิล
+- "equipment": อาวุธ, สมบัติวิเศษ, อุปกรณ์เทคโน
+- "resource": โอสถ, สมุนไพร, หินพลังงาน, แร่
+- "realm": ขอบเขตลมปราณ, ลำดับขั้น, เลเวล
 
-ข้อกำหนดสำคัญ:
-1. ห้ามเลือกคำทั่วไป เช่น พ่อ, แม่, ประตู, ท้องฟ้า, เจ้าสำนัก
-2. ค้นหาคำแปลไทยที่ถูกต้อง ตรงตามหลักการทับศัพท์ภาษาจีนกลาง หรือคำแปลมาตรฐานที่นิยมใช้ในนิยายแปลไทยแนวเดียวกัน
-3. คำศัพท์ที่มีอยู่แล้วในระบบ ห้ามนำซ้ำ: [${existingTerms.slice(-60).join(', ')}]
-4. หากไม่พบคำศัพท์ใหม่ ให้ส่งรายการว่าง []
+ข้อกำหนด:
+1. ห้ามเลือกคำทั่วไป (เช่น พ่อ, แม่, ประตู, ท้องฟ้า)
+2. ค้นหาคำแปลไทยมาตรฐานตามหลักวรรณกรรมที่นิยมใช้ในนิยายแปลแนวเดียวกัน
+3. คำที่มีอยู่แล้วห้ามส่งซ้ำ: [${existingTerms.slice(-60).join(', ')}]
 
-ตอบกลับเป็น JSON เท่านั้นในรูปแบบ:
+ตอบกลับเป็น JSON เท่านั้น:
 {
   "newTerms": [
-    { "src": "คำจีน", "tgt": "คำแปลไทยมาตรฐาน", "category": "character|location|skill|item|other" }
+    { "src": "คำจีน", "tgt": "คำแปลไทยมาตรฐาน", "category": "character|title|location|skill|equipment|resource|realm" }
   ]
 }`;
 
@@ -1220,7 +1693,7 @@
           signal: signal,
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหา:\n${sampleText}` }] }],
+            contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาบท:\n${rawText}` }] }],
             generationConfig: { response_mime_type: "application/json" }
           })
         });
@@ -1232,18 +1705,28 @@
             const parsed = JSON.parse(outText);
             const items = parsed.newTerms || [];
             let addedCount = 0;
-            items.forEach(item => {
-              if (item.src && item.tgt && !glossary[item.src]) {
-                glossary[item.src] = {
-                  tgt: item.tgt.trim(),
-                  category: item.category || 'other'
-                };
-                addedCount++;
+            for (const item of items) {
+              if (item.src && item.tgt) {
+                const existing = existingItems.find(x => x.src === item.src);
+                if (!existing) {
+                  await dbSaveGlossaryItem({
+                    src: item.src.trim(),
+                    tgt: item.tgt.trim(),
+                    category: item.category || 'character',
+                    scope: 'tagged',
+                    books: [currentBookId],
+                    count: 1,
+                    overrides: {},
+                    updatedAt: Date.now()
+                  });
+                  addedCount++;
+                } else if (!existing.books.includes(currentBookId)) {
+                  existing.books.push(currentBookId);
+                  existing.count = (existing.count || 1) + 1;
+                  existing.updatedAt = Date.now();
+                  await dbSaveGlossaryItem(existing);
+                }
               }
-            });
-            if (addedCount > 0) {
-              localStorage.setItem('nov_gloss', JSON.stringify(glossary));
-              renderGlossaryUI();
             }
             return addedCount;
           }
@@ -1279,6 +1762,8 @@
         } else {
           alert(`ตรวจสอบ "${curChap.title}" เรียบร้อยแล้ว ไม่พบชื่อเฉพาะใหม่ตกหล่น (ทุกคำมีอยู่ในคลังแล้ว)`);
         }
+        await renderGlossaryUI();
+        renderVirtualWindow(currentChapterIndex);
       } catch (err) {
         alert("สแกนไม่สำเร็จ: " + err.message);
       } finally {
@@ -1287,14 +1772,15 @@
       }
     }
 
-    // ROBUST TRANSLATE CALL WITH ABORT SIGNAL
+    // ==================== TRANSLATE CALL WITH POST-HARVESTING ====================
     async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "", signal = null) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
 
       if (!key) throw new Error("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
 
-      const termList = Object.entries(glossary).map(([k,v]) => `${k}=${v.tgt || v}`).join(", ");
+      const activeTerms = await getActiveGlossaryForCurrentBook();
+      const termList = Object.entries(activeTerms).map(([k,v]) => `${k}=${v.resolvedTgt}`).join(", ");
       const genreRule = getGenreInstruction(genre);
 
       const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลเนื้อหาต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย
@@ -1309,14 +1795,18 @@ ${genreRule}
 3. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
 4. ล็อกสรรพนามของตัวละครให้สอดคล้องกัน ห้ามสลับไปมา
 5. ในบทสนทนา ให้ใช้เครื่องหมายอัญประกาศ ' หรือ “ ” ห้ามใช้เครื่องหมาย " ซ้ำซ้อน และห้ามใส่ Control Characters ดิบ
-${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${lastChapterContext}"` : ''}
+6. สกัด "used_entities" (ชื่อเฉพาะสำคัญที่ปรากฏในบทนี้) แนบกลับมาด้วยเพื่อบันทึกลงคลังศัพท์
+${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${lastChapterContext}"` : ''}
 
 ผลลัพธ์ต้องส่งกลับเป็น JSON Object ตามโครงสร้างนี้เท่านั้น:
 {
-  "translatedBookTitle": "คำแปลชื่อเรื่องภาษาไทย (ถ้าไม่มีให้ใส่ว่าง)",
-  "translatedChapterTitle": "คำแปลชื่อตอนภาษาไทย (เช่น บทที่ 810: ...)",
+  "translatedBookTitle": "คำแปลชื่อเรื่องภาษาไทย",
+  "translatedChapterTitle": "คำแปลชื่อตอนภาษาไทย",
   "paragraphs": [
     {"th": "คำแปลไทยของย่อหน้านั้น", "src": "ข้อความจีนของย่อหน้านั้น"}
+  ],
+  "used_entities": [
+    {"src": "คำจีน", "tgt": "คำแปลไทย", "category": "character|title|location|skill|equipment|resource|realm"}
   ]
 }`;
 
@@ -1328,16 +1818,12 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาที่ต้องแปล:\n${rawText}` }] }],
-          generationConfig: {
-            response_mime_type: "application/json"
-          }
+          generationConfig: { response_mime_type: "application/json" }
         })
       });
 
       const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error?.message || `HTTP ${res.status}: ยิง API ไม่สำเร็จ`);
-      }
+      if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}: ยิง API ไม่สำเร็จ`);
 
       let outText = data.candidates[0].content.parts[0].text;
       const parsedResult = cleanAndParseJSON(outText);
@@ -1345,6 +1831,33 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       let paragraphs = Array.isArray(parsedResult) ? parsedResult : (parsedResult.paragraphs || []);
       let translatedChapTitle = parsedResult.translatedChapterTitle || rawChapTitle;
       let translatedBookTitle = parsedResult.translatedBookTitle || rawBookTitle;
+
+      // Post-Translation Entity Harvesting (บันทึกคำที่ใช้แปลจริงในบทเข้าคลัง)
+      if (Array.isArray(parsedResult.used_entities) && parsedResult.used_entities.length > 0) {
+        const existingItems = await dbGetAllGlossaryItems();
+        for (const ent of parsedResult.used_entities) {
+          if (ent.src && ent.tgt) {
+            const found = existingItems.find(x => x.src === ent.src);
+            if (!found) {
+              await dbSaveGlossaryItem({
+                src: ent.src.trim(),
+                tgt: ent.tgt.trim(),
+                category: ent.category || 'character',
+                scope: 'tagged',
+                books: [currentBookId],
+                count: 1,
+                overrides: {},
+                updatedAt: Date.now()
+              });
+            } else {
+              if (!found.books.includes(currentBookId)) found.books.push(currentBookId);
+              found.count = (found.count || 1) + 1;
+              found.updatedAt = Date.now();
+              await dbSaveGlossaryItem(found);
+            }
+          }
+        }
+      }
 
       const formattedParas = [];
       paragraphs.forEach(item => {
@@ -1387,18 +1900,18 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         try {
           activeAbortController = new AbortController();
 
+          // Two-Pass: Pass 1 ก่อนแปล
           if (attempt === 1) {
             await extractAndStoreAutoGlossary(rawText, activeModel, activeAbortController.signal);
           }
 
+          // Pass 2: แปลเนื้อหา + Post-Harvesting
           const res = await executeApiCall(rawText, activeModel, rawChapTitle, rawBookTitle, activeAbortController.signal);
           activeAbortController = null;
           return res;
         } catch (err) {
           activeAbortController = null;
-          if (err.name === 'AbortError' || retryAbortRequested) {
-            throw new Error("ผู้ใช้สั่งหยุดการทำงาน");
-          }
+          if (err.name === 'AbortError' || retryAbortRequested) throw new Error("ผู้ใช้สั่งหยุดการทำงาน");
 
           const errMsg = (err.message || "").toLowerCase();
           const isHighDemand = errMsg.includes("high demand") || 
@@ -1407,13 +1920,9 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
                                errMsg.includes("429") ||
                                errMsg.includes("overloaded");
 
-          if (!isHighDemand || attempt === maxRetries || retryAbortRequested) {
-            throw err;
-          }
+          if (!isHighDemand || attempt === maxRetries || retryAbortRequested) throw err;
 
-          if (hasBackup) {
-            activeModel = (activeModel === primaryModel) ? backupModel : primaryModel;
-          }
+          if (hasBackup) activeModel = (activeModel === primaryModel) ? backupModel : primaryModel;
 
           for (let sec = 5; sec > 0; sec--) {
             if (retryAbortRequested) throw new Error("ผู้ใช้ยกเลิกการส่งซ้ำ");
@@ -1627,9 +2136,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         document.getElementById('prefetch-badge').style.display = 'inline-block';
 
         const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
-        if (isInfinite) {
-          appendNextChapterToWindow();
-        }
+        if (isInfinite) appendNextChapterToWindow();
       } catch (e) {
         console.warn("Reading prefetch failed:", e);
         if (e.message && (e.message.includes('404') || e.message.includes('ไม่พบเนื้อหา'))) {
@@ -1643,7 +2150,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // NEXT CHAPTER CLICK (สำหรับโหมดอ่านทีละหน้า)
+    // NEXT CHAPTER CLICK
     async function handleNextChapterClick() {
       if (currentChapterIndex < chapters.length - 1) {
         currentChapterIndex++;
@@ -1726,10 +2233,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
     }
 
     async function startBatchTranslateForBook(bookId) {
-      if (isBatchRunning) {
-        alert("กำลังมีกระบวนการแปลล่วงหน้าทำงานอยู่ กรุณารอหรือกดยกเลิกก่อน");
-        return;
-      }
+      if (isBatchRunning) return alert("กำลังมีกระบวนการแปลล่วงหน้าทำงานอยู่ กรุณารอหรือกดยกเลิกก่อน");
 
       const input = document.getElementById(`batch-input-${bookId}`);
       const count = parseInt(input.value || "5", 10);
@@ -1823,9 +2327,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             updatedAt: Date.now()
           });
 
-          if (currentBookId === bookId) {
-            chapters.push(newChap);
-          }
+          if (currentBookId === bookId) chapters.push(newChap);
 
           refreshShelfViewOnly(bookId);
           targetUrl = nextUrl;
@@ -1841,18 +2343,14 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
 
       isBatchRunning = false;
+      isBatchComplete = true;
+      actionBtn.className = 'btn btn-secondary';
+      actionBtn.innerText = "ปิดการแจ้งเตือน";
 
       if (successCount === count && !batchCancelRequested) {
-        isBatchComplete = true;
         progressBox.className = 'progress-box success';
         progressTitle.innerText = "✓ แปลล่วงหน้าเสร็จสมบูรณ์!";
         progressDesc.innerText = `บันทึกเนื้อหาเรียบร้อยแล้วทั้งหมด ${successCount} ตอน พร้อมให้อ่านแบบออฟไลน์`;
-        actionBtn.className = 'btn btn-secondary';
-        actionBtn.innerText = "ปิดการแจ้งเตือน";
-      } else {
-        actionBtn.className = 'btn btn-secondary';
-        actionBtn.innerText = "ปิดการแจ้งเตือน";
-        isBatchComplete = true;
       }
 
       openBookshelfModal();
@@ -1865,156 +2363,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         abortAllRunningProcesses();
         document.getElementById('batch-progress-desc').innerText = "กำลังสั่งหยุด...";
       }
-    }
-
-    // ==================== CATEGORIZED AUTO-GLOSSARY UI & ENGINE ====================
-    function openGlossaryModal() {
-      renderGlossaryUI();
-      openModal('glossary-modal');
-    }
-
-    function switchGlossaryCategory(cat, e) {
-      currentGlossaryCategory = cat;
-      document.querySelectorAll('.cat-tab-btn').forEach(b => b.classList.remove('active'));
-      if (e && e.target) e.target.classList.add('active');
-      renderGlossaryUI();
-    }
-
-    function getCategoryLabel(cat) {
-      switch(cat) {
-        case 'character': return '👤 ตัวละคร';
-        case 'location': return '🏔️ สถานที่';
-        case 'skill': return '📜 วิชา';
-        case 'item': return '🗡️ สิ่งของ';
-        default: return '🏷️ อื่นๆ';
-      }
-    }
-
-    function renderGlossaryUI() {
-      const list = document.getElementById('glossary-list');
-      if (!list) return;
-      list.innerHTML = "";
-
-      const entries = Object.entries(glossary);
-      const filtered = entries.filter(([k, v]) => {
-        if (currentGlossaryCategory === 'all') return true;
-        return v.category === currentGlossaryCategory;
-      });
-
-      if (filtered.length === 0) {
-        list.innerHTML = `<div style="text-align:center; padding:20px; opacity:0.5; font-size:12px;">ไม่มีคำศัพท์ในหมวดนี้</div>`;
-        return;
-      }
-
-      filtered.forEach(([src, data]) => {
-        const row = document.createElement('div');
-        row.className = 'gloss-item-row';
-        row.innerHTML = `
-          <div style="flex: 1; overflow: hidden;">
-            <div style="display:flex; align-items:center; gap:6px;">
-              <span class="gloss-badge">${getCategoryLabel(data.category)}</span>
-              <b>${src}</b> ➔ <span id="gloss-val-${src}" style="color:#2563eb; font-weight:600;">${data.tgt}</span>
-            </div>
-          </div>
-          <div style="display:flex; gap:4px; align-items:center;">
-            <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="researchGlossaryTerm('${src}')" title="ให้ AI ค้นหาคำแปลมาตรฐานยอดนิยมในเน็ต">🔄 รีเสิร์ช</button>
-            <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="promptEditGlossary('${src}')">✎ แก้</button>
-            <button class="btn btn-danger" style="padding:2px 6px; font-size:10px;" onclick="delGloss('${src}')">ลบ</button>
-          </div>
-        `;
-        list.appendChild(row);
-      });
-    }
-
-    function addGlossary() {
-      const s = document.getElementById('gloss-src').value.trim();
-      const t = document.getElementById('gloss-tgt').value.trim();
-      const cat = document.getElementById('gloss-cat').value;
-
-      if (!s || !t) return alert("กรุณาใส่ทั้งคำจีนและคำแปลไทย");
-
-      glossary[s] = { tgt: t, category: cat };
-      localStorage.setItem('nov_gloss', JSON.stringify(glossary));
-      document.getElementById('gloss-src').value = "";
-      document.getElementById('gloss-tgt').value = "";
-      renderGlossaryUI();
-      renderVirtualWindow(currentChapterIndex);
-    }
-
-    function promptEditGlossary(src) {
-      const cur = glossary[src];
-      if (!cur) return;
-
-      const newTgt = prompt(`แก้ไขคำแปลไทยสำหรับ "${src}":`, cur.tgt);
-      if (newTgt !== null && newTgt.trim()) {
-        const newCat = prompt(`ย้ายหมวดหมู่ (character / location / skill / item / other):`, cur.category) || cur.category;
-        glossary[src] = {
-          tgt: newTgt.trim(),
-          category: ['character','location','skill','item','other'].includes(newCat) ? newCat : 'other'
-        };
-        localStorage.setItem('nov_gloss', JSON.stringify(glossary));
-        renderGlossaryUI();
-        renderVirtualWindow(currentChapterIndex);
-      }
-    }
-
-    async function researchGlossaryTerm(src) {
-      const key = (localStorage.getItem('nov_gemini_key') || "").trim();
-      const genre = localStorage.getItem('nov_genre') || "xianxia";
-      const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
-
-      if (!key) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
-
-      const valEl = document.getElementById(`gloss-val-${src}`);
-      if (valEl) valEl.innerText = "กำลังรีเสิร์ชผ่าน AI...";
-
-      const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนแนว "${genre}"
-จงวิเคราะห์คำศัพท์เฉพาะภาษาจีนคำนี้: "${src}"
-สืบค้นเทียบเคียงกับคลังคำแปลนิยายจีนออนไลน์และนิยายแปลไทยที่ได้รับความนิยมสูงที่สุด
-จงส่งกลับคำแปลภาษาไทยที่ถูกต้อง สละสลวย และตรงตามหมวดหมู่ที่สุด
-
-ตอบกลับเป็น JSON เท่านั้นในรูปแบบ:
-{
-  "tgt": "คำแปลไทยยอดนิยมและสละสลวยที่สุด",
-  "category": "character|location|skill|item|other"
-}`;
-
-      try {
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent?key=${key}`;
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ role: 'user', parts: [{ text: prompt }] }],
-            generationConfig: { response_mime_type: "application/json" }
-          })
-        });
-
-        if (!res.ok) throw new Error("ยิง API ไม่สำเร็จ");
-        const data = await res.json();
-        const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
-
-        if (parsed.tgt) {
-          glossary[src] = {
-            tgt: parsed.tgt.trim(),
-            category: parsed.category || glossary[src].category || 'other'
-          };
-          localStorage.setItem('nov_gloss', JSON.stringify(glossary));
-          renderGlossaryUI();
-          renderVirtualWindow(currentChapterIndex);
-        }
-      } catch (err) {
-        alert("รีเสิร์ชไม่สำเร็จ: " + err.message);
-        renderGlossaryUI();
-      }
-    }
-
-    function delGloss(src) {
-      if (!confirm(`ต้องการลบคำว่า "${src}" ออกจากคลังศัพท์ใช่หรือไม่?`)) return;
-      delete glossary[src];
-      localStorage.setItem('nov_gloss', JSON.stringify(glossary));
-      renderGlossaryUI();
-      renderVirtualWindow(currentChapterIndex);
     }
 
     // ==================== RE-TRANSLATE CHAPTER BY ID ====================
@@ -2033,9 +2381,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       }
 
       if (!srcChineseText || srcChineseText.length < 20) {
-        if (!targetChap.sourceUrl) {
-          return alert("ไม่พบข้อความต้นฉบับเดิมและไม่มี URL ของบทนี้");
-        }
+        if (!targetChap.sourceUrl) return alert("ไม่พบข้อความต้นฉบับเดิมและไม่มี URL ของบทนี้");
         try {
           const scraped = await scrapePage(targetChap.sourceUrl);
           srcChineseText = scraped.text;
@@ -2128,7 +2474,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         itemBox.className = 'book-item-container';
 
         let bookChaps = await dbGetChaptersByBook(b.bookId);
-        
         if (!bookSortModes[b.bookId]) bookSortModes[b.bookId] = 'time_desc';
         applySortToChapters(bookChaps, bookSortModes[b.bookId]);
 
@@ -2184,11 +2529,8 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       e.stopPropagation();
       let currentMode = bookSortModes[bookId] || 'time_desc';
 
-      if (type === 'time') {
-        bookSortModes[bookId] = (currentMode === 'time_desc') ? 'time_asc' : 'time_desc';
-      } else if (type === 'title') {
-        bookSortModes[bookId] = (currentMode === 'title_asc') ? 'title_desc' : 'title_asc';
-      }
+      if (type === 'time') bookSortModes[bookId] = (currentMode === 'time_desc') ? 'time_asc' : 'time_desc';
+      else if (type === 'title') bookSortModes[bookId] = (currentMode === 'title_asc') ? 'title_desc' : 'title_asc';
 
       const currentSort = bookSortModes[bookId];
       const timeBtn = document.getElementById(`sort-time-btn-${bookId}`);
@@ -2204,22 +2546,15 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       const b = books.find(x => x.bookId === bookId);
 
       const listEl = document.getElementById(`shelf-chaps-${bookId}`);
-      if (listEl) {
-        listEl.innerHTML = renderChaptersHtml(bookId, bookChaps, b?.lastChapterId);
-      }
+      if (listEl) listEl.innerHTML = renderChaptersHtml(bookId, bookChaps, b?.lastChapterId);
       updateSelectedDeleteBtn(bookId);
     }
 
     function applySortToChapters(chapsList, sortMode) {
-      if (sortMode === 'time_desc') {
-        chapsList.sort((x, y) => y.order - x.order);
-      } else if (sortMode === 'time_asc') {
-        chapsList.sort((x, y) => x.order - y.order);
-      } else if (sortMode === 'title_asc') {
-        chapsList.sort((x, y) => x.title.localeCompare(y.title, 'th', { numeric: true }));
-      } else if (sortMode === 'title_desc') {
-        chapsList.sort((x, y) => y.title.localeCompare(x.title, 'th', { numeric: true }));
-      }
+      if (sortMode === 'time_desc') chapsList.sort((x, y) => y.order - x.order);
+      else if (sortMode === 'time_asc') chapsList.sort((x, y) => x.order - y.order);
+      else if (sortMode === 'title_asc') chapsList.sort((x, y) => x.title.localeCompare(y.title, 'th', { numeric: true }));
+      else if (sortMode === 'title_desc') chapsList.sort((x, y) => y.title.localeCompare(x.title, 'th', { numeric: true }));
     }
 
     function toggleBookAccordion(bookId) {
@@ -2284,9 +2619,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       if (targetBook) {
         if (remainingChaps.length > 0) {
           let safeActiveId = targetBook.lastChapterId;
-          if (!remainingChaps.some(c => c.id === safeActiveId)) {
-            safeActiveId = remainingChaps[0].id;
-          }
+          if (!remainingChaps.some(c => c.id === safeActiveId)) safeActiveId = remainingChaps[0].id;
           const safeActiveChap = remainingChaps.find(c => c.id === safeActiveId) || remainingChaps[0];
           const safeActiveIdx = remainingChaps.indexOf(safeActiveChap);
           const latestChap = remainingChaps[remainingChaps.length - 1];
@@ -2311,11 +2644,8 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         }
       }
 
-      if (currentBookId === bookId) {
-        await loadBookFromDB(bookId);
-      } else {
-        refreshShelfViewOnly(bookId);
-      }
+      if (currentBookId === bookId) await loadBookFromDB(bookId);
+      else refreshShelfViewOnly(bookId);
     }
 
     async function refreshShelfViewOnly(bookId) {
@@ -2326,9 +2656,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       const books = await dbGetAllBooks();
       const targetBook = books.find(b => b.bookId === bookId);
 
-      if (listEl) {
-        listEl.innerHTML = renderChaptersHtml(bookId, liveChaps, targetBook?.lastChapterId);
-      }
+      if (listEl) listEl.innerHTML = renderChaptersHtml(bookId, liveChaps, targetBook?.lastChapterId);
       if (metaEl && targetBook) {
         metaEl.innerHTML = `อ่านค้างไว้: <b>${targetBook.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${liveChaps.length} ตอนที่บันทึกไว้`;
       }
@@ -2345,9 +2673,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       if (input && input.trim()) {
         lastChap.nextUrl = input.trim();
         await dbSaveChapter(lastChap);
-        if (currentBookId === bookId) {
-          nextUrlCalculated = lastChap.nextUrl;
-        }
+        if (currentBookId === bookId) nextUrlCalculated = lastChap.nextUrl;
         alert("อัปเดต URL เรียบร้อยแล้ว ตอนนี้สามารถกด 'เริ่มแปลล่วงหน้า' ได้ทันที");
         checkAndRefreshBottomStatus();
       }
@@ -2472,9 +2798,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
         throw e;
       }
 
-      if (!rawText || rawText.length < 40) {
-        throw new Error("404");
-      }
+      if (!rawText || rawText.length < 40) throw new Error("404");
 
       const nextUrl = computeNextNumericUrl(url);
 
@@ -2498,22 +2822,22 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       switch (genre) {
         case 'xianxia':
           return `สไตล์: "เทพเซียน / บำเพ็ญเพียร (Xianxia)"
-- ใช้สรรพนาม: "ข้า - เจ้า", "ผู้อาวุโส - ศิษย์น้อง/ผู้น้อย" ห้ามหลุด "ฉัน/นาย/คุณ/ผม" เด็ดขาด
+- สรรพนาม: "ข้า - เจ้า", "ผู้อาวุโส - ศิษย์น้อง/ผู้น้อย" ห้ามหลุดคำสมัยใหม่
 - ศัพท์เต๋า: บำเพ็ญเพียร, ลมปราณ, แก่นทองคำ, ทัณฑ์สวรรค์, ตำหนัก, ยอดเขา`;
         case 'wuxia':
           return `สไตล์: "กำลังภายใน / ยุทธภพ (Wuxia)"
 - บรรยากาศยุทธจักร: สำนัก, คัมภีร์ยุทธ, ปราณคุ้มกาย, กระบี่, ท่องยุทธภพ
-- สรรพนามคลาสสิก: "ข้า - ท่าน/เจ้า"`;
+- สรรพนาม: "ข้า - ท่าน/เจ้า"`;
         case 'system_game':
           return `สไตล์: "ระบบ / ดันเจี้ยน / ผู้เล่น (System/Game)"
 - ข้อความแจ้งเตือน: [ติ๊ง! ตรวจพบภารกิจ], [เลเวลอัป]
-- สรรพนามทันสมัย: "ฉัน - นาย"`;
+- สรรพนาม: "ฉัน - นาย"`;
         case 'scifi':
           return `สไตล์: "ไซไฟ / มหากาพย์อวกาศ (Sci-Fi)"
 - ศัพท์วิทยาศาสตร์: ยานรบ, รูหนอน, วาร์ป, คลื่นแม่เหล็ก, พันธุกรรม`;
         case 'horror':
           return `สไตล์: "สยองขวัญ / เอาชีวิตรอด (Horror)"
-- เน้นบรรยายบรรยากาศ: วังเวง, เย็นเยียบ, เสียงลมหายใจ, กลิ่นคาว, เงาตะคุ่ม`;
+- บรรยากาศ: วังเวง, เย็นเยียบ, เสียงลมหายใจ, กลิ่นคาว, เงาตะคุ่ม`;
         default:
           return `สไตล์: วรรณกรรมทั่วไป อ่านลื่นไหลเป็นธรรมชาติ`;
       }
@@ -2523,14 +2847,12 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       if (!rawStr) throw new Error("ผลลัพธ์ว่างเปล่า");
 
       let str = rawStr.replace(/```json/gi, '').replace(/```/g, '').trim();
-
       str = str.replace(/(?<!\\)[\r\n\t]/g, (match) => {
         if (match === '\n') return '\\n';
         if (match === '\r') return '\\r';
         if (match === '\t') return '\\t';
         return match;
       });
-
       str = str.replace(/,\s*([\]}])/g, '$1');
 
       try {
@@ -2562,7 +2884,6 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
             paragraphs: paragraphs
           };
         }
-
         throw new Error("โครงสร้าง JSON เสียหาย: " + err.message);
       }
     }
@@ -2573,10 +2894,7 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
       const statusText = document.getElementById('fetch-status-text');
       const fetchBtn = document.getElementById('fetch-models-btn');
 
-      if (!key) {
-        alert("กรุณากรอก API Key ก่อนกดตรวจเช็กโมเดล");
-        return;
-      }
+      if (!key) return alert("กรุณากรอก API Key ก่อนกดตรวจเช็กโมเดล");
 
       fetchBtn.disabled = true;
       fetchBtn.innerText = "กำลังตรวจเช็ก...";
@@ -2681,41 +2999,25 @@ ${lastChapterContext ? `6. บริบทตอนก่อนหน้า: "${
 
       try {
         const cached = JSON.parse(localStorage.getItem('nov_cached_models') || '[]');
-        if (Array.isArray(cached) && cached.length > 0) {
-          populateModelDropdowns(cached);
-        }
+        if (Array.isArray(cached) && cached.length > 0) populateModelDropdowns(cached);
       } catch(e) {}
 
-      if (localStorage.getItem('nov_primary_model')) {
-        document.getElementById('gemini-primary-model').value = localStorage.getItem('nov_primary_model');
-      }
-      if (localStorage.getItem('nov_backup_model')) {
-        document.getElementById('gemini-backup-model').value = localStorage.getItem('nov_backup_model');
-      }
-      if (localStorage.getItem('nov_retry_limit')) {
-        document.getElementById('retry-limit').value = localStorage.getItem('nov_retry_limit');
-      }
-      if (localStorage.getItem('nov_genre')) {
-        document.getElementById('novel-genre').value = localStorage.getItem('nov_genre');
-      }
+      if (localStorage.getItem('nov_primary_model')) document.getElementById('gemini-primary-model').value = localStorage.getItem('nov_primary_model');
+      if (localStorage.getItem('nov_backup_model')) document.getElementById('gemini-backup-model').value = localStorage.getItem('nov_backup_model');
+      if (localStorage.getItem('nov_retry_limit')) document.getElementById('retry-limit').value = localStorage.getItem('nov_retry_limit');
+      if (localStorage.getItem('nov_genre')) document.getElementById('novel-genre').value = localStorage.getItem('nov_genre');
 
       const prefetchVal = localStorage.getItem('nov_enable_prefetch');
       const prefetchChk = document.getElementById('enable-live-prefetch');
-      if (prefetchChk) {
-        prefetchChk.checked = (prefetchVal !== 'false');
-      }
+      if (prefetchChk) prefetchChk.checked = (prefetchVal !== 'false');
 
       const infiniteVal = localStorage.getItem('nov_enable_infinite');
       const infiniteChk = document.getElementById('enable-infinite-scroll');
-      if (infiniteChk) {
-        infiniteChk.checked = (infiniteVal !== 'false');
-      }
+      if (infiniteChk) infiniteChk.checked = (infiniteVal !== 'false');
 
       const autoGlossVal = localStorage.getItem('nov_enable_auto_glossary');
       const autoGlossChk = document.getElementById('enable-auto-glossary');
-      if (autoGlossChk) {
-        autoGlossChk.checked = (autoGlossVal !== 'false');
-      }
+      if (autoGlossChk) autoGlossChk.checked = (autoGlossVal !== 'false');
     }
 
     // EXPORT
