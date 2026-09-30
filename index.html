@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v1.6</title>
+  <title>NovelTranslate AI v1.6.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -145,7 +145,6 @@
     }
     body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
 
-    /* CONTEXTUAL CHINESE HIGHLIGHT */
     .ai-src-candidate-mark {
       background-color: #fef08a !important;
       color: #854d0e !important;
@@ -174,11 +173,12 @@
     body.theme-dark .inline-term-highlight { border-bottom-color: rgba(96,165,250,0.7); }
     body.theme-dark .inline-term-highlight:hover { background-color: rgba(96,165,250,0.25); }
 
+    /* INLINE TERM QUICK POPOVER */
     #term-popover {
       display: none; position: fixed; z-index: 100;
       background: #1e293b; color: #fff; padding: 7px 12px; border-radius: 8px;
       font-size: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.35);
-      animation: fadeIn 0.15s ease-out; gap: 8px; align-items: center; pointer-events: auto;
+      animation: fadeIn 0.15s ease-out; gap: 6px; align-items: center; pointer-events: auto;
     }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
 
@@ -383,9 +383,10 @@
     <span id="fullscreen-icon">⛶</span>
   </button>
 
-  <!-- INLINE TERM QUICK POPOVER -->
+  <!-- INLINE TERM QUICK POPOVER (เพิ่มปุ่ม 🔄 ค้นหาใหม่) -->
   <div id="term-popover">
     <span id="popover-text">จีน ➔ ไทย</span>
+    <button class="btn" style="padding: 2px 7px; font-size: 10px; background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); color:#fff;" id="popover-research-btn" title="ให้ AI ค้นหาคำแปลไทยตามหลัก 3-Tier ใหม่">🔄 ค้นหาใหม่</button>
     <button class="btn btn-primary" style="padding: 2px 7px; font-size: 10px;" id="popover-edit-btn">✎ แก้ไข</button>
   </div>
 
@@ -556,11 +557,11 @@
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('realm', event)">🧬 ลำดับขั้น/สเตตัส</button>
       </div>
 
-      <!-- Add Manual Term Form -->
-      <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap;">
-        <input type="text" id="gloss-src" class="form-input" placeholder="คำจีน (เช่น 林动)" style="flex: 1; min-width: 100px;">
-        <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปลไทย (เช่น หลินตง)" style="flex: 1; min-width: 100px;">
-        <select id="gloss-cat" class="form-input" style="width: 130px;">
+      <!-- Add Manual Term Form (เพิ่มปุ่ม 🔍 ค้นหาคำแปล ก่อนปุ่ม + เพิ่ม) -->
+      <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; align-items: center;">
+        <input type="text" id="gloss-src" class="form-input" placeholder="คำจีน (เช่น 光海)" style="flex: 1; min-width: 90px;">
+        <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปลไทย (เช่น ทะเลแสง)" style="flex: 1; min-width: 90px;">
+        <select id="gloss-cat" class="form-input" style="width: 120px;">
           <option value="character" selected>บุคคล/สิ่งมีชีวิต</option>
           <option value="title">ตำแหน่ง/ฐานะ</option>
           <option value="location">สถานที่/องค์กร</option>
@@ -569,6 +570,9 @@
           <option value="resource">ทรัพยากร/โอสถ</option>
           <option value="realm">ลำดับขั้น/สเตตัส</option>
         </select>
+        <button class="btn btn-secondary" id="lookup-manual-term-btn" onclick="lookupManualTermTranslation()" title="พิมพ์คำจีนแล้วกดปุ่มนี้เพื่อให้ AI ค้นหาคำแปลไทยมาตรฐาน 3-Tier ให้อัตโนมัติ" style="white-space: nowrap;">
+          🔍 ค้นหาคำแปล
+        </button>
         <button class="btn btn-primary" onclick="addGlossary()">+ เพิ่ม</button>
       </div>
 
@@ -859,10 +863,10 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v1.6",
+        title: "คู่มือเริ่มต้น v1.6.1",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.6", src: "欢迎来到 NovelTranslate" },
-          { th: "ติดตั้งระบบค้นหาและไฮไลต์คำจีนต้นฉบับในย่อหน้า (Contextual Substring Highlighter) แม่นยำ 100%", src: "已支持上下文子串精准高亮与候选提取" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.6.1", src: "欢迎来到 NovelTranslate" },
+          { th: "ติดตั้งปุ่มค้นหาคำแปลมาตรฐานทั้งในหน้าคลังศัพท์และหน้าแก้ไขด่วน พร้อมกำจัดอักษรจีนตกค้างในรอบเกลาคำเรียบร้อยแล้ว", src: "已完全支持便捷查词与去除中文残留" }
         ]
       }
     ];
@@ -1023,8 +1027,28 @@
       const popover = document.getElementById('term-popover');
       const textSpan = document.getElementById('popover-text');
       const editBtn = document.getElementById('popover-edit-btn');
+      const researchBtn = document.getElementById('popover-research-btn');
 
-      textSpan.innerHTML = `<b>${src}</b> ➔ <span style="color:#38bdf8;">${tgt}</span>`;
+      textSpan.innerHTML = `<b>${src}</b> ➔ <span id="popover-tgt-span" style="color:#38bdf8;">${tgt}</span>`;
+      
+      // ปุ่ม 🔄 ค้นหาใหม่ บน Popover ด่วน
+      researchBtn.onclick = async (ev) => {
+        ev.stopPropagation();
+        researchBtn.disabled = true;
+        researchBtn.innerText = "กำลังหา...";
+        try {
+          const res = await researchGlossaryTermDirect(src);
+          if (res && res.tgt) {
+            document.getElementById('popover-tgt-span').innerText = res.tgt;
+            await renderGlossaryUI();
+            await renderVirtualWindow(currentChapterIndex, false);
+          }
+        } finally {
+          researchBtn.disabled = false;
+          researchBtn.innerText = "🔄 ค้นหาใหม่";
+        }
+      };
+
       editBtn.onclick = (ev) => {
         ev.stopPropagation();
         popover.style.display = 'none';
@@ -1034,7 +1058,7 @@
       popover.style.display = 'flex';
       const rect = e.target.getBoundingClientRect();
       popover.style.top = `${rect.bottom + 6}px`;
-      popover.style.left = `${Math.min(window.innerWidth - 240, Math.max(10, rect.left))}px`;
+      popover.style.left = `${Math.min(window.innerWidth - 260, Math.max(10, rect.left))}px`;
     }
 
     function setupPopoverDelegation() {
@@ -1462,10 +1486,8 @@
         const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
 
         const rawCandidates = Array.isArray(parsed.candidates) ? parsed.candidates : [];
-        // กรองความปลอดภัยชั้นที่ 2: ต้องปรากฏอยู่ในข้อความจีนจริง 100%
         const verifiedCandidates = rawCandidates.filter(c => c.word && selectedParagraphContext.src.includes(c.word.trim()));
 
-        // เปิดกล่องภาษาจีนต้นฉบับของย่อหน้านั้นขึ้นมาทันที
         const uniqueKey = selectedParagraphContext.uniqueKey;
         const srcEl = document.getElementById(`src-${uniqueKey}`);
 
@@ -1475,14 +1497,12 @@
           if (srcEl) {
             srcEl.style.display = 'block';
 
-            // ทำแถบสีไฮไลต์คำจีนที่ตรวจพบในกล่องต้นฉบับ
             let highlightedChinese = selectedParagraphContext.src;
             verifiedCandidates.forEach(cand => {
               const regex = new RegExp(`(${escapeRegExp(cand.word)})`, 'g');
               highlightedChinese = highlightedChinese.replace(regex, `<span class="ai-src-candidate-mark" onclick="applyChosenChineseCandidate('${cand.word}', '${cand.category || 'character'}')" title="คลิกเพื่อเลือกคำนี้ใส่คลังศัพท์">$1</span>`);
             });
 
-            // สร้าง UI ปุ่มทางเลือกคำจีน
             const buttonsHtml = verifiedCandidates.map(cand => 
               `<button class="btn btn-primary" style="padding:2px 8px; font-size:11px;" onclick="applyChosenChineseCandidate('${cand.word}', '${cand.category || 'character'}')">✓ ใช้คำว่า: ${cand.word}</button>`
             ).join(' ');
@@ -1497,12 +1517,11 @@
             srcEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
         } else {
-          // หากหาไม่พบ ให้เปิดกล่องภาษาจีนต้นฉบับขึ้นมาเพื่อให้ผู้ใช้ลากคลุมเองได้ง่ายๆ
           if (srcEl) {
             srcEl.style.display = 'block';
             srcEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
-          alert(`⚠️️ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้\n\nสาเหตุ: คำนี้อาจเกิดจากการขัดเกลาสำนวนภาษาไทยจนรูปประโยคเปลี่ยนไปจากต้นฉบับ\n(ระบบได้เปิดข้อความภาษาจีนต้นฉบับของย่อหน้านี้ให้แล้ว คุณสามารถลากคลุมตัวอักษรจีนที่ต้องการโดยตรงได้ทันที)`);
+          alert(`⚠️ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้\n\nสาเหตุ: คำนี้อาจเกิดจากการขัดเกลาสำนวนภาษาไทยจนรูปประโยคเปลี่ยนไปจากต้นฉบับ\n(ระบบได้เปิดข้อความภาษาจีนต้นฉบับของย่อหน้านี้ให้แล้ว คุณสามารถลากคลุมตัวอักษรจีนที่ต้องการโดยตรงได้ทันที)`);
         }
       } catch (err) {
         alert("ค้นหาคำจีนไม่สำเร็จ: " + err.message);
@@ -1518,6 +1537,41 @@
       if (category) document.getElementById('gloss-cat').value = category;
       openGlossaryModal();
       setTimeout(() => document.getElementById('gloss-tgt').focus(), 150);
+    }
+
+    // ==================== MANUAL TERM LOOKUP ENGINE (ปุ่ม 🔍 ค้นหาคำแปล ในหน้าคลังศัพท์) ====================
+    async function lookupManualTermTranslation() {
+      const srcInput = document.getElementById('gloss-src');
+      const tgtInput = document.getElementById('gloss-tgt');
+      const catSelect = document.getElementById('gloss-cat');
+      const btn = document.getElementById('lookup-manual-term-btn');
+
+      const src = (srcInput.value || "").trim();
+      if (!src) return alert("กรุณาพิมพ์คำจีนที่ต้องการค้นหาก่อน (เช่น 光海)");
+
+      const key = (localStorage.getItem('nov_gemini_key') || "").trim();
+      if (!key) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+
+      const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
+      const originalText = btn.innerText;
+      btn.disabled = true;
+      btn.innerText = "กำลังค้นหา...";
+
+      try {
+        const res = await researchGlossaryTermDirect(src);
+        if (res && res.tgt) {
+          tgtInput.value = res.tgt;
+          if (res.category) catSelect.value = res.category;
+          tgtInput.focus();
+        } else {
+          alert("ไม่พบคำแปลที่เหมาะสม กรุณาระบุคำแปลด้วยตนเอง");
+        }
+      } catch (err) {
+        alert("ค้นหาคำแปลไม่สำเร็จ: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = originalText;
+      }
     }
 
     // ==================== UNIVERSAL CATEGORIZED GLOSSARY UI ====================
@@ -1880,7 +1934,7 @@
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
       const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
-      if (!key) return;
+      if (!key) return null;
 
       const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
       const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
@@ -1920,7 +1974,7 @@
           })
         });
 
-        if (!res.ok) return;
+        if (!res.ok) return null;
         const data = await res.json();
         const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
 
@@ -1929,11 +1983,16 @@
           const cur = items.find(x => x.src === src);
           if (cur) {
             cur.tgt = parsed.tgt.trim();
+            if (parsed.category) cur.category = parsed.category;
             cur.updatedAt = Date.now();
             await dbSaveGlossaryItem(cur);
           }
+          return parsed;
         }
-      } catch (err) {}
+      } catch (err) {
+        console.warn("Direct lookup failed:", err);
+      }
+      return null;
     }
 
     async function researchGlossaryTerm(src) {
@@ -1946,10 +2005,12 @@
       if (tgtEl) tgtEl.innerText = "กำลังรีเสิร์ช...";
 
       try {
-        await researchGlossaryTermDirect(src);
-        const items = await dbGetAllGlossaryItems();
-        const cur = items.find(x => x.src === src);
-        if (cur && tgtEl) tgtEl.innerText = cur.tgt;
+        const res = await researchGlossaryTermDirect(src);
+        if (res && res.tgt) {
+          const items = await dbGetAllGlossaryItems();
+          const cur = items.find(x => x.src === src);
+          if (cur && tgtEl) tgtEl.innerText = cur.tgt;
+        }
       } catch (err) {
         alert("รีเสิร์ชไม่สำเร็จ: " + err.message);
       } finally {
@@ -2235,18 +2296,19 @@ ${JSON.stringify(termList)}
 แนวเรื่อง: "${genre}"
 ${genreRule}
 
-กฎเหล็กสำคัญที่สุด (ฝ่าฝืนไม่ได้):
-1. **ห้ามเปลี่ยนหรือดัดแปลงคำเฉพาะเหล่านี้เด็ดขาด** (ต้องใช้คำตามนี้เป๊ะๆ 100% ห้ามเปลี่ยนเป็นคำไวพจน์อื่น):
+กฎเหล็กสำคัญที่สุด (ฝ่าฝืนไม่ได้เด็ดขาด):
+1. **ผลลัพธ์ใน array 'polished' ต้องเป็นภาษาไทยล้วน 100% ห้ามมีตัวอักษรจีน (Hanzi) หลุดรอดเข้ามาในเนื้อความเด็ดขาด**
+2. **ห้ามเปลี่ยนหรือดัดแปลงคำเฉพาะเหล่านี้เด็ดขาด** (ต้องใช้คำแปลไทยตามนี้เป๊ะๆ 100% ห้ามเปลี่ยนเป็นคำไวพจน์อื่น):
    [${termList}]
-2. **รักษาจำนวนย่อหน้าเดิม 100%**: ห้ามรวมย่อหน้าเข้าด้วยกัน และห้ามแตกย่อหน้าใหม่ ต้องมีจำนวน Element ในอาร์เรย์ผลลัพธ์เท่ากับต้นฉบับที่ส่งเข้ามา (${paragraphs.length} ย่อหน้า)
-3. กำจัดตัวอักษรแปลกปลอม, สัญลักษณ์หลุด, คำสะกดผิด, คำพิมพ์ตกหล่น
-4. ปรับโครงสร้างประโยคที่มีกลิ่นอายภาษาจีน (เช่น การเรียงประธาน-กริยาขัดหู) ให้เป็นภาษาไทยที่กระชับและกลมกล่อม
+3. **รักษาจำนวนย่อหน้าเดิม 100%**: ห้ามรวมย่อหน้าเข้าด้วยกัน และห้ามแตกย่อหน้าใหม่ ต้องมีจำนวน Element ในอาร์เรย์ผลลัพธ์เท่ากับต้นฉบับที่ส่งเข้ามา (${paragraphs.length} ย่อหน้า)
+4. กำจัดตัวอักษรแปลกปลอม, สัญลักษณ์หลุด, คำสะกดผิด, คำพิมพ์ตกหล่น
+5. ปรับโครงสร้างประโยคที่มีกลิ่นอายภาษาจีน (เช่น การเรียงประธาน-กริยาขัดหู) ให้เป็นภาษาไทยที่กระชับและกลมกล่อม
 
 จงตอบกลับเป็น JSON Object ในรูปแบบนี้เท่านั้น:
 {
   "polished": [
-    "ข้อความภาษาไทยย่อหน้าที่ 1 ที่ขัดเกลาแล้ว",
-    "ข้อความภาษาไทยย่อหน้าที่ 2 ที่ขัดเกลาแล้ว"
+    "ข้อความภาษาไทยย่อหน้าที่ 1 ที่ขัดเกลาแล้ว (ไม่มีตัวจีน)",
+    "ข้อความภาษาไทยย่อหน้าที่ 2 ที่ขัดเกลาแล้ว (ไม่มีตัวจีน)"
   ]
 }`;
 
@@ -2272,10 +2334,17 @@ ${genreRule}
         const parsed = JSON.parse(outText);
         const polishedList = parsed.polished || [];
         if (Array.isArray(polishedList) && polishedList.length === paragraphs.length) {
-          return paragraphs.map((p, idx) => ({
-            th: polishedList[idx] || p.th,
-            src: p.src
-          }));
+          return paragraphs.map((p, idx) => {
+            let polishedText = polishedList[idx] || p.th;
+            // ด่านตรวจชั้นที่ 2 (Sanitizer): กวาดล้างตัวอักษรจีนที่อาจเล็ดลอดออกมาทิ้งทันที
+            if (typeof polishedText === 'string') {
+              polishedText = polishedText.replace(/[\u4e00-\u9fa5]+/g, '').trim();
+            }
+            return {
+              th: polishedText || p.th,
+              src: p.src
+            };
+          });
         }
       } catch (e) {
         console.warn("Proofreading JSON parse warning:", e);
