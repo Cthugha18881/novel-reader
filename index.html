@@ -753,7 +753,7 @@
     let currentFontSize = 18;
     let currentUrl = "";
     let nextUrlCalculated = "";
-    let isPrefetching = false;
+    let isPrefetching = false; // Flag ป้องกัน Race Condition
     let lastChapterContext = "";
     let currentBookId = "default_novel";
     let currentBookTitle = "NovelTranslate";
@@ -796,6 +796,7 @@
       setupSelectionMonitor();
       setupScrollMonitor();
       setupFullscreenListener();
+      setupPopoverDelegation();
       
       const lastBookId = localStorage.getItem('nov_last_book_id');
       if (lastBookId) {
@@ -895,7 +896,7 @@
       if (modal) modal.classList.remove('active'); 
     }
 
-    // ==================== INLINE TERM HIGHLIGHTING ENGINE ====================
+    // ==================== INLINE TERM HIGHLIGHTING ENGINE (แก้ไขบั๊กโค้ดแทรก 100%) ====================
     async function getActiveGlossaryForCurrentBook() {
       const allItems = await dbGetAllGlossaryItems();
       const activeMap = {};
@@ -917,19 +918,32 @@
       const termEntries = Object.values(activeTerms);
       if (termEntries.length === 0) return plainThText;
 
-      termEntries.sort((a, b) => b.resolvedTgt.length - a.resolvedTgt.length);
+      // 1. เรียงลำดับจากคำที่ยาวที่สุดไปหาสั้นที่สุด เพื่อจับคำยาวก่อน
+      termEntries.sort((a, b) => (b.resolvedTgt?.length || 0) - (a.resolvedTgt?.length || 0));
 
-      let processed = plainThText;
-      termEntries.forEach(t => {
-        if (!t.resolvedTgt || t.resolvedTgt.length < 2) return;
-        const regex = new RegExp(`(${escapeRegExp(t.resolvedTgt)})`, 'g');
-        processed = processed.replace(regex, `<span class="inline-term-highlight" data-src="${t.src}" data-tgt="${t.resolvedTgt}" onclick="showTermPopover(event, '${t.src}', '${t.resolvedTgt}')">$1</span>`);
+      // 2. กรองเฉพาะคำที่มีค่าและยาวตั้งแต่ 2 ตัวอักษรขึ้นไป
+      const validTerms = termEntries.filter(t => t.resolvedTgt && t.resolvedTgt.trim().length >= 2);
+      if (validTerms.length === 0) return plainThText;
+
+      // 3. สร้าง Map เพื่อดึงข้อมูลคำจีนกลับมาอย่างรวดเร็ว
+      const termMap = new Map();
+      validTerms.forEach(t => {
+        if (!termMap.has(t.resolvedTgt)) {
+          termMap.set(t.resolvedTgt, t.src);
+        }
       });
-      return processed;
+
+      // 4. รวบคำทั้งหมดเป็น Regex ก้อนเดียว รันแทนที่ในรอบเดียว (ไม่เกิดการทับซ้อนในแท็ก HTML)
+      const pattern = validTerms.map(t => escapeRegExp(t.resolvedTgt)).join('|');
+      const regex = new RegExp(`(${pattern})`, 'g');
+
+      return plainThText.replace(regex, (match) => {
+        const srcChar = termMap.get(match) || "";
+        return `<span class="inline-term-highlight" data-src="${encodeURIComponent(srcChar)}" data-tgt="${encodeURIComponent(match)}">${match}</span>`;
+      });
     }
 
     function showTermPopover(e, src, tgt) {
-      e.stopPropagation();
       const popover = document.getElementById('term-popover');
       const textSpan = document.getElementById('popover-text');
       const editBtn = document.getElementById('popover-edit-btn');
@@ -946,12 +960,22 @@
       popover.style.left = `${Math.min(window.innerWidth - 220, Math.max(10, rect.left))}px`;
     }
 
-    document.addEventListener('click', (e) => {
-      const popover = document.getElementById('term-popover');
-      if (popover && !popover.contains(e.target) && !e.target.classList.contains('inline-term-highlight')) {
-        popover.style.display = 'none';
-      }
-    });
+    function setupPopoverDelegation() {
+      document.addEventListener('click', (e) => {
+        const highlightEl = e.target.closest('.inline-term-highlight');
+        if (highlightEl) {
+          e.stopPropagation();
+          const src = decodeURIComponent(highlightEl.getAttribute('data-src') || '');
+          const tgt = decodeURIComponent(highlightEl.getAttribute('data-tgt') || '');
+          showTermPopover(e, src, tgt);
+        } else {
+          const popover = document.getElementById('term-popover');
+          if (popover && !popover.contains(e.target)) {
+            popover.style.display = 'none';
+          }
+        }
+      });
+    }
 
     // ==================== VIRTUAL SLIDING WINDOW RENDERER ====================
     async function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
@@ -1405,24 +1429,20 @@
       const sortMode = document.getElementById('gloss-sort-select').value;
       const query = document.getElementById('gloss-search-input').value.trim().toLowerCase();
 
-      // 1. กรองตาม Scope (เฉพาะเรื่องนี้ / Global / ทั้งหมด)
       if (scopeFilter === 'current') {
         items = items.filter(it => it.scope === 'global' || (Array.isArray(it.books) && it.books.includes(currentBookId)));
       } else if (scopeFilter === 'global') {
         items = items.filter(it => it.scope === 'global');
       }
 
-      // 2. กรองตามหมวดหมู่ 7 หมวด
       if (currentGlossaryCategory !== 'all') {
         items = items.filter(it => it.category === currentGlossaryCategory);
       }
 
-      // 3. กรองตามคำค้นหา (Live Search)
       if (query) {
         items = items.filter(it => it.src.toLowerCase().includes(query) || it.tgt.toLowerCase().includes(query));
       }
 
-      // 4. จัดเรียง (Multi-Sort)
       if (sortMode === 'count_desc') items.sort((a, b) => (b.count || 1) - (a.count || 1));
       else if (sortMode === 'time_desc') items.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
       else if (sortMode === 'time_asc') items.sort((a, b) => (a.updatedAt || 0) - (b.updatedAt || 0));
@@ -1436,7 +1456,6 @@
       }
 
       items.forEach(data => {
-        const isCurrentAttached = Array.isArray(data.books) && data.books.includes(currentBookId);
         const isGlobal = data.scope === 'global';
         const scopeBadge = isGlobal ? 
           `<span class="gloss-scope-tag gloss-scope-global" onclick="toggleGlossaryScope('${data.src}')" title="คลิกเพื่อจำกัดเฉพาะเรื่อง">🌐 สากล</span>` : 
@@ -1832,7 +1851,6 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
       let translatedChapTitle = parsedResult.translatedChapterTitle || rawChapTitle;
       let translatedBookTitle = parsedResult.translatedBookTitle || rawBookTitle;
 
-      // Post-Translation Entity Harvesting (บันทึกคำที่ใช้แปลจริงในบทเข้าคลัง)
       if (Array.isArray(parsedResult.used_entities) && parsedResult.used_entities.length > 0) {
         const existingItems = await dbGetAllGlossaryItems();
         for (const ent of parsedResult.used_entities) {
@@ -1900,12 +1918,10 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         try {
           activeAbortController = new AbortController();
 
-          // Two-Pass: Pass 1 ก่อนแปล
           if (attempt === 1) {
             await extractAndStoreAutoGlossary(rawText, activeModel, activeAbortController.signal);
           }
 
-          // Pass 2: แปลเนื้อหา + Post-Harvesting
           const res = await executeApiCall(rawText, activeModel, rawChapTitle, rawBookTitle, activeAbortController.signal);
           activeAbortController = null;
           return res;
@@ -2040,8 +2056,6 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
 
         renderVirtualWindow(currentChapterIndex, true);
         closeModal('import-modal');
-
-        checkProactivePrefetch();
       } catch (err) {
         status.style.background = '#fef2f2';
         status.style.color = '#991b1b';
@@ -2052,31 +2066,34 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // ON-DEMAND READING PREFETCH
+    // ON-DEMAND READING PREFETCH (แก้ปัญหา Race Condition แปลซ้อน 100%)
     async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       const isPrefetchEnabled = localStorage.getItem('nov_enable_prefetch') !== 'false';
       if (!isPrefetchEnabled && !isManualClick) return;
 
       const lastChap = chapters[chapters.length - 1];
-      const targetUrl = lastChap.nextUrl;
+      const targetUrl = lastChap ? lastChap.nextUrl : null;
       
       if (!targetUrl) {
         checkAndRefreshBottomStatus();
         return;
       }
       
+      // ล็อก Flag ทันทีแบบ Atomic ป้องกันคำสั่งซ้ำ
       if (isPrefetching) return;
-
-      const bookChaps = await dbGetChaptersByBook(currentBookId);
-      if (bookChaps.some(c => c.sourceUrl === targetUrl)) {
-        document.getElementById('prefetch-badge').style.display = 'inline-block';
-        return;
-      }
-
       isPrefetching = true;
       checkAndRefreshBottomStatus();
 
       try {
+        const bookChaps = await dbGetChaptersByBook(currentBookId);
+        // เช็กป้องกันลึกระดับ URL ว่ามีอยู่ในเครื่องหรือยัง
+        if (bookChaps.some(c => c.sourceUrl === targetUrl)) {
+          document.getElementById('prefetch-badge').style.display = 'inline-block';
+          isPrefetching = false;
+          checkAndRefreshBottomStatus();
+          return;
+        }
+
         updateInfiniteStatusBanner(`
           <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
             <span class="spinner-icon"></span> กำลังดึงเนื้อหาตอนถัดไปจากเว็บต้นฉบับ...
@@ -2100,6 +2117,13 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         }, rawChapTitle, rawBookTitle);
         
         const currentAll = await dbGetChaptersByBook(currentBookId);
+        // เช็กซ้ำอีกรอบหลังจากแปลเสร็จ เผื่อมีกระบวนการอื่นแทรก
+        if (currentAll.some(c => c.sourceUrl === targetUrl)) {
+          isPrefetching = false;
+          checkAndRefreshBottomStatus();
+          return;
+        }
+
         const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
         const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
 
