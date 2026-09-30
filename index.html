@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v1.4</title>
+  <title>NovelTranslate AI v1.4.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -518,7 +518,7 @@
         <div style="display: flex; gap: 4px; flex-wrap: wrap;">
           <button class="btn btn-primary" style="padding: 2px 7px; font-size: 10px;" onclick="batchResearchSelectedTerms()">🔄 รีเสิร์ชที่เลือก</button>
           <button class="btn" style="padding: 2px 7px; font-size: 10px;" onclick="batchSetScopeGlobal(true)">🌐 ตั้งเป็นสากล</button>
-          <button class="btn" style="padding: 2px 7px; font-size: 10px;" onclick="batchAssignToCurrentBook()">🏷️ ผูกกับเรื่องนี้</button>
+          <button class="btn" style="padding: 2px 7px; font-size: 10px;" onclick="openBatchBookAssignModal()">🏷️ กำหนดเรื่องที่เลือก</button>
           <button class="btn btn-danger" style="padding: 2px 7px; font-size: 10px;" onclick="batchDeleteSelectedTerms()">🗑️ ลบที่เลือก</button>
         </div>
       </div>
@@ -560,7 +560,7 @@
     </div>
   </div>
 
-  <!-- MODAL: QUICK BOOK ASSIGNMENT -->
+  <!-- MODAL: QUICK BOOK ASSIGNMENT (รองรับทั้งคำเดียวและทั้งกลุ่ม) -->
   <div class="modal-overlay" id="book-assign-modal" style="z-index: 60;">
     <div class="modal-box" style="max-width: 420px;">
       <div class="modal-head">
@@ -826,15 +826,15 @@
     let selectedParagraphContext = { th: "", src: "" };
 
     let currentGlossaryCategory = 'all';
-    let termBeingAssigned = null;
+    let termBeingAssigned = null; // null หมายถึงการกำหนดแบบกลุ่ม (Batch)
 
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v1.4",
+        title: "คู่มือเริ่มต้น v1.4.1",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.4", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบรองรับการแสดงชื่อเรื่องจริงบนแท็กศัพท์, เลือกหลายคำพร้อมกัน (Batch Operations) และหน้าต่างกำหนดเรื่องให้อย่างสมบูรณ์", src: "已支持交互式标签管理与批量操作" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.4.1", src: "欢迎来到 NovelTranslate" },
+          { th: "อัปเกรดระบบเลือกกลุ่มแล้วกำหนดเรื่อง (Batch Book Assignment) ให้เปิดหน้าต่างเลือกเรื่องได้ทันที", src: "已支持批量指定作品标签" }
         ]
       }
     ];
@@ -1466,10 +1466,10 @@
         case 'title': return '🎖️ ตำแหน่ง';
         case 'location': return '🏔️ สถานที่';
         case 'skill': return '📜 ทักษะ/วิชา';
-        case 'equipment': return '🗡️️ อุปกรณ์';
+        case 'equipment': return '🗡️ อุปกรณ์';
         case 'resource': return '💊 ทรัพยากร';
         case 'realm': return '🧬 ลำดับขั้น';
-        default: return '🏷 อื่นๆ';
+        default: return '🏷️️ อื่นๆ';
       }
     }
 
@@ -1610,28 +1610,6 @@
       renderVirtualWindow(currentChapterIndex);
     }
 
-    async function batchAssignToCurrentBook() {
-      const chks = document.querySelectorAll('.gloss-item-chk:checked');
-      if (chks.length === 0) return;
-
-      const items = await dbGetAllGlossaryItems();
-      const srcList = Array.from(chks).map(c => c.value);
-
-      for (const s of srcList) {
-        const it = items.find(x => x.src === s);
-        if (it) {
-          if (!Array.isArray(it.books)) it.books = [];
-          if (!it.books.includes(currentBookId)) {
-            it.books.push(currentBookId);
-            it.updatedAt = Date.now();
-            await dbSaveGlossaryItem(it);
-          }
-        }
-      }
-      await renderGlossaryUI();
-      renderVirtualWindow(currentChapterIndex);
-    }
-
     async function batchResearchSelectedTerms() {
       const chks = document.querySelectorAll('.gloss-item-chk:checked');
       if (chks.length === 0) return;
@@ -1656,7 +1634,7 @@
       alert(`✓ รีเสิร์ชคำศัพท์เสร็จสมบูรณ์ทั้ง ${count} คำ`);
     }
 
-    // QUICK BOOK PICKER MODAL
+    // QUICK BOOK PICKER MODAL (เดี่ยว)
     async function openBookAssignModal(src) {
       termBeingAssigned = src;
       const titleEl = document.getElementById('assign-term-title');
@@ -1690,21 +1668,72 @@
       container.innerHTML = html;
     }
 
-    async function saveBookAssignment() {
-      if (!termBeingAssigned) return;
-      const items = await dbGetAllGlossaryItems();
-      const cur = items.find(x => x.src === termBeingAssigned);
-      if (!cur) return closeModal('book-assign-modal');
+    // QUICK BOOK PICKER MODAL (ทั้งกลุ่มที่เลือกไว้)
+    async function openBatchBookAssignModal() {
+      const chks = document.querySelectorAll('.gloss-item-chk:checked');
+      if (chks.length === 0) return;
 
+      termBeingAssigned = null; // null หมายถึงทำงานกับทั้งกลุ่ม
+      const titleEl = document.getElementById('assign-term-title');
+      const container = document.getElementById('assign-books-list');
+      titleEl.innerText = `ทั้งหมด (${chks.length}) คำที่เลือก`;
+      container.innerHTML = '<div style="text-align:center; padding:10px;">กำลังโหลด...</div>';
+      openModal('book-assign-modal');
+
+      const books = await dbGetAllBooks();
+      let html = `
+        <label style="display:flex; align-items:center; gap:8px; padding:6px; border-bottom:1px solid rgba(0,0,0,0.06); cursor:pointer; font-weight:600;">
+          <input type="checkbox" id="assign-global-chk" style="cursor:pointer; accent-color:#2563eb;">
+          <span>🌐 ใช้งานได้กับทุกเรื่อง (Global)</span>
+        </label>
+      `;
+
+      books.forEach(b => {
+        // ค่าเริ่มต้นติ๊กเรื่องปัจจุบันให้เป็นตัวเลือกแนะนำ
+        const isCurrent = (b.bookId === currentBookId);
+        html += `
+          <label style="display:flex; align-items:center; gap:8px; padding:6px; cursor:pointer; font-size:12px;">
+            <input type="checkbox" class="assign-book-chk" value="${b.bookId}" ${isCurrent ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
+            <span>📚 ${b.title}</span>
+          </label>
+        `;
+      });
+
+      container.innerHTML = html;
+    }
+
+    async function saveBookAssignment() {
       const isGlobal = document.getElementById('assign-global-chk').checked;
       const chks = document.querySelectorAll('.assign-book-chk:checked');
       const selectedBooks = Array.from(chks).map(c => c.value);
 
-      cur.scope = isGlobal ? 'global' : 'tagged';
-      cur.books = selectedBooks;
-      cur.updatedAt = Date.now();
+      const items = await dbGetAllGlossaryItems();
 
-      await dbSaveGlossaryItem(cur);
+      if (termBeingAssigned) {
+        // กรณีแก้ไขคำเดียว
+        const cur = items.find(x => x.src === termBeingAssigned);
+        if (cur) {
+          cur.scope = isGlobal ? 'global' : 'tagged';
+          cur.books = selectedBooks;
+          cur.updatedAt = Date.now();
+          await dbSaveGlossaryItem(cur);
+        }
+      } else {
+        // กรณีแก้ไขทั้งกลุ่มที่เลือกไว้ (Batch Assignment)
+        const selectedGlossChks = document.querySelectorAll('.gloss-item-chk:checked');
+        const srcList = Array.from(selectedGlossChks).map(c => c.value);
+
+        for (const src of srcList) {
+          const cur = items.find(x => x.src === src);
+          if (cur) {
+            cur.scope = isGlobal ? 'global' : 'tagged';
+            cur.books = [...selectedBooks];
+            cur.updatedAt = Date.now();
+            await dbSaveGlossaryItem(cur);
+          }
+        }
+      }
+
       closeModal('book-assign-modal');
       await renderGlossaryUI();
       renderVirtualWindow(currentChapterIndex);
