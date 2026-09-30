@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v1.2</title>
+  <title>NovelTranslate AI v1.3</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -66,7 +66,7 @@
       background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
     }
 
-    /* TOP-RIGHT FLOATING BUTTONS */
+    /* TOP-RIGHT FLOATING BUTTONS (3 BUTTONS IN A ROW) */
     .top-floating-btn {
       position: fixed; top: 62px; z-index: 35; width: 32px; height: 32px; border-radius: 50%;
       background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.12);
@@ -80,6 +80,7 @@
 
     #fullscreen-btn { right: 16px; }
     #scan-terms-btn { right: 54px; font-size: 13px; }
+    #retranslate-chap-btn { right: 92px; font-size: 13px; }
 
     body.is-fullscreen header { transform: translateY(-100%); opacity: 0; pointer-events: none; }
     body.is-fullscreen .mobile-dock { transform: translateY(100%); opacity: 0; pointer-events: none; }
@@ -351,7 +352,10 @@
     </div>
   </header>
 
-  <!-- TOP-RIGHT FLOATING BUTTONS (SCAN & FULLSCREEN) -->
+  <!-- TOP-RIGHT FLOATING BUTTONS (RETRANSLATE, SCAN & FULLSCREEN) -->
+  <button id="retranslate-chap-btn" class="top-floating-btn" onclick="retranslateCurrentActiveChapter()" title="แปลบทปัจจุบันนี้ใหม่ตามคลังศัพท์ล่าสุด">
+    🔄
+  </button>
   <button id="scan-terms-btn" class="top-floating-btn" onclick="scanTermsInCurrentChapter()" title="สแกนหาคำศัพท์เฉพาะในบทนี้ที่ยังไม่มีในคลัง">
     🔍+
   </button>
@@ -443,7 +447,7 @@
       </div>
 
       <div id="bookshelf-list" style="max-height: 380px; overflow-y: auto; margin-bottom: 12px;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*กด 🔄 เพื่อแปลใหม่ตามคลังศัพท์ล่าสุด | ติ๊กถูกที่ช่องสี่เหลี่ยมด้านหน้าเพื่อเลือกลบ</p>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*กด 🔄 บนมุมขวาของหน้าอ่านเพื่อแปลบทปัจจุบันใหม่ตามคลังศัพท์ล่าสุดได้ทันที</p>
     </div>
   </div>
 
@@ -753,10 +757,11 @@
     let currentFontSize = 18;
     let currentUrl = "";
     let nextUrlCalculated = "";
-    let isPrefetching = false; // Flag ป้องกัน Race Condition
+    let isPrefetching = false;
     let lastChapterContext = "";
     let currentBookId = "default_novel";
     let currentBookTitle = "NovelTranslate";
+    let currentAuthor = ""; // เก็บชื่อผู้แต่งสำหรับ Tiered Resolution
     let isUserCustomTitle = false;
 
     let renderedWindowIndices = []; 
@@ -779,10 +784,10 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v1.2",
+        title: "คู่มือเริ่มต้น v1.3",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.2", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบติดตั้งคลังศัพท์อัจฉริยะ 7 หมวดหมู่, Multi-Book Tagging, Reverse Word-Pairing และ Inline Term Tagging ครบวงจร", src: "已支持全新7大类别、标签化术语库与内联交互" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v1.3", src: "欢迎来到 NovelTranslate" },
+          { th: "ติดตั้งระบบ Tiered Research และปุ่ม 🔄 แปลบทปัจจุบันใหม่บนมุมขวาบนเรียบร้อยแล้ว", src: "已支持分层术语检索与快捷重译" }
         ]
       }
     ];
@@ -896,7 +901,7 @@
       if (modal) modal.classList.remove('active'); 
     }
 
-    // ==================== INLINE TERM HIGHLIGHTING ENGINE (แก้ไขบั๊กโค้ดแทรก 100%) ====================
+    // ==================== INLINE TERM HIGHLIGHTING ENGINE ====================
     async function getActiveGlossaryForCurrentBook() {
       const allItems = await dbGetAllGlossaryItems();
       const activeMap = {};
@@ -918,14 +923,11 @@
       const termEntries = Object.values(activeTerms);
       if (termEntries.length === 0) return plainThText;
 
-      // 1. เรียงลำดับจากคำที่ยาวที่สุดไปหาสั้นที่สุด เพื่อจับคำยาวก่อน
       termEntries.sort((a, b) => (b.resolvedTgt?.length || 0) - (a.resolvedTgt?.length || 0));
 
-      // 2. กรองเฉพาะคำที่มีค่าและยาวตั้งแต่ 2 ตัวอักษรขึ้นไป
       const validTerms = termEntries.filter(t => t.resolvedTgt && t.resolvedTgt.trim().length >= 2);
       if (validTerms.length === 0) return plainThText;
 
-      // 3. สร้าง Map เพื่อดึงข้อมูลคำจีนกลับมาอย่างรวดเร็ว
       const termMap = new Map();
       validTerms.forEach(t => {
         if (!termMap.has(t.resolvedTgt)) {
@@ -933,7 +935,6 @@
         }
       });
 
-      // 4. รวบคำทั้งหมดเป็น Regex ก้อนเดียว รันแทนที่ในรอบเดียว (ไม่เกิดการทับซ้อนในแท็ก HTML)
       const pattern = validTerms.map(t => escapeRegExp(t.resolvedTgt)).join('|');
       const regex = new RegExp(`(${pattern})`, 'g');
 
@@ -1230,6 +1231,7 @@
       await dbSaveBook({
         bookId: currentBookId,
         title: currentBookTitle,
+        author: currentAuthor,
         isUserCustomTitle: isUserCustomTitle,
         lastChapterId: targetChap.id,
         lastChapterIndex: idx,
@@ -1394,7 +1396,10 @@
     // ==================== UNIVERSAL CATEGORIZED GLOSSARY UI ====================
     async function openGlossaryModal() {
       const bookContextEl = document.getElementById('glossary-book-context');
-      if (bookContextEl) bookContextEl.innerText = `เรื่องปัจจุบัน: ${currentBookTitle} (${currentBookId})`;
+      if (bookContextEl) {
+        const authorLabel = currentAuthor ? ` | ผู้แต่ง: ${currentAuthor}` : '';
+        bookContextEl.innerText = `เรื่องปัจจุบัน: ${currentBookTitle}${authorLabel} (${currentBookId})`;
+      }
       await renderGlossaryUI();
       openModal('glossary-modal');
     }
@@ -1415,7 +1420,7 @@
         case 'equipment': return '🗡️ อุปกรณ์';
         case 'resource': return '💊 ทรัพยากร';
         case 'realm': return '🧬 ลำดับขั้น';
-        default: return '🏷️ อื่นๆ';
+        default: return '🏷️️ อื่นๆ';
       }
     }
 
@@ -1473,7 +1478,7 @@
             </div>
           </div>
           <div style="display:flex; gap:4px; align-items:center;">
-            <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="researchGlossaryTerm('${data.src}')" title="ค้นหาคำแปลยอดนิยมในเน็ต">🔄 รีเสิร์ช</button>
+            <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="researchGlossaryTerm('${data.src}')" title="ค้นหาคำแปลยอดนิยมตามลำดับขั้น 3-Tier">🔄 รีเสิร์ช</button>
             <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="promptEditGlossary('${data.src}')">✎ แก้</button>
             <button class="btn btn-danger" style="padding:2px 6px; font-size:10px;" onclick="delGloss('${data.src}')">ลบ</button>
           </div>
@@ -1540,6 +1545,7 @@
       }
     }
 
+    // TIERED RESEARCH ENGINE FOR GLOSSARY TERM
     async function researchGlossaryTerm(src) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
@@ -1547,10 +1553,19 @@
 
       if (!key) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
 
-      const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนแนว "${genre}"
-จงวิเคราะห์คำศัพท์เฉพาะภาษาจีนคำนี้: "${src}"
-สืบค้นเทียบเคียงกับคลังคำแปลนิยายจีนออนไลน์และนิยายแปลไทยที่ได้รับความนิยมสูงที่สุด
-จงส่งกลับคำแปลภาษาไทยที่ถูกต้อง สละสลวย และเลือก 1 ใน 7 หมวดหมู่นี้:
+      const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
+      const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
+
+      const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนมืออาชีพ
+ข้อมูลบริบท: ${bookCtx} ${authorCtx} แนวเรื่อง: "${genre}"
+คำศัพท์ที่ต้องวิเคราะห์: "${src}"
+
+จงสืบค้นและกำหนดคำแปลภาษาไทยตามลำดับขั้นบันได 3 ระดับ (Tiered Resolution):
+1. Tier 1 (ตรงเรื่อง): หากคำนี้เป็นชื่อตัวละคร สถานที่ หรือวิชาในเรื่อง "${currentBookTitle}" ให้ใช้คำแปล/ทับศัพท์ที่ตรงกับฉบับแปลไทยที่เผยแพร่แล้ว
+2. Tier 2 (ผู้แต่ง/จักรวาลเดียวกัน): หากไม่พบในเรื่องนี้ ให้เทียบเคียงกับศัพท์ที่ใช้ในผลงานอื่นของผู้แต่ง ${authorCtx} ในจักรวาลเดียวกัน
+3. Tier 3 (มาตรฐานวรรณกรรมประจำแนว): หากเป็นคำใหม่ ให้แปลอย่างสละสลวยตามมาตรฐานวรรณกรรมนิยายแนว "${genre}"
+
+เลือก 1 ใน 7 หมวดหมู่นี้:
 - "character": บุคคล, สิ่งมีชีวิต, สัตว์อสูร
 - "title": ตำแหน่ง, ฐานะ, คำเรียกขาน
 - "location": สถานที่, สำนัก, เมือง, ดินแดน
@@ -1561,7 +1576,7 @@
 
 ตอบกลับเป็น JSON เท่านั้น:
 {
-  "tgt": "คำแปลไทยยอดนิยมและสละสลวยที่สุด",
+  "tgt": "คำแปลไทยที่ถูกต้องและสละสลวยที่สุด",
   "category": "character|title|location|skill|equipment|resource|realm"
 }`;
 
@@ -1683,8 +1698,17 @@ ${JSON.stringify(termList)}
       const existingItems = await dbGetAllGlossaryItems();
       const existingTerms = existingItems.map(x => x.src);
 
+      const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
+      const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
+
       const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนแนว "${genre}"
-จงวิเคราะห์ข้อความภาษาจีนต่อไปนี้อย่างละเอียด และสกัดหา "ชื่อเฉพาะใหม่" ทั้งหมดที่สำคัญต่อความต่อเนื่อง โดยจัดลง 7 หมวดหมู่:
+บริบทเรื่อง: ${bookCtx} ${authorCtx}
+จงวิเคราะห์ข้อความภาษาจีนต่อไปนี้อย่างละเอียด และสกัดหา "ชื่อเฉพาะใหม่" ทั้งหมดที่สำคัญต่อความต่อเนื่อง โดยใช้หลักการเทียบเคียงตามลำดับ:
+1. ฉบับแปลไทยที่มีอยู่แล้วของเรื่องนี้
+2. ผลงานอื่นของผู้แต่งในจักรวาลเดียวกัน
+3. มาตรฐานวรรณกรรมประจำแนว
+
+จัดลง 7 หมวดหมู่:
 - "character": บุคคล, ตัวละคร, สัตว์อสูร, เผ่าพันธุ์
 - "title": ตำแหน่ง, ฐานะ, คำเรียกขาน
 - "location": สำนัก, เมือง, ภูเขา, ตระกูล, ดินแดน
@@ -1695,8 +1719,7 @@ ${JSON.stringify(termList)}
 
 ข้อกำหนด:
 1. ห้ามเลือกคำทั่วไป (เช่น พ่อ, แม่, ประตู, ท้องฟ้า)
-2. ค้นหาคำแปลไทยมาตรฐานตามหลักวรรณกรรมที่นิยมใช้ในนิยายแปลแนวเดียวกัน
-3. คำที่มีอยู่แล้วห้ามส่งซ้ำ: [${existingTerms.slice(-60).join(', ')}]
+2. คำที่มีอยู่แล้วห้ามส่งซ้ำ: [${existingTerms.slice(-60).join(', ')}]
 
 ตอบกลับเป็น JSON เท่านั้น:
 {
@@ -1777,7 +1800,7 @@ ${JSON.stringify(termList)}
       try {
         const addedCount = await extractAndStoreAutoGlossary(srcText, primaryModel);
         if (addedCount > 0) {
-          alert(`✓ สแกน "${curChap.title}" เสร็จสิ้น!\nพบชื่อเฉพาะใหม่ ${addedCount} คำ และบันทึกเข้าคลังคำศัพท์เรียบร้อยแล้ว\n(หากต้องการให้บทนี้เปลี่ยนคำตามศัพท์ใหม่ สามารถกด 'แปลใหม่' ในชั้นหนังสือได้)`);
+          alert(`✓ สแกน "${curChap.title}" เสร็จสิ้น!\nพบชื่อเฉพาะใหม่ ${addedCount} คำ และบันทึกเข้าคลังคำศัพท์เรียบร้อยแล้ว\n(หากต้องการให้บทนี้เปลี่ยนคำตามศัพท์ใหม่ สามารถกดปุ่ม 🔄 ที่มุมขวาบนเพื่อแปลใหม่ได้ทันที)`);
         } else {
           alert(`ตรวจสอบ "${curChap.title}" เรียบร้อยแล้ว ไม่พบชื่อเฉพาะใหม่ตกหล่น (ทุกคำมีอยู่ในคลังแล้ว)`);
         }
@@ -1791,7 +1814,67 @@ ${JSON.stringify(termList)}
       }
     }
 
-    // ==================== TRANSLATE CALL WITH POST-HARVESTING ====================
+    // ==================== TOP-RIGHT QUICK RETRANSLATE FOR CURRENT CHAPTER ====================
+    async function retranslateCurrentActiveChapter() {
+      const curChap = chapters[currentChapterIndex];
+      if (!curChap) return alert("ไม่พบข้อมูลตอนปัจจุบัน");
+
+      const btn = document.getElementById('retranslate-chap-btn');
+      const originalText = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner-icon" style="margin:0; width:12px; height:12px;"></span>`;
+
+      try {
+        await retranslateSpecificChapterDirect(curChap.id);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+      }
+    }
+
+    async function retranslateSpecificChapterDirect(chapId) {
+      const bookChaps = await dbGetChaptersByBook(currentBookId);
+      const targetChap = bookChaps.find(c => c.id === chapId);
+      if (!targetChap) return alert("ไม่พบบทนิยายนี้ในเครื่อง");
+
+      if (!confirm(`ต้องการแปล "${targetChap.title}" ใหม่อีกครั้งตามคลังศัพท์และข้อมูลเรื่องล่าสุดใช่หรือไม่?`)) return;
+
+      let srcChineseText = "";
+      if (Array.isArray(targetChap.paragraphs) && targetChap.paragraphs.length > 0) {
+        srcChineseText = targetChap.paragraphs.map(p => p.src || "").filter(Boolean).join("\n\n");
+      }
+
+      if (!srcChineseText || srcChineseText.length < 20) {
+        if (!targetChap.sourceUrl) return alert("ไม่พบข้อความต้นฉบับเดิมและไม่มี URL ของบทนี้");
+        try {
+          const scraped = await scrapePage(targetChap.sourceUrl);
+          srcChineseText = scraped.text;
+        } catch (err) {
+          return alert("ดึงข้อความต้นฉบับไม่สำเร็จ: " + err.message);
+        }
+      }
+
+      try {
+        const result = await translateTextWithPingPong(srcChineseText, null, targetChap.title, currentBookTitle);
+        targetChap.paragraphs = result.paragraphs;
+        if (result.chapterTitle) targetChap.title = result.chapterTitle;
+
+        await dbSaveChapter(targetChap);
+
+        const memChap = chapters.find(c => c.id === chapId);
+        if (memChap) {
+          memChap.paragraphs = targetChap.paragraphs;
+          memChap.title = targetChap.title;
+        }
+        await renderVirtualWindow(currentChapterIndex, false);
+        refreshShelfViewOnly(currentBookId);
+        alert(`✓ แปล "${targetChap.title}" ใหม่เรียบร้อยแล้ว`);
+      } catch (err) {
+        alert("แปลใหม่ไม่สำเร็จ: " + err.message);
+      }
+    }
+
+    // ==================== TRANSLATE CALL WITH TIERED INSTRUCTIONS ====================
     async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "", signal = null) {
       const key = (localStorage.getItem('nov_gemini_key') || "").trim();
       const genre = localStorage.getItem('nov_genre') || "xianxia";
@@ -1802,9 +1885,18 @@ ${JSON.stringify(termList)}
       const termList = Object.entries(activeTerms).map(([k,v]) => `${k}=${v.resolvedTgt}`).join(", ");
       const genreRule = getGenreInstruction(genre);
 
+      const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
+      const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
+
       const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลเนื้อหาต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย
+ข้อมูลอ้างอิง: ${bookCtx} ${authorCtx}
 
 ${genreRule}
+
+กฎการเทียบเคียงและล็อกคำศัพท์ (3-Tier Priority):
+1. Tier 1 (ตรงเรื่อง): หากเป็นชื่อตัวละครหรือสถานที่ในนิยายเรื่อง "${currentBookTitle}" ให้ใช้คำแปล/ทับศัพท์ที่ตรงกับฉบับแปลไทย
+2. Tier 2 (ผู้แต่ง/จักรวาลเดียวกัน): หากเป็นระดับพลังหรือวิชา ให้เทียบเคียงกับผลงานอื่นของ ${authorCtx} ในจักรวาลเดียวกัน
+3. Tier 3 (มาตรฐานแนวเรื่อง): หากเป็นคำใหม่ ให้ใช้คำแปลที่สละสลวยตามมาตรฐานวรรณกรรมนิยายแนว "${genre}"
 
 กฎเหล็กเรื่องการจัดย่อหน้าและโครงสร้าง (สำคัญสูงสุด):
 1. แปลชื่อตอนและชื่อเรื่องภาษาจีนให้สละสลวยตรงความหมาย
@@ -1986,8 +2078,9 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
       try {
         const targetBookId = extractBookIdFromUrl(url);
 
-        const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(url);
+        const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(url);
         nextUrlCalculated = nextUrl;
+        if (author) currentAuthor = author;
 
         status.innerText = `พบ "${rawChapTitle}" กำลังวิเคราะห์ชื่อเฉพาะและแปลผ่าน AI...`;
 
@@ -2044,6 +2137,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         await dbSaveBook({
           bookId: currentBookId,
           title: currentBookTitle,
+          author: currentAuthor,
           isUserCustomTitle: isUserCustomTitle,
           lastChapterId: newChapter.id,
           lastChapterIndex: currentChapterIndex,
@@ -2066,7 +2160,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // ON-DEMAND READING PREFETCH (แก้ปัญหา Race Condition แปลซ้อน 100%)
+    // ON-DEMAND READING PREFETCH
     async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       const isPrefetchEnabled = localStorage.getItem('nov_enable_prefetch') !== 'false';
       if (!isPrefetchEnabled && !isManualClick) return;
@@ -2079,14 +2173,12 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         return;
       }
       
-      // ล็อก Flag ทันทีแบบ Atomic ป้องกันคำสั่งซ้ำ
       if (isPrefetching) return;
       isPrefetching = true;
       checkAndRefreshBottomStatus();
 
       try {
         const bookChaps = await dbGetChaptersByBook(currentBookId);
-        // เช็กป้องกันลึกระดับ URL ว่ามีอยู่ในเครื่องหรือยัง
         if (bookChaps.some(c => c.sourceUrl === targetUrl)) {
           document.getElementById('prefetch-badge').style.display = 'inline-block';
           isPrefetching = false;
@@ -2100,7 +2192,8 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
           </div>
         `, true);
 
-        const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(targetUrl);
+        const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl);
+        if (author) currentAuthor = author;
         
         updateInfiniteStatusBanner(`
           <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
@@ -2117,7 +2210,6 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         }, rawChapTitle, rawBookTitle);
         
         const currentAll = await dbGetChaptersByBook(currentBookId);
-        // เช็กซ้ำอีกรอบหลังจากแปลเสร็จ เผื่อมีกระบวนการอื่นแทรก
         if (currentAll.some(c => c.sourceUrl === targetUrl)) {
           isPrefetching = false;
           checkAndRefreshBottomStatus();
@@ -2146,6 +2238,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
           await dbSaveBook({
             ...curBook,
             title: resolvedTitle,
+            author: currentAuthor,
             totalChapters: maxOrder + 1,
             lastChapterId: curBook.lastChapterId || chapters[currentChapterIndex]?.id,
             lastChapterIndex: curBook.lastChapterIndex !== undefined ? curBook.lastChapterIndex : currentChapterIndex,
@@ -2195,8 +2288,9 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
 
         try {
           currentUrl = nextUrlCalculated;
-          const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(currentUrl);
+          const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(currentUrl);
           nextUrlCalculated = nextUrl;
+          if (author) currentAuthor = author;
 
           const result = await translateTextWithPingPong(text, (msg) => {
             btnText.innerText = msg.substring(0, 30) + "...";
@@ -2305,7 +2399,8 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${urlSegment})`;
 
         try {
-          const { text, nextUrl, rawChapTitle, rawBookTitle } = await scrapePage(targetUrl);
+          const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl);
+          if (author) currentAuthor = author;
           
           const result = await translateTextWithPingPong(text, (msg) => {
             progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 32)}...`;
@@ -2342,6 +2437,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
           await dbSaveBook({
             bookId: bookId,
             title: finalBookTitle,
+            author: currentAuthor,
             isUserCustomTitle: customFlag,
             lastChapterId: targetBook?.lastChapterId || (currentBookId === bookId ? chapters[currentChapterIndex]?.id : bookChaps[0]?.id),
             lastChapterIndex: (targetBook && targetBook.lastChapterIndex !== undefined) ? targetBook.lastChapterIndex : 0,
@@ -2389,60 +2485,10 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
       }
     }
 
-    // ==================== RE-TRANSLATE CHAPTER BY ID ====================
+    // RETRANSLATE VIA SHELF
     async function retranslateSpecificChapter(e, bookId, chapId) {
       e.stopPropagation();
-
-      const bookChaps = await dbGetChaptersByBook(bookId);
-      const targetChap = bookChaps.find(c => c.id === chapId);
-      if (!targetChap) return alert("ไม่พบบทนิยายนี้ในเครื่อง");
-
-      if (!confirm(`ต้องการแปล "${targetChap.title}" ใหม่อีกครั้งตามคลังศัพท์ล่าสุดใช่หรือไม่?`)) return;
-
-      let srcChineseText = "";
-      if (Array.isArray(targetChap.paragraphs) && targetChap.paragraphs.length > 0) {
-        srcChineseText = targetChap.paragraphs.map(p => p.src || "").filter(Boolean).join("\n\n");
-      }
-
-      if (!srcChineseText || srcChineseText.length < 20) {
-        if (!targetChap.sourceUrl) return alert("ไม่พบข้อความต้นฉบับเดิมและไม่มี URL ของบทนี้");
-        try {
-          const scraped = await scrapePage(targetChap.sourceUrl);
-          srcChineseText = scraped.text;
-        } catch (err) {
-          return alert("ดึงข้อความต้นฉบับไม่สำเร็จ: " + err.message);
-        }
-      }
-
-      const btnEl = e.target;
-      const originalText = btnEl.innerText;
-      btnEl.disabled = true;
-      btnEl.innerText = "⏳ แปลใหม่...";
-
-      try {
-        const result = await translateTextWithPingPong(srcChineseText, null, targetChap.title, currentBookTitle);
-        targetChap.paragraphs = result.paragraphs;
-        if (result.chapterTitle) targetChap.title = result.chapterTitle;
-
-        await dbSaveChapter(targetChap);
-
-        if (currentBookId === bookId) {
-          const memChap = chapters.find(c => c.id === chapId);
-          if (memChap) {
-            memChap.paragraphs = targetChap.paragraphs;
-            memChap.title = targetChap.title;
-          }
-          renderVirtualWindow(currentChapterIndex, false);
-        }
-
-        refreshShelfViewOnly(bookId);
-        alert(`✓ แปล "${targetChap.title}" ใหม่ตามคลังศัพท์ล่าสุดเรียบร้อยแล้ว`);
-      } catch (err) {
-        alert("แปลใหม่ไม่สำเร็จ: " + err.message);
-      } finally {
-        btnEl.disabled = false;
-        btnEl.innerText = originalText;
-      }
+      await retranslateSpecificChapterDirect(chapId);
     }
 
     // ==================== BOOKSHELF RENDERING ====================
@@ -2719,6 +2765,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         chapters = loadedChaps;
         currentBookId = bookId;
         currentBookTitle = targetBook.title;
+        currentAuthor = targetBook.author || "";
         isUserCustomTitle = targetBook.isUserCustomTitle || false;
 
         if (typeof specifyChapIdOrIdx === 'string') {
@@ -2780,6 +2827,7 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
       let rawText = "";
       let rawChapTitle = "";
       let rawBookTitle = "";
+      let author = "";
 
       try {
         const res = await fetch(`https://r.jina.ai/${url}`, { signal });
@@ -2801,6 +2849,13 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
             } else {
               rawChapTitle = fullTitle.replace('-69书吧', '').trim();
             }
+          }
+
+          // สแกนหานามปากกาผู้แต่ง (Author Anchor)
+          const authorLine = lines.find(l => l.includes('作者：') || l.includes('作者:'));
+          if (authorLine) {
+            const m = authorLine.match(/作者[：:]\s*([^\s]+)/);
+            if (m) author = m[1];
           }
 
           const filteredLines = lines.filter(l => {
@@ -2830,7 +2885,8 @@ ${lastChapterContext ? `7. บริบทตอนก่อนหน้า: "${
         text: rawText,
         nextUrl: nextUrl,
         rawChapTitle: rawChapTitle || "บทนิยาย",
-        rawBookTitle: rawBookTitle || ""
+        rawBookTitle: rawBookTitle || "",
+        author: author
       };
     }
 
