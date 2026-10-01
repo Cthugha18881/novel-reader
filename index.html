@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.1</title>
+  <title>NovelTranslate AI v2.2</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -449,7 +449,6 @@
       <button class="btn" onclick="exportTxt()" style="font-size: 11px; shrink: 0;">.TXT</button>
     </div>
 
-    <!-- Reading Paragraphs Container -->
     <div id="reading-content"></div>
 
     <div id="infinite-status-banner"></div>
@@ -499,7 +498,72 @@
     </div>
   </div>
 
-  <!-- MODAL 1: IMPORT & TRANSLATE (เพิ่มตัวเลือกแนวเรื่องก่อนเริ่มแปล) -->
+  <!-- MODAL: CHANGE BOOK GENRE PICKER -->
+  <div class="modal-overlay" id="genre-picker-modal" style="z-index: 65;">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-head">
+        <div class="modal-title">เลือกแนวเรื่อง / สไตล์สำนวน</div>
+        <button class="modal-close" onclick="closeModal('genre-picker-modal')">✕</button>
+      </div>
+      <div style="font-size: 12px; margin-bottom: 8px;">
+        นิยาย: <b id="genre-picker-book-title" style="color: #2563eb;">...</b>
+      </div>
+      <div class="form-group">
+        <label class="form-label">เลือกแนวเรื่องสำหรับเรื่องนี้:</label>
+        <select id="genre-picker-select" class="form-input">
+          <option value="xianxia">เซียนเซีย / เทพเซียนบำเพ็ญเพียรเต๋า</option>
+          <option value="wuxia">กำลังภายใน / ยุทธภพดั้งเดิม</option>
+          <option value="western_fantasy">แฟนตาซีตะวันตก / ดาบและเวทมนตร์</option>
+          <option value="system_game">ระบบ / ดันเจี้ยน / เลเวลอัป</option>
+          <option value="scifi">ไซไฟ / มหากาพย์จักรวาล</option>
+          <option value="horror">สยองขวัญ / ระทึกขวัญเอาชีวิตรอด</option>
+          <option value="historical">ย้อนยุค / ชิงบัลลังก์ / ราชสำนัก</option>
+          <option value="urban_life">สังคมเมือง / ธุรกิจ / แพทย์ / รวยเงียบ</option>
+          <option value="modern_romance">โรแมนติก / ดราม่า / ชีวิตประจำวัน</option>
+          <option value="fanfic">แฟนฟิค / อนิเมะ / ข้ามโลกมัลติเวิร์ส</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
+        <button class="btn" onclick="closeModal('genre-picker-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveChosenBookGenre()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT GLOSSARY TERM (แทนที่ prompt) -->
+  <div class="modal-overlay" id="edit-term-modal" style="z-index: 65;">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-head">
+        <div class="modal-title">แก้ไขคำศัพท์ในคลัง</div>
+        <button class="modal-close" onclick="closeModal('edit-term-modal')">✕</button>
+      </div>
+      <div style="font-size: 13px; margin-bottom: 10px;">
+        คำจีนต้นฉบับ: <b id="edit-term-src-label" style="color: #2563eb; font-size: 14px;">...</b>
+      </div>
+      <div class="form-group">
+        <label class="form-label">คำแปลภาษาไทย:</label>
+        <input type="text" id="edit-term-tgt-input" class="form-input" placeholder="ใส่คำแปลไทย...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">หมวดหมู่คำศัพท์:</label>
+        <select id="edit-term-cat-select" class="form-input">
+          <option value="character">👤 บุคคล/สิ่งมีชีวิต</option>
+          <option value="title">🎖️ ตำแหน่ง/ฐานะ</option>
+          <option value="location">🏔️️ สถานที่/องค์กร</option>
+          <option value="skill">📜 ทักษะ/วิชา</option>
+          <option value="equipment">🗡️ อุปกรณ์/เทคโน</option>
+          <option value="resource">💊 ทรัพยากร/โอสถ</option>
+          <option value="realm">🧬 ลำดับขั้น/สเตตัส</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
+        <button class="btn" onclick="closeModal('edit-term-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveEditedGlossaryTerm()">บันทึกการแก้ไข</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL 1: IMPORT & TRANSLATE -->
   <div class="modal-overlay" id="import-modal">
     <div class="modal-box">
       <div class="modal-head">
@@ -513,7 +577,6 @@
       <div class="form-group">
         <label class="form-label">แนวเรื่อง / สไตล์สำนวนของเรื่องนี้ (Genre)</label>
         <select id="import-novel-genre" class="form-input">
-          <!-- 10 หมวดหมู่นิยายสากล -->
           <option value="xianxia" selected>เซียนเซีย / เทพเซียนบำเพ็ญเพียรเต๋า</option>
           <option value="wuxia">กำลังภายใน / ยุทธภพดั้งเดิม</option>
           <option value="western_fantasy">แฟนตาซีตะวันตก / ดาบและเวทมนตร์</option>
@@ -634,7 +697,7 @@
     </div>
   </div>
 
-  <!-- MODAL 3: SETTINGS (ตัดส่วนแนวเรื่องออกแล้ว ย้ายไปอยู่รายเรื่อง) -->
+  <!-- MODAL 3: SETTINGS -->
   <div class="modal-overlay" id="settings-modal">
     <div class="modal-box">
       <div class="modal-head">
@@ -902,8 +965,11 @@
     let currentBookId = "default_novel";
     let currentBookTitle = "NovelTranslate";
     let currentAuthor = "";
-    let currentBookGenre = "xianxia"; // แนวเรื่องของเรื่องปัจจุบัน
+    let currentBookGenre = "xianxia";
     let isUserCustomTitle = false;
+
+    let bookIdForGenreEdit = null;
+    let termBeingEditedSrc = null;
 
     let apiKeyPool = [];
     let currentApiKeyIndex = 0;
@@ -929,12 +995,12 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v2.1",
+        title: "คู่มือเริ่มต้น v2.2",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.1", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบรองรับการแยกแนวเรื่องอิสระรายเรื่องบนชั้นหนังสือ (10 หมวดหมู่นิยายสากล) เรียบร้อยแล้ว", src: "已支持按书籍独立设置小说题材流派" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.2", src: "欢迎来到 NovelTranslate" },
+          { th: "ระบบติดตั้งหน้าต่าง Modal แบบ Dropdown ตัวเลือกสำหรับเปลี่ยนแนวเรื่องและแก้ไขคำศัพท์เรียบร้อยแล้ว", src: "已支持下拉列表选择题材与修改术语" }
         ],
-        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.1"
+        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.2"
       }
     ];
     let currentChapterIndex = 0;
@@ -1145,7 +1211,7 @@
       editBtn.onclick = (ev) => {
         ev.stopPropagation();
         popover.style.display = 'none';
-        promptEditGlossary(src);
+        openEditTermModal(src);
       };
 
       popover.style.display = 'flex';
@@ -1615,7 +1681,7 @@
             srcEl.style.display = 'block';
             srcEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
-          alert(`⚠️ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้\n\nสาเหตุ: คำนี้อาจเกิดจากการขัดเกลาสำนวนภาษาไทยจนรูปประโยคเปลี่ยนไปจากต้นฉบับ\n(ระบบได้เปิดข้อความภาษาจีนต้นฉบับของย่อหน้านี้ให้แล้ว คุณสามารถลากคลุมตัวอักษรจีนที่ต้องการโดยตรงได้ทันที)`);
+          alert(`⚠ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้\n\nสาเหตุ: คำนี้อาจเกิดจากการขัดเกลาสำนวนภาษาไทยจนรูปประโยคเปลี่ยนไปจากต้นฉบับ\n(ระบบได้เปิดข้อความภาษาจีนต้นฉบับของย่อหน้านี้ให้แล้ว คุณสามารถลากคลุมตัวอักษรจีนที่ต้องการโดยตรงได้ทันที)`);
         }
       } catch (err) {
         alert("ค้นหาคำจีนไม่สำเร็จ: " + err.message);
@@ -1804,7 +1870,7 @@
           </div>
           <div style="display:flex; gap:4px; align-items:center; shrink: 0;">
             <button class="btn" style="padding:2px 6px; font-size:10px;" id="btn-research-${data.src}" onclick="researchGlossaryTerm('${data.src}')" title="ค้นหาคำแปลยอดนิยมตามลำดับขั้น 3-Tier">🔄</button>
-            <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="promptEditGlossary('${data.src}')">✎</button>
+            <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="openEditTermModal('${data.src}')">✎</button>
             <button class="btn btn-danger" style="padding:2px 6px; font-size:10px;" onclick="delGloss('${data.src}')">✕</button>
           </div>
         `;
@@ -2042,28 +2108,46 @@
       renderVirtualWindow(currentChapterIndex);
     }
 
-    async function promptEditGlossary(src) {
+    // MODAL EDIT FOR GLOSSARY TERM (แทน prompt)
+    async function openEditTermModal(src) {
+      termBeingEditedSrc = src;
       const items = await dbGetAllGlossaryItems();
       const cur = items.find(x => x.src === src);
       if (!cur) return;
 
+      document.getElementById('edit-term-src-label').innerText = src;
+      document.getElementById('edit-term-tgt-input').value = cur.tgt || "";
+      document.getElementById('edit-term-cat-select').value = cur.category || "character";
+
+      openModal('edit-term-modal');
+      setTimeout(() => document.getElementById('edit-term-tgt-input').focus(), 150);
+    }
+
+    async function saveEditedGlossaryTerm() {
+      if (!termBeingEditedSrc) return;
+      const items = await dbGetAllGlossaryItems();
+      const cur = items.find(x => x.src === termBeingEditedSrc);
+      if (!cur) return closeModal('edit-term-modal');
+
+      const newTgt = document.getElementById('edit-term-tgt-input').value.trim();
+      const newCat = document.getElementById('edit-term-cat-select').value;
+
+      if (!newTgt) return alert("กรุณาระบุคำแปลภาษาไทย");
+
       const oldTgt = cur.tgt;
-      const newTgt = prompt(`แก้ไขคำแปลไทยสำหรับ "${src}":`, cur.tgt);
-      if (newTgt !== null && newTgt.trim()) {
-        const catPrompt = prompt(`เปลี่ยนหมวดหมู่ (character / title / location / skill / equipment / resource / realm):`, cur.category);
-        const validCats = ['character','title','location','skill','equipment','resource','realm'];
-        cur.tgt = newTgt.trim();
-        if (catPrompt && validCats.includes(catPrompt.trim())) cur.category = catPrompt.trim();
-        cur.updatedAt = Date.now();
-        await dbSaveGlossaryItem(cur);
+      cur.tgt = newTgt;
+      cur.category = newCat;
+      cur.updatedAt = Date.now();
 
-        if (oldTgt && oldTgt !== cur.tgt) {
-          await syncUpdatedTermAcrossChapters(src, oldTgt, cur.tgt);
-        }
+      await dbSaveGlossaryItem(cur);
 
-        await renderGlossaryUI();
-        renderVirtualWindow(currentChapterIndex);
+      if (oldTgt && oldTgt !== newTgt) {
+        await syncUpdatedTermAcrossChapters(termBeingEditedSrc, oldTgt, newTgt);
       }
+
+      closeModal('edit-term-modal');
+      await renderGlossaryUI();
+      renderVirtualWindow(currentChapterIndex);
     }
 
     // TIERED RESEARCH ENGINE (HELPER)
@@ -2762,7 +2846,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
         const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(url);
         nextUrlCalculated = nextUrl;
         if (author) currentAuthor = author;
-        currentBookGenre = chosenGenre; // กำหนดแนวเรื่องเฉพาะของเรื่องนี้
+        currentBookGenre = chosenGenre;
 
         status.innerText = `พบ "${rawChapTitle}" กำลังวิเคราะห์ชื่อเฉพาะและแปลผ่าน AI...`;
 
@@ -3191,39 +3275,37 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       await retranslateSpecificChapterDirect(chapId);
     }
 
-    // CHANGE GENRE FOR SPECIFIC BOOK IN SHELF
-    async function promptChangeBookGenre(e, bookId) {
+    // MODAL PICKER FOR CHANGING BOOK GENRE
+    async function openGenrePickerModal(e, bookId) {
       e.stopPropagation();
+      bookIdForGenreEdit = bookId;
       const books = await dbGetAllBooks();
       const b = books.find(x => x.bookId === bookId);
       if (!b) return;
 
-      const genresList = [
-        "xianxia: เซียนเซีย / เทพเซียนบำเพ็ญเพียรเต๋า",
-        "wuxia: กำลังภายใน / ยุทธภพดั้งเดิม",
-        "western_fantasy: แฟนตาซีตะวันตก / ดาบและเวทมนตร์",
-        "system_game: ระบบ / ดันเจี้ยน / เลเวลอัป",
-        "scifi: ไซไฟ / มหากาพย์จักรวาล",
-        "horror: สยองขวัญ / ระทึกขวัญเอาชีวิตรอด",
-        "historical: ย้อนยุค / ชิงบัลลังก์ / ราชสำนัก",
-        "urban_life: สังคมเมือง / ธุรกิจ / แพทย์ / รวยเงียบ",
-        "modern_romance: โรแมนติก / ดราม่า / ชีวิตประจำวัน",
-        "fanfic: แฟนฟิค / อนิเมะ / ข้ามโลกมัลติเวิร์ส"
-      ];
+      document.getElementById('genre-picker-book-title').innerText = b.title || 'นิยาย';
+      document.getElementById('genre-picker-select').value = b.genre || 'xianxia';
 
-      const input = prompt(
-        `เลือกแนวเรื่องสำหรับ "${b.title}":\n(พิมพ์รหัสภาษาอังกฤษ: xianxia, wuxia, western_fantasy, system_game, scifi, horror, historical, urban_life, modern_romance, fanfic)\n\nรายการ:\n` + genresList.join("\n"),
-        b.genre || "xianxia"
-      );
+      openModal('genre-picker-modal');
+    }
 
-      if (input && input.trim()) {
-        const val = input.trim().toLowerCase();
-        b.genre = val;
-        b.updatedAt = Date.now();
-        await dbSaveBook(b);
-        if (currentBookId === bookId) currentBookGenre = val;
-        openBookshelfModal();
+    async function saveChosenBookGenre() {
+      if (!bookIdForGenreEdit) return;
+      const books = await dbGetAllBooks();
+      const b = books.find(x => x.bookId === bookIdForGenreEdit);
+      if (!b) return closeModal('genre-picker-modal');
+
+      const selectedGenre = document.getElementById('genre-picker-select').value;
+      b.genre = selectedGenre;
+      b.updatedAt = Date.now();
+      await dbSaveBook(b);
+
+      if (currentBookId === bookIdForGenreEdit) {
+        currentBookGenre = selectedGenre;
       }
+
+      closeModal('genre-picker-modal');
+      refreshShelfViewOnly(bookIdForGenreEdit);
     }
 
     function getGenreThaiName(g) {
@@ -3308,7 +3390,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
             <div class="book-info" onclick="toggleBookAccordion('${b.bookId}')">
               <div class="book-title">
                 📚 ${b.title || 'นิยายเรื่องใหม่'} 
-                <span class="btn" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; background: rgba(37,99,235,0.1); color: #2563eb;" onclick="promptChangeBookGenre(event, '${b.bookId}')" title="คลิกเพื่อเปลี่ยนแนวเรื่อง">
+                <span class="btn" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; background: rgba(37,99,235,0.1); color: #2563eb;" onclick="openGenrePickerModal(event, '${b.bookId}')" title="คลิกเพื่อเลือกแนวเรื่องจากรายการ">
                   🏷️ ${genreBadge} ✎
                 </span>
                 <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนย่อย)</span>
@@ -3524,7 +3606,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
         currentBookId = bookId;
         currentBookTitle = targetBook.title;
         currentAuthor = targetBook.author || "";
-        currentBookGenre = targetBook.genre || "xianxia"; // โหลดแนวเรื่องเฉพาะของเล่มนี้
+        currentBookGenre = targetBook.genre || "xianxia";
         isUserCustomTitle = targetBook.isUserCustomTitle || false;
 
         if (typeof specifyChapIdOrIdx === 'string') {
@@ -3657,7 +3739,6 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       return 'book_' + btoa(url.split('?')[0]).substring(0, 16);
     }
 
-    // 10 UNIVERSAL GENRES INSTRUCTION ENGINE
     function getGenreInstruction(genre) {
       switch (genre) {
         case 'xianxia':
