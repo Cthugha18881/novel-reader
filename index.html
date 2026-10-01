@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.0.1</title>
+  <title>NovelTranslate AI v2.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -372,7 +372,7 @@
 </head>
 <body class="theme-sepia" id="app-body">
 
-  <!-- FLOATING ACTION STATUS TOAST (แจ้งเตือนความคืบหน้าระดับสากล) -->
+  <!-- FLOATING ACTION STATUS TOAST -->
   <div id="global-action-toast">
     <span class="spinner-icon" style="margin: 0; width: 14px; height: 14px;"></span>
     <span id="global-toast-msg">กำลังทำงาน...</span>
@@ -499,7 +499,7 @@
     </div>
   </div>
 
-  <!-- MODAL 1: IMPORT & TRANSLATE -->
+  <!-- MODAL 1: IMPORT & TRANSLATE (เพิ่มตัวเลือกแนวเรื่องก่อนเริ่มแปล) -->
   <div class="modal-overlay" id="import-modal">
     <div class="modal-box">
       <div class="modal-head">
@@ -509,6 +509,23 @@
       <div class="form-group">
         <label class="form-label">URL หน้านิยาย (เช่น 69shuba, biquge ฯลฯ)</label>
         <input type="url" id="import-url" class="form-input" placeholder="https://www.69shuba.com/txt/88724/40717272">
+      </div>
+      <div class="form-group">
+        <label class="form-label">แนวเรื่อง / สไตล์สำนวนของเรื่องนี้ (Genre)</label>
+        <select id="import-novel-genre" class="form-input">
+          <!-- 10 หมวดหมู่นิยายสากล -->
+          <option value="xianxia" selected>เซียนเซีย / เทพเซียนบำเพ็ญเพียรเต๋า</option>
+          <option value="wuxia">กำลังภายใน / ยุทธภพดั้งเดิม</option>
+          <option value="western_fantasy">แฟนตาซีตะวันตก / ดาบและเวทมนตร์</option>
+          <option value="system_game">ระบบ / ดันเจี้ยน / เลเวลอัป</option>
+          <option value="scifi">ไซไฟ / มหากาพย์จักรวาล</option>
+          <option value="horror">สยองขวัญ / ระทึกขวัญเอาชีวิตรอด</option>
+          <option value="historical">ย้อนยุค / ชิงบัลลังก์ / ราชสำนัก</option>
+          <option value="urban_life">สังคมเมือง / ธุรกิจ / แพทย์ / รวยเงียบ</option>
+          <option value="modern_romance">โรแมนติก / ดราม่า / ชีวิตประจำวัน</option>
+          <option value="fanfic">แฟนฟิค / อนิเมะ / ข้ามโลกมัลติเวิร์ส</option>
+        </select>
+        <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">*ระบบจะจำแนวเรื่องนี้ไว้ใช้กับเรื่องนี้ตลอดไป และสามารถเปลี่ยนได้ที่ชั้นหนังสือ</div>
       </div>
       <div class="status-msg" id="import-status"></div>
       <div style="display: flex; gap: 8px; margin-top: 14px;">
@@ -531,7 +548,6 @@
         <button class="modal-close" onclick="closeModal('glossary-modal')">✕</button>
       </div>
 
-      <!-- Scope Filter & Tools -->
       <div class="glossary-filter-bar">
         <select id="gloss-scope-filter" class="form-input" style="width: auto; max-width: 210px; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
         </select>
@@ -553,7 +569,6 @@
         </button>
       </div>
 
-      <!-- Batch Toolbar -->
       <div class="gloss-batch-toolbar" id="gloss-batch-toolbar">
         <span id="gloss-batch-count" style="font-weight: 600;">เลือกไว้ 0 คำ</span>
         <div style="display: flex; gap: 4px; flex-wrap: wrap;">
@@ -564,12 +579,10 @@
         </div>
       </div>
 
-      <!-- Live Search Box -->
       <div style="margin-bottom: 8px;">
         <input type="text" id="gloss-search-input" class="form-input" placeholder="🔍 ค้นหาคำศัพท์ (พิมพ์ได้ทั้งภาษาไทยและจีน)..." oninput="renderGlossaryUI()">
       </div>
 
-      <!-- 7 Universal Category Tabs -->
       <div class="gloss-category-tabs">
         <button class="cat-tab-btn active" onclick="switchGlossaryCategory('all', event)">ทั้งหมด</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('character', event)">👤 บุคคล/สิ่งมีชีวิต</button>
@@ -581,7 +594,6 @@
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('realm', event)">🧬 ลำดับขั้น/สเตตัส</button>
       </div>
 
-      <!-- Add Manual Term Form -->
       <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; align-items: center;">
         <input type="text" id="gloss-src" class="form-input" placeholder="คำจีน (เช่น 光海)" style="flex: 1; min-width: 90px;">
         <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปลไทย (เช่น ทะเลแสง)" style="flex: 1; min-width: 90px;">
@@ -622,7 +634,7 @@
     </div>
   </div>
 
-  <!-- MODAL 3: SETTINGS -->
+  <!-- MODAL 3: SETTINGS (ตัดส่วนแนวเรื่องออกแล้ว ย้ายไปอยู่รายเรื่อง) -->
   <div class="modal-overlay" id="settings-modal">
     <div class="modal-box">
       <div class="modal-head">
@@ -657,18 +669,6 @@
         <div class="form-group">
           <label class="form-label">ลิมิตส่งซ้ำเมื่อเซิร์ฟเวอร์หนาแน่น (รอบ)</label>
           <input type="number" id="retry-limit" class="form-input" min="1" max="50" value="10" placeholder="10">
-        </div>
-
-        <div class="form-group">
-          <label class="form-label">แนวเรื่อง / สไตล์สำนวนนิยาย (Genre)</label>
-          <select id="novel-genre" class="form-input">
-            <option value="xianxia" selected>เซียนเซีย / เทพเซียนบำเพ็ญเพียร</option>
-            <option value="wuxia">กำลังภายใน / ยุทธภพ</option>
-            <option value="system_game">ระบบ / ดันเจี้ยน / เลเวลอัพ</option>
-            <option value="scifi">ไซไฟ / ยุคอวกาศ</option>
-            <option value="horror">สยองขวัญ / ระทึกขวัญเอาชีวิตรอด</option>
-            <option value="modern_romance">ปัจจุบัน / สืบสวน / โรแมนติก</option>
-          </select>
         </div>
 
         <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
@@ -882,7 +882,6 @@
         }
       }
 
-      // อัปเดต DOM เฉพาะจุดแบบ In-Place เพื่อไม่ให้หน้าจอเด้งลงท้ายบท
       const activeHighlights = document.querySelectorAll(`.inline-term-highlight[data-src="${encodeURIComponent(src)}"]`);
       activeHighlights.forEach(el => {
         el.innerText = newTgt;
@@ -903,6 +902,7 @@
     let currentBookId = "default_novel";
     let currentBookTitle = "NovelTranslate";
     let currentAuthor = "";
+    let currentBookGenre = "xianxia"; // แนวเรื่องของเรื่องปัจจุบัน
     let isUserCustomTitle = false;
 
     let apiKeyPool = [];
@@ -929,17 +929,16 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v2.0.1",
+        title: "คู่มือเริ่มต้น v2.1",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.0.1", src: "欢迎来到 NovelTranslate" },
-          { th: "แก้ไขปัญหาหน้าจอเด้งเวลาเปลี่ยนคำศัพท์ พร้อมเพิ่มแถบแจ้งเตือนสถานะการแปลแบบสด (Live Status Toast) สมบูรณ์แบบ", src: "已修复位置跳动并支持实时全局翻译状态反馈" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.1", src: "欢迎来到 NovelTranslate" },
+          { th: "ระบบรองรับการแยกแนวเรื่องอิสระรายเรื่องบนชั้นหนังสือ (10 หมวดหมู่นิยายสากล) เรียบร้อยแล้ว", src: "已支持按书籍独立设置小说题材流派" }
         ],
-        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.0.1"
+        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.1"
       }
     ];
     let currentChapterIndex = 0;
 
-    // GLOBAL STATUS TOAST
     function showGlobalToast(msg) {
       const toast = document.getElementById('global-action-toast');
       const text = document.getElementById('global-toast-msg');
@@ -1131,7 +1130,6 @@
           if (res && res.tgt) {
             document.getElementById('popover-tgt-span').innerText = res.tgt;
             await renderGlossaryUI();
-            // อัปเดตเฉพาะจุด ไม่สั่ง re-render ทั้งจอ ป้องกันหน้าจอเด้งหลุดตำแหน่ง
             const activeHighlights = document.querySelectorAll(`.inline-term-highlight[data-src="${encodeURIComponent(src)}"]`);
             activeHighlights.forEach(el => {
               el.innerText = res.tgt;
@@ -1427,6 +1425,7 @@
         bookId: currentBookId,
         title: currentBookTitle,
         author: currentAuthor,
+        genre: currentBookGenre,
         isUserCustomTitle: isUserCustomTitle,
         lastChapterId: targetChap.id,
         lastChapterIndex: idx,
@@ -1616,7 +1615,7 @@
             srcEl.style.display = 'block';
             srcEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
-          alert(`⚠️️ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้\n\nสาเหตุ: คำนี้อาจเกิดจากการขัดเกลาสำนวนภาษาไทยจนรูปประโยคเปลี่ยนไปจากต้นฉบับ\n(ระบบได้เปิดข้อความภาษาจีนต้นฉบับของย่อหน้านี้ให้แล้ว คุณสามารถลากคลุมตัวอักษรจีนที่ต้องการโดยตรงได้ทันที)`);
+          alert(`⚠️ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้\n\nสาเหตุ: คำนี้อาจเกิดจากการขัดเกลาสำนวนภาษาไทยจนรูปประโยคเปลี่ยนไปจากต้นฉบับ\n(ระบบได้เปิดข้อความภาษาจีนต้นฉบับของย่อหน้านี้ให้แล้ว คุณสามารถลากคลุมตัวอักษรจีนที่ต้องการโดยตรงได้ทันที)`);
         }
       } catch (err) {
         alert("ค้นหาคำจีนไม่สำเร็จ: " + err.message);
@@ -1673,7 +1672,8 @@
       const bookContextEl = document.getElementById('glossary-book-context');
       if (bookContextEl) {
         const authorLabel = currentAuthor ? ` | ผู้แต่ง: ${currentAuthor}` : '';
-        bookContextEl.innerText = `เรื่องปัจจุบัน: ${currentBookTitle}${authorLabel}`;
+        const genreLabel = getGenreThaiName(currentBookGenre);
+        bookContextEl.innerText = `เรื่องปัจจุบัน: ${currentBookTitle}${authorLabel} (แนว: ${genreLabel})`;
       }
       await refreshGlossaryScopeDropdown();
       await renderGlossaryUI();
@@ -1720,7 +1720,7 @@
       switch(cat) {
         case 'character': return '👤 บุคคล/สัตว์';
         case 'title': return '🎖️ ตำแหน่ง';
-        case 'location': return '🏔️️ สถานที่';
+        case 'location': return '🏔️ สถานที่';
         case 'skill': return '📜 ทักษะ/วิชา';
         case 'equipment': return '🗡️ อุปกรณ์';
         case 'resource': return '💊 ทรัพยากร';
@@ -1891,7 +1891,7 @@
       alert(`✓ รีเสิร์ชคำศัพท์เสร็จสมบูรณ์ทั้ง ${count} คำ`);
     }
 
-    // QUICK BOOK PICKER MODAL (เดี่ยว)
+    // QUICK BOOK PICKER MODAL
     async function openBookAssignModal(src) {
       termBeingAssigned = src;
       const titleEl = document.getElementById('assign-term-title');
@@ -1925,7 +1925,6 @@
       container.innerHTML = html;
     }
 
-    // QUICK BOOK PICKER MODAL (ทั้งกลุ่มที่เลือกไว้)
     async function openBatchBookAssignModal() {
       const chks = document.querySelectorAll('.gloss-item-chk:checked');
       if (chks.length === 0) return;
@@ -2070,7 +2069,7 @@
     // TIERED RESEARCH ENGINE (HELPER)
     async function researchGlossaryTermDirect(src) {
       const activeKey = getActiveApiKey();
-      const genre = localStorage.getItem('nov_genre') || "xianxia";
+      const genre = currentBookGenre || "xianxia";
       const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
       if (!activeKey) return null;
 
@@ -2156,6 +2155,7 @@
           const items = await dbGetAllGlossaryItems();
           const cur = items.find(x => x.src === src);
           if (cur && tgtEl) tgtEl.innerText = cur.tgt;
+          renderVirtualWindow(currentChapterIndex, false);
         }
       } catch (err) {
         alert("รีเสิร์ชไม่สำเร็จ: " + err.message);
@@ -2167,7 +2167,7 @@
     async function autoOrganizeGlossaryWithAI() {
       const activeKey = getActiveApiKey();
       const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
-      const genre = localStorage.getItem('nov_genre') || "xianxia";
+      const genre = currentBookGenre || "xianxia";
 
       if (!activeKey) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
 
@@ -2244,7 +2244,7 @@ ${JSON.stringify(termList)}
       if (!isAutoGlossaryEnabled) return 0;
 
       const activeKey = getActiveApiKey();
-      const genre = localStorage.getItem('nov_genre') || "xianxia";
+      const genre = currentBookGenre || "xianxia";
       if (!activeKey) return 0;
 
       const existingItems = await dbGetAllGlossaryItems();
@@ -2445,7 +2445,7 @@ ${JSON.stringify(termList)}
     // ==================== ADVANCED AI PROOFREADING / POLISH PASS ====================
     async function proofreadAndPolishParagraphs(paragraphs, modelToUse, signal = null) {
       const activeKey = getActiveApiKey();
-      const genre = localStorage.getItem('nov_genre') || "xianxia";
+      const genre = currentBookGenre || "xianxia";
       if (!activeKey || !paragraphs || paragraphs.length === 0) return paragraphs;
 
       const activeTerms = await getActiveGlossaryForCurrentBook();
@@ -2519,7 +2519,7 @@ ${genreRule}
     // ==================== TRANSLATE CALL WITH TIERED INSTRUCTIONS & ROLLING CONTEXT ====================
     async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "", prevSummary = "", signal = null, onStatusUpdate = null) {
       const activeKey = getActiveApiKey();
-      const genre = localStorage.getItem('nov_genre') || "xianxia";
+      const genre = currentBookGenre || "xianxia";
 
       if (!activeKey) throw new Error("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
 
@@ -2742,6 +2742,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
     // START TRANSLATE
     async function startTranslateFirst() {
       const url = document.getElementById('import-url').value.trim();
+      const chosenGenre = document.getElementById('import-novel-genre').value;
       if (!url) return alert("กรุณาใส่ URL หน้านิยาย");
 
       const status = document.getElementById('import-status');
@@ -2761,6 +2762,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
         const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(url);
         nextUrlCalculated = nextUrl;
         if (author) currentAuthor = author;
+        currentBookGenre = chosenGenre; // กำหนดแนวเรื่องเฉพาะของเรื่องนี้
 
         status.innerText = `พบ "${rawChapTitle}" กำลังวิเคราะห์ชื่อเฉพาะและแปลผ่าน AI...`;
 
@@ -2822,6 +2824,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
           bookId: currentBookId,
           title: currentBookTitle,
           author: currentAuthor,
+          genre: currentBookGenre,
           isUserCustomTitle: isUserCustomTitle,
           lastChapterId: newChapter.id,
           lastChapterIndex: currentChapterIndex,
@@ -2926,6 +2929,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
             ...curBook,
             title: resolvedTitle,
             author: currentAuthor,
+            genre: curBook.genre || currentBookGenre,
             totalChapters: maxOrder + 1,
             lastChapterId: curBook.lastChapterId || chapters[currentChapterIndex]?.id,
             lastChapterIndex: curBook.lastChapterIndex !== undefined ? curBook.lastChapterIndex : currentChapterIndex,
@@ -3133,6 +3137,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
             bookId: bookId,
             title: finalBookTitle,
             author: currentAuthor,
+            genre: targetBook?.genre || currentBookGenre,
             isUserCustomTitle: customFlag,
             lastChapterId: targetBook?.lastChapterId || (currentBookId === bookId ? chapters[currentChapterIndex]?.id : bookChaps[0]?.id),
             lastChapterIndex: (targetBook && targetBook.lastChapterIndex !== undefined) ? targetBook.lastChapterIndex : 0,
@@ -3184,6 +3189,57 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
     async function retranslateSpecificChapter(e, bookId, chapId) {
       e.stopPropagation();
       await retranslateSpecificChapterDirect(chapId);
+    }
+
+    // CHANGE GENRE FOR SPECIFIC BOOK IN SHELF
+    async function promptChangeBookGenre(e, bookId) {
+      e.stopPropagation();
+      const books = await dbGetAllBooks();
+      const b = books.find(x => x.bookId === bookId);
+      if (!b) return;
+
+      const genresList = [
+        "xianxia: เซียนเซีย / เทพเซียนบำเพ็ญเพียรเต๋า",
+        "wuxia: กำลังภายใน / ยุทธภพดั้งเดิม",
+        "western_fantasy: แฟนตาซีตะวันตก / ดาบและเวทมนตร์",
+        "system_game: ระบบ / ดันเจี้ยน / เลเวลอัป",
+        "scifi: ไซไฟ / มหากาพย์จักรวาล",
+        "horror: สยองขวัญ / ระทึกขวัญเอาชีวิตรอด",
+        "historical: ย้อนยุค / ชิงบัลลังก์ / ราชสำนัก",
+        "urban_life: สังคมเมือง / ธุรกิจ / แพทย์ / รวยเงียบ",
+        "modern_romance: โรแมนติก / ดราม่า / ชีวิตประจำวัน",
+        "fanfic: แฟนฟิค / อนิเมะ / ข้ามโลกมัลติเวิร์ส"
+      ];
+
+      const input = prompt(
+        `เลือกแนวเรื่องสำหรับ "${b.title}":\n(พิมพ์รหัสภาษาอังกฤษ: xianxia, wuxia, western_fantasy, system_game, scifi, horror, historical, urban_life, modern_romance, fanfic)\n\nรายการ:\n` + genresList.join("\n"),
+        b.genre || "xianxia"
+      );
+
+      if (input && input.trim()) {
+        const val = input.trim().toLowerCase();
+        b.genre = val;
+        b.updatedAt = Date.now();
+        await dbSaveBook(b);
+        if (currentBookId === bookId) currentBookGenre = val;
+        openBookshelfModal();
+      }
+    }
+
+    function getGenreThaiName(g) {
+      switch(g) {
+        case 'xianxia': return 'เซียนเซีย';
+        case 'wuxia': return 'กำลังภายใน';
+        case 'western_fantasy': return 'แฟนตาซีตะวันตก';
+        case 'system_game': return 'ระบบ/เกม';
+        case 'scifi': return 'ไซไฟ';
+        case 'horror': return 'สยองขวัญ';
+        case 'historical': return 'ย้อนยุค/ราชสำนัก';
+        case 'urban_life': return 'สังคมเมือง';
+        case 'modern_romance': return 'โรแมนติก';
+        case 'fanfic': return 'แฟนฟิค';
+        default: return 'วรรณกรรมทั่วไป';
+      }
     }
 
     // ==================== BOOKSHELF RENDERING ====================
@@ -3245,11 +3301,18 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
         const currentSort = bookSortModes[b.bookId];
         const timeBtnLabel = currentSort === 'time_desc' ? 'ล่าสุด ↓' : (currentSort === 'time_asc' ? 'เก่าสุด ↑' : 'เวลา');
         const titleBtnLabel = currentSort === 'title_asc' ? 'ชื่อ ก-ฮ ↓' : (currentSort === 'title_desc' ? 'ชื่อ ฮ-ก ↑' : 'ชื่อ');
+        const genreBadge = getGenreThaiName(b.genre || 'xianxia');
 
         itemBox.innerHTML = `
           <div class="book-card-header">
             <div class="book-info" onclick="toggleBookAccordion('${b.bookId}')">
-              <div class="book-title">📚 ${b.title || 'นิยายเรื่องใหม่'} <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนย่อย)</span></div>
+              <div class="book-title">
+                📚 ${b.title || 'นิยายเรื่องใหม่'} 
+                <span class="btn" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; background: rgba(37,99,235,0.1); color: #2563eb;" onclick="promptChangeBookGenre(event, '${b.bookId}')" title="คลิกเพื่อเปลี่ยนแนวเรื่อง">
+                  🏷️ ${genreBadge} ✎
+                </span>
+                <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนย่อย)</span>
+              </div>
               <div class="book-meta" id="shelf-meta-${b.bookId}">อ่านค้างไว้: <b>${b.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${bookChaps.length} ตอนที่บันทึกไว้</div>
             </div>
             <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบทั้งเรื่อง</button>
@@ -3461,6 +3524,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
         currentBookId = bookId;
         currentBookTitle = targetBook.title;
         currentAuthor = targetBook.author || "";
+        currentBookGenre = targetBook.genre || "xianxia"; // โหลดแนวเรื่องเฉพาะของเล่มนี้
         isUserCustomTitle = targetBook.isUserCustomTitle || false;
 
         if (typeof specifyChapIdOrIdx === 'string') {
@@ -3593,26 +3657,43 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       return 'book_' + btoa(url.split('?')[0]).substring(0, 16);
     }
 
+    // 10 UNIVERSAL GENRES INSTRUCTION ENGINE
     function getGenreInstruction(genre) {
       switch (genre) {
         case 'xianxia':
-          return `สไตล์: "เทพเซียน / บำเพ็ญเพียร (Xianxia)"
-- สรรพนาม: "ข้า - เจ้า", "ผู้อาวุโส - ศิษย์น้อง/ผู้น้อย" ห้ามหลุดคำสมัยใหม่
-- ศัพท์เต๋า: บำเพ็ญเพียร, ลมปราณ, แก่นทองคำ, ทัณฑ์สวรรค์, ตำหนัก, ยอดเขา`;
+          return `สไตล์: "เซียนเซีย / เทพเซียนบำเพ็ญเพียรเต๋า (Xianxia)"
+- สรรพนาม: "ข้า - เจ้า", "ผู้อาวุโส - ศิษย์น้อง/ผู้น้อย"
+- ศัพท์เต๋า: บำเพ็ญเพียร, ลมปราณ, แก่นทองคำ, ทัณฑ์สวรรค์, วิถีสวรรค์, ยอดเขา`;
         case 'wuxia':
-          return `สไตล์: "กำลังภายใน / ยุทธภพ (Wuxia)"
-- บรรยากาศยุทธจักร: สำนัก, คัมภีร์ยุทธ, ปราณคุ้มกาย, กระบี่, ท่องยุทธภพ
-- สรรพนาม: "ข้า - ท่าน/เจ้า"`;
+          return `สไตล์: "กำลังภายใน / ยุทธภพดั้งเดิม (Wuxia)"
+- สรรพนาม: "ข้า - ท่าน/เจ้า", "จอมยุทธ์"
+- บรรยากาศยุทธจักร: สำนัก, คัมภีร์ยุทธ, ปราณคุ้มกาย, ท่องยุทธภพ, คุณธรรมน้ำมิตร`;
+        case 'western_fantasy':
+          return `สไตล์: "แฟนตาซีตะวันตก / ดาบและเวทมนตร์ (Western Fantasy)"
+- สรรพนาม: "ข้า - เจ้า" หรือ "ฉัน - นาย" ตามความสนิทสนม
+- บรรยากาศ: อัศวิน, จอมเวท, มังกร, โบสถ์, วงเวท, มานา, สัจธรรม`;
         case 'system_game':
           return `สไตล์: "ระบบ / ดันเจี้ยน / ผู้เล่น (System/Game)"
-- ข้อความแจ้งเตือน: [ติ๊ง! ตรวจพบภารกิจ], [เลเวลอัป]
-- สรรพนาม: "ฉัน - นาย"`;
+- ข้อความแจ้งเตือน: [ติ๊ง! ตรวจพบภารกิจ], [เลเวลอัป], ค่าสเตตัส
+- สรรพนาม: "ฉัน - นาย" กึ่งสมัยใหม่`;
         case 'scifi':
-          return `สไตล์: "ไซไฟ / มหากาพย์อวกาศ (Sci-Fi)"
-- ศัพท์วิทยาศาสตร์: ยานรบ, รูหนอน, วาร์ป, คลื่นแม่เหล็ก, พันธุกรรม`;
+          return `สไตล์: "ไซไฟ / มหากาพย์จักรวาล (Sci-Fi)"
+- ศัพท์วิทยาศาสตร์: ยานรบ, รูหนอน, วาร์ป, คลื่นแม่เหล็ก, พันธุกรรม, มิติอวกาศ`;
         case 'horror':
-          return `สไตล์: "สยองขวัญ / เอาชีวิตรอด (Horror)"
-- บรรยากาศ: วังเวง, เย็นเยียบ, เสียงลมหายใจ, กลิ่นคาว, เงาตะคุ่ม`;
+          return `สไตล์: "สยองขวัญ / ระทึกขวัญเอาชีวิตรอด (Horror)"
+- บรรยากาศ: วังเวง, เย็นเยียบ, เสียงลมหายใจ, กลิ่นคาว, เงาตะคุ่ม, กลิ่นอายความตาย`;
+        case 'historical':
+          return `สไตล์: "ย้อนยุค / ชิงบัลลังก์ / ราชสำนัก (Historical)"
+- บรรยากาศ: ราชสำนัก, ขุนนาง, ราชาศัพท์จีน (กระหม่อม, พระองค์, ฝ่าบาท, ฮ่องเต้), กลศึกการเมือง`;
+        case 'urban_life':
+          return `สไตล์: "สังคมเมือง / ธุรกิจ / แพทย์ / รวยเงียบ (Urban Life)"
+- บรรยากาศ: สังคมยุคปัจจุบัน, ภาษาพูดเป็นธรรมชาติ, ศัพท์ธุรกิจ, คลินิก, รถหรู`;
+        case 'modern_romance':
+          return `สไตล์: "โรแมนติก / ดราม่า / ชีวิตประจำวัน (Romance)"
+- บรรยากาศ: ภาษาละมุน นุ่มนวล เน้นอารมณ์ความรู้สึก สายตาและบทสนทนาที่ลึกซึ้ง`;
+        case 'fanfic':
+          return `สไตล์: "แฟนฟิค / ข้ามโลกมัลติเวิร์ส (Fanfic)"
+- บรรยากาศ: ภาษาเป็นกันเอง สนุกสนาน คุมบุคลิกตัวละครให้ตรงตามต้นฉบับดั้งเดิม`;
         default:
           return `สไตล์: วรรณกรรมทั่วไป อ่านลื่นไหลเป็นธรรมชาติ`;
       }
@@ -3741,7 +3822,6 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
 
       localStorage.setItem('nov_primary_model', document.getElementById('gemini-primary-model').value);
       localStorage.setItem('nov_retry_limit', document.getElementById('retry-limit').value || "10");
-      localStorage.setItem('nov_genre', document.getElementById('novel-genre').value);
       
       const proofreadChk = document.getElementById('enable-proofread-pass');
       localStorage.setItem('nov_enable_proofread', proofreadChk.checked ? 'true' : 'false');
@@ -3799,7 +3879,6 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
 
       if (localStorage.getItem('nov_primary_model')) document.getElementById('gemini-primary-model').value = localStorage.getItem('nov_primary_model');
       if (localStorage.getItem('nov_retry_limit')) document.getElementById('retry-limit').value = localStorage.getItem('nov_retry_limit');
-      if (localStorage.getItem('nov_genre')) document.getElementById('novel-genre').value = localStorage.getItem('nov_genre');
 
       const proofreadVal = localStorage.getItem('nov_enable_proofread');
       const proofreadChk = document.getElementById('enable-proofread-pass');
