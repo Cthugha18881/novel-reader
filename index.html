@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.3</title>
+  <title>NovelTranslate AI v2.3.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -734,14 +734,13 @@
           <input type="number" id="retry-limit" class="form-input" min="1" max="50" value="10" placeholder="10">
         </div>
 
-        <!-- NEW ADVANCED SETTINGS TOGGLES -->
         <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
           <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
             <input type="checkbox" id="enable-deep-ner-scan" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
             <div>
-              <span>🔍 สแกนคำศัพท์เชิงลึก 2 มุมมอง (Deep Dual-Pass NER)</span>
+              <span>🔍 สแกนคำศัพท์เชิงลึก (Deep Dual-Pass NER)</span>
               <div style="font-size: 11px; font-weight: normal; opacity: 0.65; margin-top: 2px;">
-                กวาดจับทั้งชื่อเฉพาะเชิงโครงสร้าง และคำประสม/ฉายา/วิชาเฉพาะเรื่อง ป้องกันคำเฉพาะหลุดรอด (ใช้โทเคนเพิ่มขึ้นเล็กน้อย)
+                กวาดจับทั้งชื่อเฉพาะ, ระดับพลังทุกขั้น (ขอบเขต/หลอม/ปราณ), ฉายา และวิชา ป้องกันคำเฉพาะหลุดรอด
               </div>
             </div>
           </label>
@@ -751,9 +750,9 @@
           <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
             <input type="checkbox" id="enable-proofread-pass" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
             <div>
-              <span>✨ ตรวจทานคำผิดและรักษาคำศัพท์อย่างเข้มงวด (AI Proofreading & Spell Auditor)</span>
+              <span>✨ ตรวจทานคำผิดและรักษาคำศัพท์อย่างเข้มงวด (AI Proofreading Pass)</span>
               <div style="font-size: 11px; font-weight: normal; opacity: 0.65; margin-top: 2px;">
-                ตรวจแก้คำสะกดผิดภาษาไทย ล็อกคำในคลังศัพท์ให้ตรงรูปเดิม 100% ป้องกันเส้นประหลุด (ใช้เวลาเพิ่มขึ้นและใช้โทเคนเพิ่ม ~1 เท่าตัว)
+                ตรวจแก้คำสะกดผิดภาษาไทย ล็อกคำในคลังศัพท์ให้ตรงรูปเดิม 100% ป้องกันเส้นประหลุด และไม่ใส่ขีด —— นำหน้าประโยค
               </div>
             </div>
           </label>
@@ -932,7 +931,7 @@
       const targetBookChaps = await dbGetChaptersByBook(currentBookId);
       if (targetBookChaps.length === 0) return;
 
-      const escapeOld = escapeRegExp(oldTgt);
+      const escapeOld = escapeRegExp(oldTgt.trim());
       const regex = new RegExp(escapeOld, 'g');
       let changedChapCount = 0;
 
@@ -940,8 +939,8 @@
         let isModified = false;
         if (Array.isArray(chap.paragraphs)) {
           chap.paragraphs.forEach(p => {
-            if (p.th && p.th.includes(oldTgt)) {
-              p.th = p.th.replace(regex, newTgt);
+            if (p.th && p.th.includes(oldTgt.trim())) {
+              p.th = p.th.replace(regex, newTgt.trim());
               isModified = true;
             }
           });
@@ -960,8 +959,8 @@
 
       const activeHighlights = document.querySelectorAll(`.inline-term-highlight[data-src="${encodeURIComponent(src)}"]`);
       activeHighlights.forEach(el => {
-        el.innerText = newTgt;
-        el.setAttribute('data-tgt', encodeURIComponent(newTgt));
+        el.innerText = newTgt.trim();
+        el.setAttribute('data-tgt', encodeURIComponent(newTgt.trim()));
       });
 
       if (changedChapCount > 0) {
@@ -1008,12 +1007,12 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v2.3",
+        title: "คู่มือเริ่มต้น v2.3.1",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.3", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบติดตั้ง Deep Dual-Pass NER Scan และระบบรักษาคำในคลังแบบเข้มงวดเรียบร้อยแล้ว", src: "已支持深度双视角NER扫描与术语强校验审计" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.3.1", src: "欢迎来到 NovelTranslate" },
+          { th: "ปรับปรุงระบบตรวจจับระดับพลังอย่างครบถ้วน ตัดปัญหาขีดเส้นบทสนทนา —— ตกค้าง และแก้ไขให้เส้นประขีดใต้คำศัพท์แสดงอย่างแม่นยำ 100%", src: "已修复破折号残留并提升边界高亮与境界扫描识别率" }
         ],
-        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.3"
+        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.3.1"
       }
     ];
     let currentChapterIndex = 0;
@@ -1149,14 +1148,17 @@
       }
     }
 
-    // ==================== INLINE TERM HIGHLIGHTING ENGINE ====================
+    // ==================== INLINE TERM HIGHLIGHTING ENGINE (ACCURATE & ROBUST) ====================
     async function getActiveGlossaryForCurrentBook() {
       const allItems = await dbGetAllGlossaryItems();
       const activeMap = {};
       allItems.forEach(item => {
         if (item.scope === 'global' || (Array.isArray(item.books) && item.books.includes(currentBookId))) {
           const resolvedTgt = (item.overrides && item.overrides[currentBookId]) ? item.overrides[currentBookId] : item.tgt;
-          activeMap[item.src] = { ...item, resolvedTgt };
+          const cleanTgt = (resolvedTgt || "").trim();
+          if (cleanTgt) {
+            activeMap[item.src] = { ...item, resolvedTgt: cleanTgt };
+          }
         }
       });
       return activeMap;
@@ -1171,19 +1173,24 @@
       const termEntries = Object.values(activeTerms);
       if (termEntries.length === 0) return plainThText;
 
-      termEntries.sort((a, b) => (b.resolvedTgt?.length || 0) - (a.resolvedTgt?.length || 0));
+      // กรองคำที่ถูกต้อง และเรียงจากยาวสุดไปสั้นสุดเสมอ เพื่อป้องกันคำสั้นแย่งไฮไลต์
+      const validTerms = termEntries
+        .map(t => ({ ...t, cleanTgt: (t.resolvedTgt || "").trim() }))
+        .filter(t => t.cleanTgt.length >= 1);
 
-      const validTerms = termEntries.filter(t => t.resolvedTgt && t.resolvedTgt.trim().length >= 2);
       if (validTerms.length === 0) return plainThText;
+
+      validTerms.sort((a, b) => b.cleanTgt.length - a.cleanTgt.length);
 
       const termMap = new Map();
       validTerms.forEach(t => {
-        if (!termMap.has(t.resolvedTgt)) {
-          termMap.set(t.resolvedTgt, t.src);
+        if (!termMap.has(t.cleanTgt)) {
+          termMap.set(t.cleanTgt, t.src);
         }
       });
 
-      const pattern = validTerms.map(t => escapeRegExp(t.resolvedTgt)).join('|');
+      const uniqueTgtList = Array.from(termMap.keys());
+      const pattern = uniqueTgtList.map(tgt => escapeRegExp(tgt)).join('|');
       const regex = new RegExp(`(${pattern})`, 'g');
 
       return plainThText.replace(regex, (match) => {
@@ -1799,7 +1806,7 @@
       switch(cat) {
         case 'character': return '👤 บุคคล/สัตว์';
         case 'title': return '🎖️ ตำแหน่ง';
-        case 'location': return '🏔️️ สถานที่';
+        case 'location': return '🏔️ สถานที่';
         case 'skill': return '📜 ทักษะ/วิชา';
         case 'equipment': return '🗡️ อุปกรณ์';
         case 'resource': return '💊 ทรัพยากร';
@@ -2128,7 +2135,7 @@
       if (!cur) return;
 
       document.getElementById('edit-term-src-label').innerText = src;
-      document.getElementById('edit-term-tgt-input').value = cur.tgt || "";
+      document.getElementById('edit-term-tgt-input').value = (cur.tgt || "").trim();
       document.getElementById('edit-term-cat-select').value = cur.category || "character";
 
       openModal('edit-term-modal');
@@ -2192,7 +2199,7 @@
 
 ตอบกลับเป็น JSON เท่านั้น:
 {
-  "tgt": "คำแปลไทยที่ถูกต้องและสละสลวยที่สุด",
+  "tgt": "คำแปลไทยที่ถูกต้องและสละสลวยที่สุด (ห้ามมีคำสร้อย ห้ามมีช่องว่างเกิน)",
   "category": "character|title|location|skill|equipment|resource|realm"
 }`;
 
@@ -2333,7 +2340,7 @@ ${JSON.stringify(termList)}
       renderVirtualWindow(currentChapterIndex);
     }
 
-    // ==================== AUTO-GLOSSARY SCAN FOR SPECIFIC TEXT (DUAL-PASS OPTION) ====================
+    // ==================== AUTO-GLOSSARY SCAN FOR SPECIFIC TEXT (DUAL-PASS + REALM FIX) ====================
     async function extractAndStoreAutoGlossary(rawText, modelToUse, signal = null) {
       const isAutoGlossaryEnabled = localStorage.getItem('nov_enable_auto_glossary') !== 'false';
       if (!isAutoGlossaryEnabled) return 0;
@@ -2349,21 +2356,12 @@ ${JSON.stringify(termList)}
       const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
       const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
 
-      // Dual-Pass Instructions เมื่อเปิดใช้งานโหมดสแกนลึก
-      const deepInstruction = isDeepNer ? `
-งานพิเศษ (Dual-Pass Extended Scan):
-นอกจากชื่อตัวละครและสถานที่ ให้กวาดล้างคำประสมพิเศษต่อไปนี้เพิ่มเติม:
-- คำเรียกฉายาหรือนามสมมุติของตัวละคร (รวมคำที่มีสรรพนามนำหน้า)
-- ทักษะยุทธ์หรือวิชา 4 ตัวอักษร
-- คำเรียกเฉพาะของเผ่าพันธุ์ วัตถุเวทมนตร์ หรือตำแหน่งเฉพาะถิ่นในเรื่องนี้` : '';
-
       const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนแนว "${genre}"
 บริบทเรื่อง: ${bookCtx} ${authorCtx}
-จงวิเคราะห์ข้อความภาษาจีนต่อไปนี้อย่างละเอียด และสกัดหา "ชื่อเฉพาะใหม่" ทั้งหมดที่สำคัญต่อความต่อเนื่อง โดยใช้หลักการเทียบเคียงตามลำดับ:
-1. ฉบับแปลไทยที่มีอยู่แล้วของเรื่องนี้
-2. ผลงานอื่นของผู้แต่งในจักรวาลเดียวกัน
-3. มาตรฐานวรรณกรรมประจำแนว
-${deepInstruction}
+จงวิเคราะห์ข้อความภาษาจีนต่อไปนี้อย่างละเอียด และสกัดหา "ชื่อเฉพาะใหม่" ทั้งหมดที่สำคัญต่อความต่อเนื่อง โดยเฉพาะ:
+1. **ลำดับขั้นและระดับพลัง (Realms & Stages):** คำบอกระดับพลังทุกคำ เช่น ขอบเขตหลอม, สร้างฐานราก, แก่นทองคำ, ก่อกำเนิด, รวมวิญญาณ ไม่ว่าจะมาเดี่ยวๆ หรือมีคำว่า 'ขั้น/ระดับ/ขอบเขต' ประกอบอยู่ ต้องสกัดออกมาให้ครบ 100%
+2. **ชื่อเฉพาะทั่วไป:** ตัวละคร, สัตว์อสูร, สถานที่, สำนัก, วิชา, เคล็ดวิชา, สมบัติ, ยาโอสถ
+${isDeepNer ? `3. **คำประสมพิเศษและฉายา:** ฉายาตัวละคร, คำเรียกเฉพาะของเผ่าพันธุ์, ตำแหน่งเฉพาะถิ่น` : ''}
 
 จัดลง 7 หมวดหมู่:
 - "character": บุคคล, ตัวละคร, สัตว์อสูร, เผ่าพันธุ์
@@ -2372,11 +2370,12 @@ ${deepInstruction}
 - "skill": วิชา, ทักษะยุทธ, คัมภีร์, สกิล
 - "equipment": อาวุธ, สมบัติวิเศษ, อุปกรณ์เทคโน
 - "resource": โอสถ, สมุนไพร, หินพลังงาน, แร่
-- "realm": ขอบเขตลมปราณ, ลำดับขั้น, เลเวล
+- "realm": ขอบเขตลมปราณ, ลำดับขั้น, เลเวล, ระดับพลัง
 
 ข้อกำหนด:
 1. ห้ามเลือกคำทั่วไป (เช่น พ่อ, แม่, ประตู, ท้องฟ้า)
 2. คำที่มีอยู่แล้วห้ามส่งซ้ำ: [${existingTerms.slice(-60).join(', ')}]
+3. คำแปลไทยใน "tgt" ต้องเป็นชื่อเฉพาะตรงตัว ห้ามมีช่องว่างเกินหน้าหลัง
 
 ตอบกลับเป็น JSON เท่านั้น:
 {
@@ -2406,11 +2405,13 @@ ${deepInstruction}
             let addedCount = 0;
             for (const item of items) {
               if (item.src && item.tgt) {
-                const existing = existingItems.find(x => x.src === item.src);
+                const cleanSrc = item.src.trim();
+                const cleanTgt = item.tgt.trim();
+                const existing = existingItems.find(x => x.src === cleanSrc);
                 if (!existing) {
                   await dbSaveGlossaryItem({
-                    src: item.src.trim(),
-                    tgt: item.tgt.trim(),
+                    src: cleanSrc,
+                    tgt: cleanTgt,
                     category: item.category || 'character',
                     scope: 'tagged',
                     books: [currentBookId],
@@ -2420,7 +2421,6 @@ ${deepInstruction}
                   });
                   addedCount++;
                 } else {
-                  // รักษา tgt เดิมของผู้ใช้ไว้ 100% ไม่อัปเดตทับคำแปล
                   if (!existing.books.includes(currentBookId)) existing.books.push(currentBookId);
                   existing.count = (existing.count || 1) + 1;
                   existing.updatedAt = Date.now();
@@ -2548,7 +2548,7 @@ ${deepInstruction}
       }
     }
 
-    // ==================== ADVANCED AI PROOFREADING / POLISH PASS (STRICT ENFORCEMENT & SPELL AUDIT) ====================
+    // ==================== ADVANCED AI PROOFREADING / POLISH PASS (REMOVED DASH & STRICT TERM CHECK) ====================
     async function proofreadAndPolishParagraphs(paragraphs, modelToUse, signal = null) {
       const activeKey = getActiveApiKey();
       const genre = currentBookGenre || "xianxia";
@@ -2559,24 +2559,24 @@ ${deepInstruction}
       const genreRule = getGenreInstruction(genre);
 
       const prompt = `คุณคือบรรณาธิการอาวุโสและผู้ตรวจแก้คำผิด (Spell & Tone Auditor) ของสำนักพิมพ์นิยายแปลภาษาไทย
-หน้าที่: ตรวจแก้คำผิดและคำพิมพ์ตกหล่น, ตรวจสอบความถูกต้องของคำเฉพาะในคลังศัพท์, ถอดรหัสสำนวนจีน และเกลาไวยากรณ์ให้ลื่นไหลเป็นธรรมชาติ โดยคงความหมายและรูปประโยคให้ใกล้เคียงต้นฉบับที่สุด
+หน้าที่: ตรวจแก้คำผิดและคำพิมพ์ตกหล่น, ตรวจสอบความถูกต้องของคำเฉพาะในคลังศัพท์, และจัดรูปแบบให้เป็นระเบียบ โดยคงรูปประโยคและความหมายเดิมไว้
 
 แนวเรื่อง: "${genre}"
 ${genreRule}
 
 กฎเหล็กสำคัญที่สุด (ฝ่าฝืนไม่ได้เด็ดขาด):
 1. **ผลลัพธ์ใน array 'polished' ต้องเป็นภาษาไทยล้วน 100% ห้ามมีตัวอักษรจีน (Hanzi) หลุดรอดเข้ามาเด็ดขาด**
-2. **รักษาคำเฉพาะใน [Glossary] ไว้ตามรูปเดิม 100% ห้ามดัดแปลง ห้ามเติมคำสร้อย และห้ามเปลี่ยนเป็นคำไวพจน์อื่นเด็ดขาด** (เพื่อให้ระบบจับคู่เส้นใต้ได้อย่างแม่นยำ):
+2. **รักษาคำเฉพาะใน [Glossary] ไว้ตามรูปเดิม 100% ห้ามดัดแปลง ห้ามเติมคำสร้อย และห้ามเปลี่ยนเป็นคำไวพจน์อื่นเด็ดขาด**:
    [${termList}]
-3. **ตรวจสอบและแก้ไขคำสะกดผิดภาษาไทยที่พบบ่อย** (เช่น สังเกตุ -> สังเกต, กระทั่ง, ผูกพัน, อนุญาต, โอกาส)
-4. **กำจัดตัวอักษรขยะหรือสัญลักษณ์แปลกปลอม** แต่ **ต้องคงเครื่องหมายวรรคตอนของนิยายไว้ครบถ้วน** (เช่น อัญประกาศ “ ”, เครื่องหมายขีดคำพูด ——, เครื่องหมายละ ...)
+3. **ห้ามใส่เครื่องหมายขีดสนทนา —— นำหน้าประโยคเด็ดขาด** ให้ใช้เครื่องหมายอัญประกาศ '...' หรือ “...” ตามปกติเท่านั้น
+4. **ตรวจสอบและแก้ไขคำสะกดผิดภาษาไทยที่พบบ่อย**
 5. **รักษาจำนวนย่อหน้าเดิม 100%**: ห้ามรวมย่อหน้า และห้ามแตกย่อหน้าใหม่ ต้องมีจำนวน Element เท่ากับต้นฉบับที่ส่งเข้ามา (${paragraphs.length} ย่อหน้า)
 
 จงตอบกลับเป็น JSON Object ในรูปแบบนี้เท่านั้น:
 {
   "polished": [
-    "ข้อความภาษาไทยย่อหน้าที่ 1 ที่ตรวจแก้แล้ว",
-    "ข้อความภาษาไทยย่อหน้าที่ 2 ที่ตรวจแก้แล้ว"
+    "ข้อความภาษาไทยย่อหน้าที่ 1 ที่ตรวจแก้แล้ว (ไม่มีขีด —— นำหน้า)",
+    "ข้อความภาษาไทยย่อหน้าที่ 2 ที่ตรวจแก้แล้ว (ไม่มีขีด —— นำหน้า)"
   ]
 }`;
 
@@ -2608,8 +2608,9 @@ ${genreRule}
           return paragraphs.map((p, idx) => {
             let polishedText = polishedList[idx] || p.th;
             if (typeof polishedText === 'string') {
-              // Sanitizer: ล้างตัวอักษรจีนตกค้าง
-              polishedText = polishedText.replace(/[\u4e00-\u9fa5]+/g, '').trim();
+              // ล้างตัวอักษรจีนตกค้าง และกำจัดเครื่องหมาย —— ที่อยู่ต้นประโยคทิ้ง
+              polishedText = polishedText.replace(/[\u4e00-\u9fa5]+/g, '');
+              polishedText = polishedText.replace(/^——\s*/g, '').replace(/(\n)——\s*/g, '$1').trim();
             }
             return {
               th: polishedText || p.th,
@@ -2663,7 +2664,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
    - ชื่อเรื่องต้นฉบับ: "${rawBookTitle}"
 2. ห้ามรวบย่อหน้ารวมกันเป็นก้อนเดียวเด็ดขาด แยกย่อหน้าแปลให้ตรงกับต้นฉบับแบบ 1 ต่อ 1
 3. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
-4. ในบทสนทนา ให้ใช้เครื่องหมายอัญประกาศ ' หรือ “ ” ห้ามใช้เครื่องหมาย " ซ้ำซ้อน และห้ามใส่ Control Characters ดิบ
+4. ในบทสนทนา ให้ใช้เครื่องหมายอัญประกาศ ' หรือ “ ” ห้ามใช้เครื่องหมาย " ซ้ำซ้อน และ **ห้ามใส่ขีด —— นำหน้าบทสนทนา**
 5. สรุปเหตุการณ์สำคัญของบทนี้ในฟิลด์ "chapter_summary" ความยาว 1-2 ประโยค เพื่อใช้ต่อบริบทในบทถัดไป
 6. สกัด "used_entities" (ชื่อเฉพาะสำคัญที่ปรากฏในบทนี้) แนบกลับมาด้วยเพื่อบันทึกลงคลังศัพท์
 
@@ -2710,11 +2711,13 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
         const existingItems = await dbGetAllGlossaryItems();
         for (const ent of parsedResult.used_entities) {
           if (ent.src && ent.tgt) {
-            const found = existingItems.find(x => x.src === ent.src);
+            const cleanSrc = ent.src.trim();
+            const cleanTgt = ent.tgt.trim();
+            const found = existingItems.find(x => x.src === cleanSrc);
             if (!found) {
               await dbSaveGlossaryItem({
-                src: ent.src.trim(),
-                tgt: ent.tgt.trim(),
+                src: cleanSrc,
+                tgt: cleanTgt,
                 category: ent.category || 'character',
                 scope: 'tagged',
                 books: [currentBookId],
@@ -2740,13 +2743,17 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
 
       const formattedParas = [];
       paragraphs.forEach(item => {
-        if (item.th && item.th.length > 350 && (item.th.includes('”') || item.th.includes('"'))) {
-          const subParas = item.th.split(/(?<=[”」\n])\s*/);
+        let cleanTh = item.th || "";
+        // กำจัด —— นำหน้าบทสนทนาที่อาจหลุดมา
+        cleanTh = cleanTh.replace(/^——\s*/g, '').replace(/(\n)——\s*/g, '$1');
+
+        if (cleanTh.length > 350 && (cleanTh.includes('”') || cleanTh.includes('"'))) {
+          const subParas = cleanTh.split(/(?<=[”」\n])\s*/);
           subParas.forEach(sub => {
             if (sub.trim()) formattedParas.push({ th: sub.trim(), src: item.src || "" });
           });
         } else {
-          formattedParas.push(item);
+          formattedParas.push({ th: cleanTh, src: item.src || "" });
         }
       });
 
@@ -2788,7 +2795,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
           activeAbortController = new AbortController();
 
           if (attempt === 1) {
-            if (onStatusUpdate) onStatusUpdate("กำลังสแกนหาชื่อเฉพาะใหม่...");
+            if (onStatusUpdate) onStatusUpdate("กำลังสแกนหาชื่อเฉพาะและระดับพลังใหม่...");
             await extractAndStoreAutoGlossary(rawText, primaryModel, activeAbortController.signal);
           }
 
@@ -3762,6 +3769,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       return 'book_' + btoa(url.split('?')[0]).substring(0, 16);
     }
 
+    // 10 UNIVERSAL GENRES INSTRUCTION ENGINE
     function getGenreInstruction(genre) {
       switch (genre) {
         case 'xianxia':
