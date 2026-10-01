@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.2</title>
+  <title>NovelTranslate AI v2.3</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -530,7 +530,7 @@
     </div>
   </div>
 
-  <!-- MODAL: EDIT GLOSSARY TERM (แทนที่ prompt) -->
+  <!-- MODAL: EDIT GLOSSARY TERM -->
   <div class="modal-overlay" id="edit-term-modal" style="z-index: 65;">
     <div class="modal-box" style="max-width: 420px;">
       <div class="modal-head">
@@ -549,7 +549,7 @@
         <select id="edit-term-cat-select" class="form-input">
           <option value="character">👤 บุคคล/สิ่งมีชีวิต</option>
           <option value="title">🎖️ ตำแหน่ง/ฐานะ</option>
-          <option value="location">🏔️️ สถานที่/องค์กร</option>
+          <option value="location">🏔 สถานที่/องค์กร</option>
           <option value="skill">📜 ทักษะ/วิชา</option>
           <option value="equipment">🗡️ อุปกรณ์/เทคโน</option>
           <option value="resource">💊 ทรัพยากร/โอสถ</option>
@@ -649,7 +649,7 @@
       <div class="gloss-category-tabs">
         <button class="cat-tab-btn active" onclick="switchGlossaryCategory('all', event)">ทั้งหมด</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('character', event)">👤 บุคคล/สิ่งมีชีวิต</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('title', event)">🎖️ ตำแหน่ง/ฐานะ</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('title', event)">🎖️️ ตำแหน่ง/ฐานะ</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('location', event)">🏔️ สถานที่/องค์กร</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('skill', event)">📜 ทักษะ/วิชา</button>
         <button class="cat-tab-btn" onclick="switchGlossaryCategory('equipment', event)">🗡️ อุปกรณ์/เทคโน</button>
@@ -734,13 +734,26 @@
           <input type="number" id="retry-limit" class="form-input" min="1" max="50" value="10" placeholder="10">
         </div>
 
+        <!-- NEW ADVANCED SETTINGS TOGGLES -->
         <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
+            <input type="checkbox" id="enable-deep-ner-scan" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
+            <div>
+              <span>🔍 สแกนคำศัพท์เชิงลึก 2 มุมมอง (Deep Dual-Pass NER)</span>
+              <div style="font-size: 11px; font-weight: normal; opacity: 0.65; margin-top: 2px;">
+                กวาดจับทั้งชื่อเฉพาะเชิงโครงสร้าง และคำประสม/ฉายา/วิชาเฉพาะเรื่อง ป้องกันคำเฉพาะหลุดรอด (ใช้โทเคนเพิ่มขึ้นเล็กน้อย)
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-group" style="margin-top: 10px;">
           <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
             <input type="checkbox" id="enable-proofread-pass" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
             <div>
-              <span>✨ ตรวจทานและขัดเกลาสำนวนรอบสอง (AI Proofreading Pass)</span>
+              <span>✨ ตรวจทานคำผิดและรักษาคำศัพท์อย่างเข้มงวด (AI Proofreading & Spell Auditor)</span>
               <div style="font-size: 11px; font-weight: normal; opacity: 0.65; margin-top: 2px;">
-                สแกนแก้คำผิด อักขระหลุด และเกลาไวยากรณ์ไทยให้อ่านลื่นไหลที่สุด (ใช้เวลาเพิ่มขึ้นเล็กน้อยและใช้โทเคนเพิ่ม ~1 เท่าตัว)
+                ตรวจแก้คำสะกดผิดภาษาไทย ล็อกคำในคลังศัพท์ให้ตรงรูปเดิม 100% ป้องกันเส้นประหลุด (ใช้เวลาเพิ่มขึ้นและใช้โทเคนเพิ่ม ~1 เท่าตัว)
               </div>
             </div>
           </label>
@@ -995,12 +1008,12 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v2.2",
+        title: "คู่มือเริ่มต้น v2.3",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.2", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบติดตั้งหน้าต่าง Modal แบบ Dropdown ตัวเลือกสำหรับเปลี่ยนแนวเรื่องและแก้ไขคำศัพท์เรียบร้อยแล้ว", src: "已支持下拉列表选择题材与修改术语" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.3", src: "欢迎来到 NovelTranslate" },
+          { th: "ระบบติดตั้ง Deep Dual-Pass NER Scan และระบบรักษาคำในคลังแบบเข้มงวดเรียบร้อยแล้ว", src: "已支持深度双视角NER扫描与术语强校验审计" }
         ],
-        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.2"
+        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.3"
       }
     ];
     let currentChapterIndex = 0;
@@ -1681,7 +1694,7 @@
             srcEl.style.display = 'block';
             srcEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
-          alert(`⚠ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้\n\nสาเหตุ: คำนี้อาจเกิดจากการขัดเกลาสำนวนภาษาไทยจนรูปประโยคเปลี่ยนไปจากต้นฉบับ\n(ระบบได้เปิดข้อความภาษาจีนต้นฉบับของย่อหน้านี้ให้แล้ว คุณสามารถลากคลุมตัวอักษรจีนที่ต้องการโดยตรงได้ทันที)`);
+          alert(`⚠️ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้\n\nสาเหตุ: คำนี้อาจเกิดจากการขัดเกลาสำนวนภาษาไทยจนรูปประโยคเปลี่ยนไปจากต้นฉบับ\n(ระบบได้เปิดข้อความภาษาจีนต้นฉบับของย่อหน้านี้ให้แล้ว คุณสามารถลากคลุมตัวอักษรจีนที่ต้องการโดยตรงได้ทันที)`);
         }
       } catch (err) {
         alert("ค้นหาคำจีนไม่สำเร็จ: " + err.message);
@@ -1786,7 +1799,7 @@
       switch(cat) {
         case 'character': return '👤 บุคคล/สัตว์';
         case 'title': return '🎖️ ตำแหน่ง';
-        case 'location': return '🏔️ สถานที่';
+        case 'location': return '🏔️️ สถานที่';
         case 'skill': return '📜 ทักษะ/วิชา';
         case 'equipment': return '🗡️ อุปกรณ์';
         case 'resource': return '💊 ทรัพยากร';
@@ -2108,7 +2121,6 @@
       renderVirtualWindow(currentChapterIndex);
     }
 
-    // MODAL EDIT FOR GLOSSARY TERM (แทน prompt)
     async function openEditTermModal(src) {
       termBeingEditedSrc = src;
       const items = await dbGetAllGlossaryItems();
@@ -2239,7 +2251,6 @@
           const items = await dbGetAllGlossaryItems();
           const cur = items.find(x => x.src === src);
           if (cur && tgtEl) tgtEl.innerText = cur.tgt;
-          renderVirtualWindow(currentChapterIndex, false);
         }
       } catch (err) {
         alert("รีเสิร์ชไม่สำเร็จ: " + err.message);
@@ -2322,13 +2333,14 @@ ${JSON.stringify(termList)}
       renderVirtualWindow(currentChapterIndex);
     }
 
-    // ==================== AUTO-GLOSSARY SCAN FOR SPECIFIC TEXT ====================
+    // ==================== AUTO-GLOSSARY SCAN FOR SPECIFIC TEXT (DUAL-PASS OPTION) ====================
     async function extractAndStoreAutoGlossary(rawText, modelToUse, signal = null) {
       const isAutoGlossaryEnabled = localStorage.getItem('nov_enable_auto_glossary') !== 'false';
       if (!isAutoGlossaryEnabled) return 0;
 
       const activeKey = getActiveApiKey();
       const genre = currentBookGenre || "xianxia";
+      const isDeepNer = localStorage.getItem('nov_enable_deep_ner') === 'true';
       if (!activeKey) return 0;
 
       const existingItems = await dbGetAllGlossaryItems();
@@ -2337,12 +2349,21 @@ ${JSON.stringify(termList)}
       const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
       const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
 
+      // Dual-Pass Instructions เมื่อเปิดใช้งานโหมดสแกนลึก
+      const deepInstruction = isDeepNer ? `
+งานพิเศษ (Dual-Pass Extended Scan):
+นอกจากชื่อตัวละครและสถานที่ ให้กวาดล้างคำประสมพิเศษต่อไปนี้เพิ่มเติม:
+- คำเรียกฉายาหรือนามสมมุติของตัวละคร (รวมคำที่มีสรรพนามนำหน้า)
+- ทักษะยุทธ์หรือวิชา 4 ตัวอักษร
+- คำเรียกเฉพาะของเผ่าพันธุ์ วัตถุเวทมนตร์ หรือตำแหน่งเฉพาะถิ่นในเรื่องนี้` : '';
+
       const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนแนว "${genre}"
 บริบทเรื่อง: ${bookCtx} ${authorCtx}
 จงวิเคราะห์ข้อความภาษาจีนต่อไปนี้อย่างละเอียด และสกัดหา "ชื่อเฉพาะใหม่" ทั้งหมดที่สำคัญต่อความต่อเนื่อง โดยใช้หลักการเทียบเคียงตามลำดับ:
 1. ฉบับแปลไทยที่มีอยู่แล้วของเรื่องนี้
 2. ผลงานอื่นของผู้แต่งในจักรวาลเดียวกัน
 3. มาตรฐานวรรณกรรมประจำแนว
+${deepInstruction}
 
 จัดลง 7 หมวดหมู่:
 - "character": บุคคล, ตัวละคร, สัตว์อสูร, เผ่าพันธุ์
@@ -2398,8 +2419,9 @@ ${JSON.stringify(termList)}
                     updatedAt: Date.now()
                   });
                   addedCount++;
-                } else if (!existing.books.includes(currentBookId)) {
-                  existing.books.push(currentBookId);
+                } else {
+                  // รักษา tgt เดิมของผู้ใช้ไว้ 100% ไม่อัปเดตทับคำแปล
+                  if (!existing.books.includes(currentBookId)) existing.books.push(currentBookId);
                   existing.count = (existing.count || 1) + 1;
                   existing.updatedAt = Date.now();
                   await dbSaveGlossaryItem(existing);
@@ -2526,7 +2548,7 @@ ${JSON.stringify(termList)}
       }
     }
 
-    // ==================== ADVANCED AI PROOFREADING / POLISH PASS ====================
+    // ==================== ADVANCED AI PROOFREADING / POLISH PASS (STRICT ENFORCEMENT & SPELL AUDIT) ====================
     async function proofreadAndPolishParagraphs(paragraphs, modelToUse, signal = null) {
       const activeKey = getActiveApiKey();
       const genre = currentBookGenre || "xianxia";
@@ -2536,25 +2558,25 @@ ${JSON.stringify(termList)}
       const termList = Object.entries(activeTerms).map(([k, v]) => `${k}=${v.resolvedTgt}`).join(", ");
       const genreRule = getGenreInstruction(genre);
 
-      const prompt = `คุณคือบรรณาธิการอาวุโสของสำนักพิมพ์นิยายแปลภาษาไทย
-หน้าที่: ตรวจแก้คำผิด ขัดเกลาสำนวนภาษาไทย ถอดรหัสสำนวนจีน และแก้ปัญหาไวยากรณ์จีนตกค้างให้สละสลวย ไหลลื่น เป็นธรรมชาติ
+      const prompt = `คุณคือบรรณาธิการอาวุโสและผู้ตรวจแก้คำผิด (Spell & Tone Auditor) ของสำนักพิมพ์นิยายแปลภาษาไทย
+หน้าที่: ตรวจแก้คำผิดและคำพิมพ์ตกหล่น, ตรวจสอบความถูกต้องของคำเฉพาะในคลังศัพท์, ถอดรหัสสำนวนจีน และเกลาไวยากรณ์ให้ลื่นไหลเป็นธรรมชาติ โดยคงความหมายและรูปประโยคให้ใกล้เคียงต้นฉบับที่สุด
 
 แนวเรื่อง: "${genre}"
 ${genreRule}
 
 กฎเหล็กสำคัญที่สุด (ฝ่าฝืนไม่ได้เด็ดขาด):
-1. **ผลลัพธ์ใน array 'polished' ต้องเป็นภาษาไทยล้วน 100% ห้ามมีตัวอักษรจีน (Hanzi) หลุดรอดเข้ามาในเนื้อความเด็ดขาด**
-2. **ห้ามเปลี่ยนหรือดัดแปลงคำเฉพาะเหล่านี้เด็ดขาด** (ต้องใช้คำแปลไทยตามนี้เป๊ะๆ 100% ห้ามเปลี่ยนเป็นคำไวพจน์อื่น):
+1. **ผลลัพธ์ใน array 'polished' ต้องเป็นภาษาไทยล้วน 100% ห้ามมีตัวอักษรจีน (Hanzi) หลุดรอดเข้ามาเด็ดขาด**
+2. **รักษาคำเฉพาะใน [Glossary] ไว้ตามรูปเดิม 100% ห้ามดัดแปลง ห้ามเติมคำสร้อย และห้ามเปลี่ยนเป็นคำไวพจน์อื่นเด็ดขาด** (เพื่อให้ระบบจับคู่เส้นใต้ได้อย่างแม่นยำ):
    [${termList}]
-3. **รักษาจำนวนย่อหน้าเดิม 100%**: ห้ามรวมย่อหน้าเข้าด้วยกัน และห้ามแตกย่อหน้าใหม่ ต้องมีจำนวน Element ในอาร์เรย์ผลลัพธ์เท่ากับต้นฉบับที่ส่งเข้ามา (${paragraphs.length} ย่อหน้า)
-4. กำจัดตัวอักษรแปลกปลอม, สัญลักษณ์หลุด, คำสะกดผิด, คำพิมพ์ตกหล่น
-5. ปรับโครงสร้างประโยคที่มีกลิ่นอายภาษาจีน (เช่น การเรียงประธาน-กริยาขัดหู) ให้เป็นภาษาไทยที่กระชับและกลมกล่อม
+3. **ตรวจสอบและแก้ไขคำสะกดผิดภาษาไทยที่พบบ่อย** (เช่น สังเกตุ -> สังเกต, กระทั่ง, ผูกพัน, อนุญาต, โอกาส)
+4. **กำจัดตัวอักษรขยะหรือสัญลักษณ์แปลกปลอม** แต่ **ต้องคงเครื่องหมายวรรคตอนของนิยายไว้ครบถ้วน** (เช่น อัญประกาศ “ ”, เครื่องหมายขีดคำพูด ——, เครื่องหมายละ ...)
+5. **รักษาจำนวนย่อหน้าเดิม 100%**: ห้ามรวมย่อหน้า และห้ามแตกย่อหน้าใหม่ ต้องมีจำนวน Element เท่ากับต้นฉบับที่ส่งเข้ามา (${paragraphs.length} ย่อหน้า)
 
 จงตอบกลับเป็น JSON Object ในรูปแบบนี้เท่านั้น:
 {
   "polished": [
-    "ข้อความภาษาไทยย่อหน้าที่ 1 ที่ขัดเกลาแล้ว (ไม่มีตัวจีน)",
-    "ข้อความภาษาไทยย่อหน้าที่ 2 ที่ขัดเกลาแล้ว (ไม่มีตัวจีน)"
+    "ข้อความภาษาไทยย่อหน้าที่ 1 ที่ตรวจแก้แล้ว",
+    "ข้อความภาษาไทยย่อหน้าที่ 2 ที่ตรวจแก้แล้ว"
   ]
 }`;
 
@@ -2586,6 +2608,7 @@ ${genreRule}
           return paragraphs.map((p, idx) => {
             let polishedText = polishedList[idx] || p.th;
             if (typeof polishedText === 'string') {
+              // Sanitizer: ล้างตัวอักษรจีนตกค้าง
               polishedText = polishedText.replace(/[\u4e00-\u9fa5]+/g, '').trim();
             }
             return {
@@ -2614,7 +2637,7 @@ ${genreRule}
       const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
       const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
 
-      const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลเนื้อหาภาษาจีนต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย เป็นธรรมชาติ
+      const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลเนื้อหาภาษาจีนต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย เป็นธรรมชาติ โดยคงความหมายและรูปประโยคให้ใกล้เคียงต้นฉบับที่สุด
 
 สไตล์และบรรยากาศหลักของแนวเรื่อง:
 ${genreRule}
@@ -3904,6 +3927,9 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       localStorage.setItem('nov_primary_model', document.getElementById('gemini-primary-model').value);
       localStorage.setItem('nov_retry_limit', document.getElementById('retry-limit').value || "10");
       
+      const deepNerChk = document.getElementById('enable-deep-ner-scan');
+      localStorage.setItem('nov_enable_deep_ner', deepNerChk.checked ? 'true' : 'false');
+
       const proofreadChk = document.getElementById('enable-proofread-pass');
       localStorage.setItem('nov_enable_proofread', proofreadChk.checked ? 'true' : 'false');
 
@@ -3960,6 +3986,10 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
 
       if (localStorage.getItem('nov_primary_model')) document.getElementById('gemini-primary-model').value = localStorage.getItem('nov_primary_model');
       if (localStorage.getItem('nov_retry_limit')) document.getElementById('retry-limit').value = localStorage.getItem('nov_retry_limit');
+
+      const deepNerVal = localStorage.getItem('nov_enable_deep_ner');
+      const deepNerChk = document.getElementById('enable-deep-ner-scan');
+      if (deepNerChk) deepNerChk.checked = (deepNerVal === 'true');
 
       const proofreadVal = localStorage.getItem('nov_enable_proofread');
       const proofreadChk = document.getElementById('enable-proofread-pass');
