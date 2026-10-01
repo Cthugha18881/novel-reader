@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.0</title>
+  <title>NovelTranslate AI v2.0.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -70,6 +70,16 @@
       display: none; font-size: 10px; padding: 2px 7px; border-radius: 999px;
       background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
     }
+
+    /* FLOATING ACTION STATUS TOAST */
+    #global-action-toast {
+      display: none; position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+      z-index: 80; background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 30px;
+      font-size: 13px; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+      align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,0.15);
+      animation: fadeInDown 0.2s ease-out;
+    }
+    @keyframes fadeInDown { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
     /* TOP-RIGHT FLOATING BUTTONS */
     .top-floating-btn {
@@ -362,6 +372,12 @@
 </head>
 <body class="theme-sepia" id="app-body">
 
+  <!-- FLOATING ACTION STATUS TOAST (แจ้งเตือนความคืบหน้าระดับสากล) -->
+  <div id="global-action-toast">
+    <span class="spinner-icon" style="margin: 0; width: 14px; height: 14px;"></span>
+    <span id="global-toast-msg">กำลังทำงาน...</span>
+  </div>
+
   <!-- TOP HEADER -->
   <header>
     <div class="brand-box">
@@ -515,7 +531,7 @@
         <button class="modal-close" onclick="closeModal('glossary-modal')">✕</button>
       </div>
 
-      <!-- Scope Filter & Tools (Dynamic Book Selector) -->
+      <!-- Scope Filter & Tools -->
       <div class="glossary-filter-bar">
         <select id="gloss-scope-filter" class="form-input" style="width: auto; max-width: 210px; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
         </select>
@@ -866,6 +882,13 @@
         }
       }
 
+      // อัปเดต DOM เฉพาะจุดแบบ In-Place เพื่อไม่ให้หน้าจอเด้งลงท้ายบท
+      const activeHighlights = document.querySelectorAll(`.inline-term-highlight[data-src="${encodeURIComponent(src)}"]`);
+      activeHighlights.forEach(el => {
+        el.innerText = newTgt;
+        el.setAttribute('data-tgt', encodeURIComponent(newTgt));
+      });
+
       if (changedChapCount > 0) {
         console.log(`[TermSync] Replaced "${oldTgt}" ➔ "${newTgt}" across ${changedChapCount} chapters.`);
       }
@@ -906,15 +929,30 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v2.0",
+        title: "คู่มือเริ่มต้น v2.0.1",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.0", src: "欢迎来到 NovelTranslate" },
-          { th: "ติดตั้งระบบ Narrative Rolling Summary และ Scene-Adaptive Translation เต็มรูปแบบ", src: "已完全支持情景自适应与上下文滚动摘要" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.0.1", src: "欢迎来到 NovelTranslate" },
+          { th: "แก้ไขปัญหาหน้าจอเด้งเวลาเปลี่ยนคำศัพท์ พร้อมเพิ่มแถบแจ้งเตือนสถานะการแปลแบบสด (Live Status Toast) สมบูรณ์แบบ", src: "已修复位置跳动并支持实时全局翻译状态反馈" }
         ],
-        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.0"
+        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.0.1"
       }
     ];
     let currentChapterIndex = 0;
+
+    // GLOBAL STATUS TOAST
+    function showGlobalToast(msg) {
+      const toast = document.getElementById('global-action-toast');
+      const text = document.getElementById('global-toast-msg');
+      if (toast && text) {
+        text.innerText = msg;
+        toast.style.display = 'flex';
+      }
+    }
+
+    function hideGlobalToast() {
+      const toast = document.getElementById('global-action-toast');
+      if (toast) toast.style.display = 'none';
+    }
 
     // INIT
     window.addEventListener('DOMContentLoaded', async () => {
@@ -1014,6 +1052,7 @@
       localStorage.setItem('nov_font_size', currentFontSize);
     }
 
+    // MODAL OPEN / CLOSE WITH BODY SCROLL LOCK
     function openModal(id) { 
       const modal = document.getElementById(id);
       if (modal) {
@@ -1092,7 +1131,12 @@
           if (res && res.tgt) {
             document.getElementById('popover-tgt-span').innerText = res.tgt;
             await renderGlossaryUI();
-            await renderVirtualWindow(currentChapterIndex, false);
+            // อัปเดตเฉพาะจุด ไม่สั่ง re-render ทั้งจอ ป้องกันหน้าจอเด้งหลุดตำแหน่ง
+            const activeHighlights = document.querySelectorAll(`.inline-term-highlight[data-src="${encodeURIComponent(src)}"]`);
+            activeHighlights.forEach(el => {
+              el.innerText = res.tgt;
+              el.setAttribute('data-tgt', encodeURIComponent(res.tgt));
+            });
           }
         } finally {
           researchBtn.disabled = false;
@@ -1572,7 +1616,7 @@
             srcEl.style.display = 'block';
             srcEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
-          alert(`⚠️ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้\n\nสาเหตุ: คำนี้อาจเกิดจากการขัดเกลาสำนวนภาษาไทยจนรูปประโยคเปลี่ยนไปจากต้นฉบับ\n(ระบบได้เปิดข้อความภาษาจีนต้นฉบับของย่อหน้านี้ให้แล้ว คุณสามารถลากคลุมตัวอักษรจีนที่ต้องการโดยตรงได้ทันที)`);
+          alert(`⚠️️ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้\n\nสาเหตุ: คำนี้อาจเกิดจากการขัดเกลาสำนวนภาษาไทยจนรูปประโยคเปลี่ยนไปจากต้นฉบับ\n(ระบบได้เปิดข้อความภาษาจีนต้นฉบับของย่อหน้านี้ให้แล้ว คุณสามารถลากคลุมตัวอักษรจีนที่ต้องการโดยตรงได้ทันที)`);
         }
       } catch (err) {
         alert("ค้นหาคำจีนไม่สำเร็จ: " + err.message);
@@ -1676,7 +1720,7 @@
       switch(cat) {
         case 'character': return '👤 บุคคล/สัตว์';
         case 'title': return '🎖️ ตำแหน่ง';
-        case 'location': return '🏔️ สถานที่';
+        case 'location': return '🏔️️ สถานที่';
         case 'skill': return '📜 ทักษะ/วิชา';
         case 'equipment': return '🗡️ อุปกรณ์';
         case 'resource': return '💊 ทรัพยากร';
@@ -2112,7 +2156,6 @@
           const items = await dbGetAllGlossaryItems();
           const cur = items.find(x => x.src === src);
           if (cur && tgtEl) tgtEl.innerText = cur.tgt;
-          renderVirtualWindow(currentChapterIndex, false);
         }
       } catch (err) {
         alert("รีเสิร์ชไม่สำเร็จ: " + err.message);
@@ -2303,6 +2346,7 @@ ${JSON.stringify(termList)}
 
       btn.disabled = true;
       btn.innerHTML = `<span class="spinner-icon" style="margin:0; width:12px; height:12px;"></span>`;
+      showGlobalToast(`กำลังสแกนหาคำศัพท์เฉพาะใน "${curChap.title}"...`);
 
       const srcText = curChap.paragraphs.map(p => p.src || "").filter(Boolean).join("\n\n");
 
@@ -2320,6 +2364,7 @@ ${JSON.stringify(termList)}
       } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
+        hideGlobalToast();
       }
     }
 
@@ -2353,22 +2398,28 @@ ${JSON.stringify(termList)}
         srcChineseText = targetChap.paragraphs.map(p => p.src || "").filter(Boolean).join("\n\n");
       }
 
+      showGlobalToast(`[${targetChap.title}] กำลังเตรียมต้นฉบับ...`);
+
       if (!srcChineseText || srcChineseText.length < 20) {
         if (!targetChap.sourceUrl) return alert("ไม่พบข้อความต้นฉบับเดิมและไม่มี URL ของบทนี้");
         try {
+          showGlobalToast(`[${targetChap.title}] กำลังดึงต้นฉบับจากเว็บ...`);
           const scraped = await scrapePage(targetChap.sourceUrl);
           srcChineseText = scraped.text;
         } catch (err) {
+          hideGlobalToast();
           return alert("ดึงข้อความต้นฉบับไม่สำเร็จ: " + err.message);
         }
       }
 
-      // ดึงสรุปบทก่อนหน้า (Lookback-1)
       const prevChap = bookChaps.find(c => c.order === (targetChap.order - 1));
       const prevSummary = prevChap?.summary || "";
 
       try {
-        const result = await translateTextWithPingPong(srcChineseText, null, targetChap.title, currentBookTitle, prevSummary);
+        const result = await translateTextWithPingPong(srcChineseText, (msg) => {
+          showGlobalToast(`[${targetChap.title}] ${msg}`);
+        }, targetChap.title, currentBookTitle, prevSummary);
+
         targetChap.paragraphs = result.paragraphs;
         if (result.chapterTitle) targetChap.title = result.chapterTitle;
         if (result.summary) targetChap.summary = result.summary;
@@ -2383,8 +2434,10 @@ ${JSON.stringify(termList)}
         }
         await renderVirtualWindow(currentChapterIndex, false);
         refreshShelfViewOnly(currentBookId);
-        alert(`✓ แปล "${targetChap.title}" ใหม่เรียบร้อยแล้ว`);
+        showGlobalToast(`✓ แปล "${targetChap.title}" ใหม่เรียบร้อยแล้ว`);
+        setTimeout(hideGlobalToast, 2500);
       } catch (err) {
+        hideGlobalToast();
         alert("แปลใหม่ไม่สำเร็จ: " + err.message);
       }
     }
@@ -2477,7 +2530,6 @@ ${genreRule}
       const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
       const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
 
-      // จัดระเบียบ Prompt เพื่อรองรับ Prompt Caching และ Scene-Adaptive Translation
       const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลเนื้อหาภาษาจีนต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย เป็นธรรมชาติ
 
 สไตล์และบรรยากาศหลักของแนวเรื่อง:
@@ -2629,9 +2681,11 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
           activeAbortController = new AbortController();
 
           if (attempt === 1) {
+            if (onStatusUpdate) onStatusUpdate("กำลังสแกนหาชื่อเฉพาะใหม่...");
             await extractAndStoreAutoGlossary(rawText, primaryModel, activeAbortController.signal);
           }
 
+          if (onStatusUpdate) onStatusUpdate(`กำลังแปลผ่านโมเดล ${primaryModel}...`);
           const res = await executeApiCall(rawText, primaryModel, rawChapTitle, rawBookTitle, prevSummary, activeAbortController.signal, onStatusUpdate);
           activeAbortController = null;
           return res;
@@ -2677,6 +2731,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       if (btnText) btnText.innerText = "ตอนถัดไป →";
       const startBtnText = document.getElementById('start-btn-text');
       if (startBtnText) startBtnText.innerText = "เริ่มแปลตอนนี้";
+      hideGlobalToast();
     }
 
     function handleImportCancel() {
@@ -2712,7 +2767,6 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
         const existingChaps = await dbGetChaptersByBook(targetBookId);
         const maxOrder = existingChaps.reduce((max, c) => Math.max(max, c.order || 0), 0);
 
-        // ดึงสรุปบทก่อนหน้า (Lookback-1)
         const prevChap = existingChaps.find(c => c.order === maxOrder);
         const prevSummary = prevChap?.summary || "";
 
@@ -2831,7 +2885,6 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
           </div>
         `, true);
 
-        // ดึงสรุปบทก่อนหน้า (Lookback-1)
         const prevSummary = lastChap?.summary || "";
 
         const result = await translateTextWithPingPong(text, (msg) => {
