@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.3.2</title>
+  <title>NovelTranslate AI v2.4</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -734,6 +734,7 @@
           <input type="number" id="retry-limit" class="form-input" min="1" max="50" value="10" placeholder="10">
         </div>
 
+        <!-- TOGGLES -->
         <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
           <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
             <input type="checkbox" id="enable-deep-ner-scan" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
@@ -748,11 +749,11 @@
 
         <div class="form-group" style="margin-top: 10px;">
           <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
-            <input type="checkbox" id="enable-proofread-pass" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
+            <input type="checkbox" id="enable-bilingual-verify" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
             <div>
-              <span>✨ ตรวจทานคำผิดและรักษาคำศัพท์อย่างเข้มงวด (AI Proofreading Pass)</span>
+              <span>🛡️ ตรวจสอบความถูกต้องเทียบต้นฉบับ 2 ภาษา (Bilingual Cross-Verification Pass)</span>
               <div style="font-size: 11px; font-weight: normal; opacity: 0.65; margin-top: 2px;">
-                ตรวจแก้คำสะกดผิดภาษาไทย ล็อกคำในคลังศัพท์ให้ตรงรูปเดิม 100% ป้องกันเส้นประหลุด และไม่ใส่ขีด —— นำหน้าประโยค
+                เทียบประโยคไทยกับจีนต้นฉบับแบบ 1:1 ป้องกันใจความสลับ, ล็อกคำศัพท์ในคลังให้ขึ้นเส้นประ 100%, แก้คำสะกดผิด และป้องกันคำในกรอบ 【 】 หาย
               </div>
             </div>
           </label>
@@ -1007,12 +1008,12 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v2.3.2",
+        title: "คู่มือเริ่มต้น v2.4",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.3.2", src: "欢迎来到 NovelTranslate" },
-          { th: "ปรับปรุงระบบแปลคำในวงเล็บทึบ 【...】 ป้องกันช่องว่าง พร้อมขยายการจับคู่เส้นประคำศัพท์ในคลังอย่างแม่นยำ 100%", src: "已修复方括号内容丢失并提升边界高亮与全量境界扫描" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.4", src: "欢迎来到 NovelTranslate" },
+          { th: "ติดตั้งระบบตรวจสอบคุณภาพสองภาษาเทียบย่อหน้าต่อย่อหน้า (Bilingual Cross-Verification Pass) สมบูรณ์แบบ", src: "已完全支持双语段落级交叉校对与境界完整性审计" }
         ],
-        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.3.2"
+        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.4"
       }
     ];
     let currentChapterIndex = 0;
@@ -1148,7 +1149,7 @@
       }
     }
 
-    // ==================== INLINE TERM HIGHLIGHTING ENGINE (ACCURATE & ROBUST) ====================
+    // ==================== INLINE TERM HIGHLIGHTING ENGINE (EXACT MATCH & ORDERED) ====================
     async function getActiveGlossaryForCurrentBook() {
       const allItems = await dbGetAllGlossaryItems();
       const activeMap = {};
@@ -1179,7 +1180,6 @@
 
       if (validTerms.length === 0) return plainThText;
 
-      // เรียงจากยาวไปสั้นเสมอ เพื่อไม่ให้คำสั้นแย่งไฮไลต์คำยาว
       validTerms.sort((a, b) => b.cleanTgt.length - a.cleanTgt.length);
 
       const termMap = new Map();
@@ -1640,7 +1640,7 @@
 กฎเหล็กสำคัญที่สุด (ฝ่าฝืนไม่ได้เด็ดขาด):
 1. คำจีนที่คุณตอบกลับมาต้องเป็น **Substring ที่ปรากฏอยู่ในข้อความภาษาจีนต้นฉบับด้านบนแบบเป๊ะๆ 100%** (Exact Substring)
 2. **ห้ามเดา ห้ามแปลคำไทยกลับเป็นจีน และห้ามสร้างคำจีนที่ไม่มีอยู่ในข้อความต้นฉบับเด็ดขาด**
-3. หากมีคำที่เกี่ยวข้องหรือเป็นไปได้ 1–3 คำ (เช่น มีทั้งชื่อเต็มและชื่อย่อ) ให้ส่งมาในอาร์เรย์ "candidates" โดยเรียงจากคำที่ตรงที่สุดไปหาน้อยที่สุด
+3. หากมีคำที่เกี่ยวข้องหรือเป็นไปได้ 1–3 คำ ให้ส่งมาในอาร์เรย์ "candidates" โดยเรียงจากคำที่ตรงที่สุดไปหาน้อยที่สุด
 4. หากคำที่เลือกถูกเกลาสำนวนจนรูปประโยคเปลี่ยนไป และไม่สามารถจับคู่กับคำจีนคำใดในย่อหน้านี้ได้ ให้ส่ง "candidates": [] (อาร์เรย์ว่าง)
 
 ตอบกลับเป็น JSON Object เท่านั้น:
@@ -1806,7 +1806,7 @@
       switch(cat) {
         case 'character': return '👤 บุคคล/สัตว์';
         case 'title': return '🎖️ ตำแหน่ง';
-        case 'location': return '🏔 สถานที่';
+        case 'location': return '🏔️ สถานที่';
         case 'skill': return '📜 ทักษะ/วิชา';
         case 'equipment': return '🗡️ อุปกรณ์';
         case 'resource': return '💊 ทรัพยากร';
@@ -2169,7 +2169,7 @@
       renderVirtualWindow(currentChapterIndex);
     }
 
-    // TIERED RESEARCH ENGINE (HELPER)
+    // TIERED RESEARCH ENGINE
     async function researchGlossaryTermDirect(src) {
       const activeKey = getActiveApiKey();
       const genre = currentBookGenre || "xianxia";
@@ -2340,7 +2340,7 @@ ${JSON.stringify(termList)}
       renderVirtualWindow(currentChapterIndex);
     }
 
-    // ==================== AUTO-GLOSSARY SCAN FOR SPECIFIC TEXT (DUAL-PASS + REALM FIX) ====================
+    // ==================== AUTO-GLOSSARY SCAN FOR SPECIFIC TEXT ====================
     async function extractAndStoreAutoGlossary(rawText, modelToUse, signal = null) {
       const isAutoGlossaryEnabled = localStorage.getItem('nov_enable_auto_glossary') !== 'false';
       if (!isAutoGlossaryEnabled) return 0;
@@ -2549,84 +2549,94 @@ ${isDeepNer ? `4. **คำประสมพิเศษและฉายา:**
       }
     }
 
-    // ==================== ADVANCED AI PROOFREADING / POLISH PASS ====================
-    async function proofreadAndPolishParagraphs(paragraphs, modelToUse, signal = null) {
+    // ==================== BILINGUAL CROSS-VERIFICATION PASS (ตรวจสอบคุณภาพสองภาษาเทียบประโยคต่อประโยค) ====================
+    async function bilingualCrossVerificationPass(paragraphs, modelToUse, signal = null, onStatusUpdate = null) {
       const activeKey = getActiveApiKey();
       const genre = currentBookGenre || "xianxia";
       if (!activeKey || !paragraphs || paragraphs.length === 0) return paragraphs;
+
+      if (onStatusUpdate) onStatusUpdate("🔍 กำลังตรวจสอบความถูกต้องเทียบต้นฉบับสองภาษา (Bilingual Quality Estimation)...");
 
       const activeTerms = await getActiveGlossaryForCurrentBook();
       const termList = Object.entries(activeTerms).map(([k, v]) => `${k}=${v.resolvedTgt}`).join(", ");
       const genreRule = getGenreInstruction(genre);
 
-      const prompt = `คุณคือบรรณาธิการอาวุโสและผู้ตรวจแก้คำผิด (Spell & Tone Auditor) ของสำนักพิมพ์นิยายแปลภาษาไทย
-หน้าที่: ตรวจแก้คำผิดและคำพิมพ์ตกหล่น, ตรวจสอบความถูกต้องของคำเฉพาะในคลังศัพท์, และจัดรูปแบบให้เป็นระเบียบ โดยคงรูปประโยคและความหมายเดิมไว้
+      const prompt = `คุณคือบรรณาธิการอาวุโสและผู้ตรวจสอบความถูกต้องของงานแปล (Bilingual Quality Auditor)
+หน้าที่ของคุณ: ตรวจเทียบคำแปลภาษาไทยกับภาษาจีนต้นฉบับแบบย่อหน้าต่อย่อหน้า (1 ต่อ 1)
 
 แนวเรื่อง: "${genre}"
 ${genreRule}
 
 กฎเหล็กสำคัญที่สุด (ฝ่าฝืนไม่ได้เด็ดขาด):
-1. **ผลลัพธ์ใน array 'polished' ต้องเป็นภาษาไทยล้วน 100% ห้ามมีตัวอักษรจีน (Hanzi) หลุดรอดเข้ามาเด็ดขาด**
-2. **รักษาคำเฉพาะใน [Glossary] ไว้ตามรูปเดิม 100% ห้ามดัดแปลง ห้ามเติมคำสร้อย และห้ามเปลี่ยนเป็นคำไวพจน์อื่นเด็ดขาด**:
+1. **ความถูกต้องของใจความ (Semantic Accuracy):**
+   - ตรวจสอบว่าประธาน กริยา กรรม สลับตำแหน่งจนความหมายเพี้ยนหรือไม่ (เช่น ใครเป็นผู้ลงมือ ใครเป็นฝ่ายถูกกระทำ)
+   - ตรวจสอบคำปฏิเสธและเงื่อนไข (ห้ามตกหล่นคำว่า 'ไม่', 'มิได้', 'หาได้...ไม่')
+2. **รักษาคำใน [Glossary] ให้ตรงรูปเดิม 100%:**
+   - หากย่อหน้าจีนมีคำเหล่านี้ ปลายทางภาษาไทยต้องใช้คำแปลตามนี้เป๊ะๆ ห้ามดัดแปลง ห้ามเติมคำสร้อย:
    [${termList}]
-3. **ข้อความในวงเล็บทึบ 【 】 หรือ [ ] ต้องมีคำแปลภาษาไทยอยู่ข้างในเสมอ ห้ามส่งวงเล็บเปล่า 【 】 หรือ [ ] กลับมาเด็ดขาด**
-4. **ห้ามใส่เครื่องหมายขีดสนทนา —— นำหน้าประโยคเด็ดขาด** ให้ใช้เครื่องหมายอัญประกาศ '...' หรือ “...” ตามปกติเท่านั้น
-5. **ตรวจสอบและแก้ไขคำสะกดผิดภาษาไทยที่พบบ่อย**
-6. **รักษาจำนวนย่อหน้าเดิม 100%**: ห้ามรวมย่อหน้า และห้ามแตกย่อหน้าใหม่ ต้องมีจำนวน Element เท่ากับต้นฉบับที่ส่งเข้ามา (${paragraphs.length} ย่อหน้า)
+3. **คำในวงเล็บทึบ 【 】 หรือ [ ] ต้องมีคำแปลครบถ้วน:**
+   - ห้ามส่งวงเล็บเปล่า 【 】 หรือ [ ] กลับมาเด็ดขาด ทุกวงเล็บต้องมีคำแปลภาษาไทยอยู่ข้างในเสมอ
+4. **ความสะอาดของภาษาไทย:**
+   - ผลลัพธ์ต้องเป็นภาษาไทยล้วน 100% ห้ามมีตัวอักษรจีน (Hanzi) หลุดรอดมาเด็ดขาด
+   - **ห้ามใส่เครื่องหมายขีดสนทนา —— นำหน้าประโยคเด็ดขาด** ให้ใช้อัญประกาศ '...' หรือ “...” ตามปกติ
+   - ตรวจแก้คำสะกดผิดภาษาไทยที่พบบ่อย
+5. **รักษาจำนวนย่อหน้าเดิม 100%**: จำนวนผลลัพธ์ใน array "verified_paragraphs" ต้องเท่ากับต้นฉบับที่ส่งเข้ามา (${paragraphs.length} ย่อหน้า)
+
+เนื้อหาคู่ย่อหน้าที่ต้องตรวจทาน:
+${JSON.stringify(paragraphs.map(p => ({ src: p.src || "", th: p.th || "" })))}
 
 จงตอบกลับเป็น JSON Object ในรูปแบบนี้เท่านั้น:
 {
-  "polished": [
-    "ข้อความภาษาไทยย่อหน้าที่ 1 ที่ตรวจแก้แล้ว (ไม่มีขีด —— นำหน้า และไม่มีวงเล็บเปล่า)",
-    "ข้อความภาษาไทยย่อหน้าที่ 2 ที่ตรวจแก้แล้ว (ไม่มีขีด —— นำหน้า และไม่มีวงเล็บเปล่า)"
+  "verified_paragraphs": [
+    "ข้อความภาษาไทยย่อหน้าที่ 1 ที่ตรวจทานแล้ว",
+    "ข้อความภาษาไทยย่อหน้าที่ 2 ที่ตรวจทานแล้ว"
   ]
 }`;
 
-      const inputTexts = paragraphs.map(p => p.th || "");
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${activeKey}`;
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        signal: signal,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nรายการย่อหน้าที่ต้องตรวจทาน:\n${JSON.stringify(inputTexts)}` }] }],
-          generationConfig: { response_mime_type: "application/json" }
-        })
-      });
-
-      if (!res.ok) {
-        if (res.status === 429) rotateApiKey();
-        return paragraphs;
-      }
-      const data = await res.json();
-      const outText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (!outText) return paragraphs;
-
       try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${activeKey}`;
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          signal: signal,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { response_mime_type: "application/json" }
+          })
+        });
+
+        if (!res.ok) {
+          if (res.status === 429) rotateApiKey();
+          return paragraphs;
+        }
+
+        const data = await res.json();
+        const outText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!outText) return paragraphs;
+
         const parsed = JSON.parse(outText);
-        const polishedList = parsed.polished || [];
-        if (Array.isArray(polishedList) && polishedList.length === paragraphs.length) {
+        const verifiedList = parsed.verified_paragraphs || [];
+
+        if (Array.isArray(verifiedList) && verifiedList.length === paragraphs.length) {
           return paragraphs.map((p, idx) => {
-            let polishedText = polishedList[idx] || p.th;
-            if (typeof polishedText === 'string') {
-              // 1. ตรวจสอบว่ามีวงเล็บว่างเปล่าหลุดมาหรือไม่ ถ้ามีให้ใช้คำแปลเดิมของรอบแรกเพื่อป้องกันข้อความสูญหาย
-              if (/【\s*】|\[\s*\]/.test(polishedText) && p.th && !/【\s*】|\[\s*\]/.test(p.th)) {
-                polishedText = p.th;
+            let verifiedText = verifiedList[idx] || p.th;
+            if (typeof verifiedText === 'string') {
+              // Fallback ป้องกันวงเล็บว่างเปล่า
+              if (/【\s*】|\[\s*\]/.test(verifiedText) && p.th && !/【\s*】|\[\s*\]/.test(p.th)) {
+                verifiedText = p.th;
               }
-              // 2. ล้างตัวอักษรจีนตกค้าง
-              polishedText = polishedText.replace(/[\u4e00-\u9fa5]+/g, '');
-              // 3. กำจัด —— หน้าประโยค
-              polishedText = polishedText.replace(/^——\s*/g, '').replace(/(\n)——\s*/g, '$1').trim();
+              // ล้างอักษรจีนและขีดนำหน้า
+              verifiedText = verifiedText.replace(/[\u4e00-\u9fa5]+/g, '');
+              verifiedText = verifiedText.replace(/^——\s*/g, '').replace(/(\n)——\s*/g, '$1').trim();
             }
             return {
-              th: polishedText || p.th,
+              th: verifiedText || p.th,
               src: p.src
             };
           });
         }
-      } catch (e) {
-        console.warn("Proofreading JSON parse warning:", e);
+      } catch (err) {
+        console.warn("Bilingual verification fallback:", err);
       }
       return paragraphs;
     }
@@ -2671,7 +2681,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
    - ชื่อเรื่องต้นฉบับ: "${rawBookTitle}"
 2. ห้ามรวบย่อหน้ารวมกันเป็นก้อนเดียวเด็ดขาด แยกย่อหน้าแปลให้ตรงกับต้นฉบับแบบ 1 ต่อ 1
 3. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
-4. **หากพบข้อความในวงเล็บทึบ 【 】 หรือ [ ] ต้องแปลข้อความข้างในเป็นภาษาไทยเสมอ ห้ามทิ้งอักษรจีนไว้ข้างใน และห้ามส่งวงเล็บว่างเปล่า 【 】 เด็ดขาด เช่น 【城头土】 ต้องแปลเป็น 【ดินหัวเมือง】 หรือ 【ดินบนกำแพงเมือง】**
+4. **หากพบข้อความในวงเล็บทึบ 【 】 หรือ [ ] ต้องแปลข้อความข้างในเป็นภาษาไทยเสมอ ห้ามทิ้งอักษรจีนไว้ข้างใน และห้ามส่งวงเล็บว่างเปล่า 【 】 เด็ดขาด**
 5. ในบทสนทนา ให้ใช้เครื่องหมายอัญประกาศ ' หรือ “ ” ห้ามใช้เครื่องหมาย " ซ้ำซ้อน และ **ห้ามใส่ขีด —— นำหน้าบทสนทนา**
 6. สรุปเหตุการณ์สำคัญของบทนี้ในฟิลด์ "chapter_summary" ความยาว 1-2 ประโยค เพื่อใช้ต่อบริบทในบทถัดไป
 7. สกัด "used_entities" (ชื่อเฉพาะสำคัญและระดับพลังที่ปรากฏในบทนี้) แนบกลับมาด้วยเพื่อบันทึกลงคลังศัพท์
@@ -2743,10 +2753,10 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
         }
       }
 
-      const isProofreadEnabled = localStorage.getItem('nov_enable_proofread') === 'true';
-      if (isProofreadEnabled && paragraphs.length > 0) {
-        if (onStatusUpdate) onStatusUpdate("✨ กำลังตรวจทานและขัดเกลาสำนวนรอบสอง (AI Polish)...");
-        paragraphs = await proofreadAndPolishParagraphs(paragraphs, modelToUse, signal);
+      // ตรวจสอบคุณภาพเทียบสองภาษา (Bilingual Cross-Verification Pass)
+      const isBilingualVerifyEnabled = localStorage.getItem('nov_enable_bilingual_verify') !== 'false';
+      if (isBilingualVerifyEnabled && paragraphs.length > 0) {
+        paragraphs = await bilingualCrossVerificationPass(paragraphs, modelToUse, signal, onStatusUpdate);
       }
 
       const formattedParas = [];
@@ -3776,6 +3786,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       return 'book_' + btoa(url.split('?')[0]).substring(0, 16);
     }
 
+    // 10 UNIVERSAL GENRES INSTRUCTION ENGINE
     function getGenreInstruction(genre) {
       switch (genre) {
         case 'xianxia':
@@ -3944,14 +3955,14 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       const deepNerChk = document.getElementById('enable-deep-ner-scan');
       localStorage.setItem('nov_enable_deep_ner', deepNerChk.checked ? 'true' : 'false');
 
-      const proofreadChk = document.getElementById('enable-proofread-pass');
-      localStorage.setItem('nov_enable_proofread', proofreadChk.checked ? 'true' : 'false');
-
-      const prefetchChk = document.getElementById('enable-live-prefetch');
-      localStorage.setItem('nov_enable_prefetch', prefetchChk.checked ? 'true' : 'false');
+      const bilingualVerifyChk = document.getElementById('enable-bilingual-verify');
+      localStorage.setItem('nov_enable_bilingual_verify', bilingualVerifyChk.checked ? 'true' : 'false');
 
       const infiniteChk = document.getElementById('enable-infinite-scroll');
       localStorage.setItem('nov_enable_infinite', infiniteChk.checked ? 'true' : 'false');
+
+      const prefetchChk = document.getElementById('enable-live-prefetch');
+      localStorage.setItem('nov_enable_prefetch', prefetchChk.checked ? 'true' : 'false');
 
       const autoGlossChk = document.getElementById('enable-auto-glossary');
       localStorage.setItem('nov_enable_auto_glossary', autoGlossChk.checked ? 'true' : 'false');
@@ -4005,9 +4016,9 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       const deepNerChk = document.getElementById('enable-deep-ner-scan');
       if (deepNerChk) deepNerChk.checked = (deepNerVal === 'true');
 
-      const proofreadVal = localStorage.getItem('nov_enable_proofread');
-      const proofreadChk = document.getElementById('enable-proofread-pass');
-      if (proofreadChk) proofreadChk.checked = (proofreadVal === 'true');
+      const bilingualVerifyVal = localStorage.getItem('nov_enable_bilingual_verify');
+      const bilingualVerifyChk = document.getElementById('enable-bilingual-verify');
+      if (bilingualVerifyChk) bilingualVerifyChk.checked = (bilingualVerifyVal !== 'false');
 
       const prefetchVal = localStorage.getItem('nov_enable_prefetch');
       const prefetchChk = document.getElementById('enable-live-prefetch');
