@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.5</title>
+  <title>NovelTranslate AI v2.5.1</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -1012,6 +1012,35 @@
       }
     }
 
+    // ==================== SAFE BRACKET RESCUE HELPER ====================
+    // สกัดคำในวงเล็บจากภาษาจีนมาแปลทดแทนกรณีเกิดวงเล็บว่างเปล่า
+    function rescueEmptyBrackets(thText, srcText) {
+      if (!thText || !srcText) return thText;
+      if (!/【\s*】|\[\s*\]/.test(thText)) return thText;
+
+      const srcBrackets = [];
+      const regexSrc = /【(.*?)】|\[(.*?)\]/g;
+      let m;
+      while ((m = regexSrc.exec(srcText)) !== null) {
+        const val = (m[1] || m[2] || "").trim();
+        if (val) srcBrackets.push(val);
+      }
+
+      if (srcBrackets.length === 0) return thText;
+
+      let bIdx = 0;
+      return thText.replace(/【\s*】|\[\s*\]/g, () => {
+        if (bIdx < srcBrackets.length) {
+          const rawChinese = srcBrackets[bIdx++];
+          // ตรวจในคลังศัพท์ก่อนว่ามีคำแปลไหม
+          const cached = inMemoryGlossaryCache.find(x => x.src === rawChinese);
+          if (cached && cached.tgt) return `【${cached.tgt}】`;
+          return `【${rawChinese}】`;
+        }
+        return '';
+      });
+    }
+
     // ==================== APP STATE & VARIABLES ====================
     let currentTheme = 'sepia';
     let currentFontSize = 18;
@@ -1051,12 +1080,12 @@
     let chapters = [
       {
         id: "guide_chap_1",
-        title: "คู่มือเริ่มต้น v2.5",
+        title: "คู่มือเริ่มต้น v2.5.1",
         paragraphs: [
-          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.5", src: "欢迎来到 NovelTranslate" },
-          { th: "ระบบผสานการทำงานรอบสองภาษา ล็อกสรรพนามเข้มงวด และกรองอักขระในคลังศัพท์สมบูรณ์แบบ", src: "已支持双语交叉校对、人称代词锁定与术语缓存强一致性" }
+          { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.5.1", src: "欢迎来到 NovelTranslate" },
+          { th: "แก้ไขปัญหากรอบคำ 【...】 ว่างเปล่าอย่างสมบูรณ์ พร้อมระบบสกัดคำศัพท์และรักษาความถูกต้องสองภาษา", src: "已完全修复方括号内容丢失并支持双语交叉校对" }
         ],
-        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.5"
+        summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.5.1"
       }
     ];
     let currentChapterIndex = 0;
@@ -1193,7 +1222,7 @@
       }
     }
 
-    // ==================== INLINE TERM HIGHLIGHTING ENGINE (EXACT MATCH & ORDERED) ====================
+    // ==================== INLINE TERM HIGHLIGHTING ENGINE ====================
     async function getActiveGlossaryForCurrentBook() {
       const allItems = await dbGetAllGlossaryItems();
       const activeMap = {};
@@ -1224,7 +1253,6 @@
 
       if (validTerms.length === 0) return plainThText;
 
-      // เรียงจากยาวไปสั้นเสมอ เพื่อไม่ให้คำสั้นแย่งไฮไลต์คำยาว
       validTerms.sort((a, b) => b.cleanTgt.length - a.cleanTgt.length);
 
       const termMap = new Map();
@@ -1685,11 +1713,10 @@
 ข้อความภาษาจีนต้นฉบับของย่อหน้านี้:
 "${selectedParagraphContext.src}"
 
-กฎเหล็กสำคัญที่สุด (ฝ่าฝืนไม่ได้เด็ดขาด):
+กฎเหล็กสำคัญที่สุด:
 1. คำจีนที่คุณตอบกลับมาต้องเป็น **Substring ที่ปรากฏอยู่ในข้อความภาษาจีนต้นฉบับด้านบนแบบเป๊ะๆ 100%** (Exact Substring)
 2. **ห้ามเดา ห้ามแปลคำไทยกลับเป็นจีน และห้ามสร้างคำจีนที่ไม่มีอยู่ในข้อความต้นฉบับเด็ดขาด**
 3. หากมีคำที่เกี่ยวข้องหรือเป็นไปได้ 1–3 คำ ให้ส่งมาในอาร์เรย์ "candidates" โดยเรียงจากคำที่ตรงที่สุดไปหาน้อยที่สุด
-4. หากคำที่เลือกถูกเกลาสำนวนจนรูปประโยคเปลี่ยนไป และไม่สามารถจับคู่กับคำจีนคำใดในย่อหน้านี้ได้ ให้ส่ง "candidates": [] (อาร์เรย์ว่าง)
 
 ตอบกลับเป็น JSON Object เท่านั้น:
 {
@@ -1749,7 +1776,7 @@
             srcEl.style.display = 'block';
             srcEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
           }
-          alert(`⚠️ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้\n\nสาเหตุ: คำนี้อาจเกิดจากการขัดเกลาสำนวนภาษาไทยจนรูปประโยคเปลี่ยนไปจากต้นฉบับ\n(ระบบได้เปิดข้อความภาษาจีนต้นฉบับของย่อหน้านี้ให้แล้ว คุณสามารถลากคลุมตัวอักษรจีนที่ต้องการโดยตรงได้ทันที)`);
+          alert(`⚠️ ไม่พบตัวอักษรจีนที่ตรงกับ "${selectedWordBuffer}" ในย่อหน้านี้`);
         }
       } catch (err) {
         alert("ค้นหาคำจีนไม่สำเร็จ: " + err.message);
@@ -2408,8 +2435,8 @@ ${JSON.stringify(termList)}
       const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนแนว "${genre}"
 บริบทเรื่อง: ${bookCtx} ${authorCtx}
 จงวิเคราะห์ข้อความภาษาจีนต่อไปนี้อย่างละเอียด และสกัดหา "ชื่อเฉพาะใหม่" ทั้งหมดที่สำคัญต่อความต่อเนื่อง โดยเฉพาะ:
-1. **ลำดับขั้นและระดับพลัง (Realms & Stages):** คำบอกระดับพลังทุกคำ เช่น ขอบเขตหลอม, สร้างฐานราก, แก่นทองคำ, ก่อกำเนิด, รวมวิญญาณ ไม่ว่าจะมาเดี่ยวๆ หรือมีคำว่า 'ขั้น/ระดับ/ขอบเขต' ประกอบอยู่ ต้องสกัดออกมาให้ครบ 100%
-2. **ข้อความในวงเล็บทึบ 【 】 หรือ [ ]:** มักเป็นชื่อวิชา ทักษะ หรือสถานะพิเศษ ให้สกัดคำที่อยู่ข้างในออกมาด้วยเสมอ (โดยตัดเครื่องหมายวงเล็บทิ้ง)
+1. **ลำดับขั้นและระดับพลัง (Realms & Stages):** คำบอกระดับพลังทุกคำ เช่น ขอบเขตหลอม, สร้างฐานราก, แก่นทองคำ, ก่อกำเนิด, รวมวิญญาณ
+2. **ข้อความในวงเล็บทึบ 【 】 หรือ [ ]:** มักเป็นชื่อวิชา มรรคผล ธาตุกำเนิด หรือสถานะพิเศษ (เช่น 【大海水】, 【石榴木】, 【城头土】) ให้สกัดคำที่อยู่ข้างในออกมาด้วยเสมอ
 3. **ชื่อเฉพาะทั่วไป:** ตัวละคร, สัตว์อสูร, สถานที่, สำนัก, วิชา, เคล็ดวิชา, สมบัติ, ยาโอสถ
 ${isDeepNer ? `4. **คำประสมพิเศษและฉายา:** ฉายาตัวละคร, คำเรียกเฉพาะของเผ่าพันธุ์, ตำแหน่งเฉพาะถิ่น` : ''}
 
@@ -2598,7 +2625,7 @@ ${isDeepNer ? `4. **คำประสมพิเศษและฉายา:**
       }
     }
 
-    // ==================== BILINGUAL CROSS-VERIFICATION PASS (SINGLE CONSOLIDATED POST-PROCESSOR) ====================
+    // ==================== BILINGUAL CROSS-VERIFICATION PASS (WITH BRACKET RESCUE) ====================
     async function bilingualCrossVerificationPass(paragraphs, modelToUse, signal = null, onStatusUpdate = null) {
       const activeKey = getActiveApiKey();
       const genre = currentBookGenre || "xianxia";
@@ -2625,8 +2652,8 @@ ${genreRule}
 3. **รักษาคำใน [Glossary] ให้ตรงรูปเดิม 100%:**
    - หากย่อหน้าจีนมีคำเหล่านี้ ปลายทางภาษาไทยต้องใช้คำแปลตามนี้เป๊ะๆ ห้ามดัดแปลง ห้ามเติมคำสร้อย:
    [${termList}]
-4. **คำในวงเล็บทึบ 【 】 หรือ [ ] ต้องมีคำแปลครบถ้วน:**
-   - ห้ามส่งวงเล็บเปล่า 【 】 หรือ [ ] กลับมาเด็ดขาด ทุกวงเล็บต้องมีคำแปลภาษาไทยอยู่ข้างในเสมอ
+4. **คำในวงเล็บทึบ 【 】 หรือ [ ] ต้องแปลเป็นภาษาไทยเสมอ:**
+   - ห้ามส่งวงเล็บเปล่า 【 】 หรือ [ ] กลับมาเด็ดขาด ทุกวงเล็บต้องมีคำแปลภาษาไทยที่ถูกต้องอยู่ข้างใน (เช่น 【大海水】 -> 【น้ำมหาสมุทร】, 【石榴木】 -> 【ไม้ทับทิม】)
 5. **ความสะอาดของภาษาไทย:**
    - ผลลัพธ์ต้องเป็นภาษาไทยล้วน 100% ห้ามมีตัวอักษรจีน (Hanzi) หลุดรอดมาเด็ดขาด
    - **ห้ามใส่เครื่องหมายขีดสนทนา —— นำหน้าประโยคเด็ดขาด** ให้ใช้อัญประกาศ '...' หรือ “...” ตามปกติ
@@ -2672,11 +2699,9 @@ ${JSON.stringify(paragraphs.map(p => ({ src: p.src || "", th: p.th || "" })))}
           return paragraphs.map((p, idx) => {
             let verifiedText = verifiedList[idx] || p.th;
             if (typeof verifiedText === 'string') {
-              // Fallback ป้องกันวงเล็บว่างเปล่า
-              if (/【\s*】|\[\s*\]/.test(verifiedText) && p.th && !/【\s*】|\[\s*\]/.test(p.th)) {
-                verifiedText = p.th;
-              }
-              // ล้างอักษรจีนและขีดนำหน้า
+              // 1. ถ้ามีวงเล็บว่างเปล่าหลุดมา กู้ชีพด้วยข้อความจีนต้นฉบับทันที
+              verifiedText = rescueEmptyBrackets(verifiedText, p.src);
+              // 2. ล้างอักษรจีนและขีดนำหน้า
               verifiedText = verifiedText.replace(/[\u4e00-\u9fa5]+/g, '');
               verifiedText = verifiedText.replace(/^——\s*/g, '').replace(/(\n)——\s*/g, '$1').trim();
             }
@@ -2692,7 +2717,7 @@ ${JSON.stringify(paragraphs.map(p => ({ src: p.src || "", th: p.th || "" })))}
       return paragraphs;
     }
 
-    // MONOLINGUAL POLISH PASS (FALLBACK POST-PROCESSOR)
+    // MONOLINGUAL POLISH PASS
     async function proofreadAndPolishParagraphs(paragraphs, modelToUse, signal = null) {
       const activeKey = getActiveApiKey();
       const genre = currentBookGenre || "xianxia";
@@ -2711,7 +2736,7 @@ ${genreRule}
 กฎเหล็กสำคัญที่สุด:
 1. **ล็อกสรรพนามให้คงที่ 100%:** ห้ามสลับ 'ข้า-เจ้า' เป็น 'ผม/ฉัน/คุณ' เด็ดขาด
 2. **รักษาคำเฉพาะใน [Glossary] ไว้ตามรูปเดิม 100%**: [${termList}]
-3. **ข้อความในวงเล็บทึบ 【 】 หรือ [ ] ต้องมีคำแปลเสมอ ห้ามส่งวงเล็บเปล่า**
+3. **ข้อความในวงเล็บทึบ 【 】 หรือ [ ] ต้องมีคำแปลภาษาไทยเสมอ ห้ามส่งวงเล็บเปล่า**
 4. **ห้ามใส่เครื่องหมายขีดสนทนา —— นำหน้าประโยคเด็ดขาด**
 5. **รักษาจำนวนย่อหน้าเดิม 100%**: (${paragraphs.length} ย่อหน้า)
 
@@ -2749,9 +2774,7 @@ ${genreRule}
           return paragraphs.map((p, idx) => {
             let polishedText = polishedList[idx] || p.th;
             if (typeof polishedText === 'string') {
-              if (/【\s*】|\[\s*\]/.test(polishedText) && p.th && !/【\s*】|\[\s*\]/.test(p.th)) {
-                polishedText = p.th;
-              }
+              polishedText = rescueEmptyBrackets(polishedText, p.src);
               polishedText = polishedText.replace(/[\u4e00-\u9fa5]+/g, '');
               polishedText = polishedText.replace(/^——\s*/g, '').replace(/(\n)——\s*/g, '$1').trim();
             }
@@ -2808,7 +2831,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
    - ชื่อเรื่องต้นฉบับ: "${rawBookTitle}"
 3. ห้ามรวบย่อหน้ารวมกันเป็นก้อนเดียวเด็ดขาด แยกย่อหน้าแปลให้ตรงกับต้นฉบับแบบ 1 ต่อ 1
 4. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
-5. **หากพบข้อความในวงเล็บทึบ 【 】 หรือ [ ] ต้องแปลข้อความข้างในเป็นภาษาไทยเสมอ ห้ามทิ้งอักษรจีนไว้ข้างใน และห้ามส่งวงเล็บว่างเปล่า 【 】 เด็ดขาด**
+5. **ข้อความในวงเล็บทึบ 【 】 หรือ [ ] ต้องแปลเป็นภาษาไทยเสมอ ห้ามส่งวงเล็บว่างเปล่า 【 】 เด็ดขาด เช่น 【大海水】 -> 【น้ำมหาสมุทร】, 【石榴木】 -> 【ไม้ทับทิม】, 【城头土】 -> 【ดินหัวเมือง】**
 6. ในบทสนทนา ให้ใช้เครื่องหมายอัญประกาศ ' หรือ “ ” ห้ามใช้เครื่องหมาย " ซ้ำซ้อน และ **ห้ามใส่ขีด —— นำหน้าบทสนทนา**
 7. สรุปเหตุการณ์สำคัญของบทนี้ในฟิลด์ "chapter_summary" ความยาว 1-2 ประโยค เพื่อใช้ต่อบริบทในบทถัดไป
 8. สกัด "used_entities" (ชื่อเฉพาะสำคัญและระดับพลังที่ปรากฏในบทนี้) แนบกลับมาด้วยเพื่อบันทึกลงคลังศัพท์
@@ -2852,6 +2875,12 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       let translatedBookTitle = parsedResult.translatedBookTitle || rawBookTitle;
       let chapterSummary = parsedResult.chapter_summary || "";
 
+      // ป้องกันวงเล็บว่างเปล่าตั้งแต่รอบแรกทันที
+      paragraphs = paragraphs.map(p => ({
+        th: rescueEmptyBrackets(p.th, p.src),
+        src: p.src
+      }));
+
       if (Array.isArray(parsedResult.used_entities) && parsedResult.used_entities.length > 0) {
         const existingItems = await dbGetAllGlossaryItems();
         for (const ent of parsedResult.used_entities) {
@@ -2880,7 +2909,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
         }
       }
 
-      // ตรวจสอบระบบ Post-Processor: หากเปิดระบบสองภาษา ให้ใช้ระบบสองภาษาเป็นหลักเพื่อความประหยัดและแม่นยำ
+      // ตรวจสอบระบบ Post-Processor
       const isBilingualVerifyEnabled = localStorage.getItem('nov_enable_bilingual_verify') !== 'false';
       const isProofreadEnabled = localStorage.getItem('nov_enable_proofread') === 'true';
 
@@ -2894,6 +2923,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       const formattedParas = [];
       paragraphs.forEach(item => {
         let cleanTh = item.th || "";
+        cleanTh = rescueEmptyBrackets(cleanTh, item.src);
         cleanTh = cleanTh.replace(/^——\s*/g, '').replace(/(\n)——\s*/g, '$1');
 
         if (cleanTh.length > 350 && (cleanTh.includes('”') || cleanTh.includes('"'))) {
@@ -3918,7 +3948,6 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
       return 'book_' + btoa(url.split('?')[0]).substring(0, 16);
     }
 
-    // 10 UNIVERSAL GENRES INSTRUCTION ENGINE
     function getGenreInstruction(genre) {
       switch (genre) {
         case 'xianxia':
