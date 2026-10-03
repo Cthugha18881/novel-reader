@@ -1,1035 +1,569 @@
-// ==================== APP CONTROLLER & VIEWER ====================
-let currentTheme = 'sepia';
-let currentFontSize = 18;
-let currentUrl = "";
-let nextUrlCalculated = "";
-let isPrefetching = false;
-let currentBookId = "default_novel";
-let currentBookTitle = "NovelTranslate";
-let currentAuthor = "";
+// ============================================================================
+// NOVELTRANSLATE AI - MAIN CONTROLLER (app.js)
+// ============================================================================
+
+let currentBookId = localStorage.getItem('nov_current_book_id') || null;
+let currentBookTitle = "ยังไม่ได้เลือกเรื่อง";
 let currentBookGenre = "xianxia";
-let isUserCustomTitle = false;
-
-let bookIdForGenreEdit = null;
-let termBeingEditedSrc = null;
-
-let renderedWindowIndices = []; 
-let isAppendingNextChapter = false;
-let chapterIntersectionObserver = null;
+let currentAuthor = "";
+let chapters = [];
+let currentChapterIndex = 0;
+let currentFontSize = parseInt(localStorage.getItem('nov_font_size') || '18', 10);
+let currentTheme = localStorage.getItem('nov_theme') || 'theme-sepia';
 
 let selectedWordBuffer = "";
-let isSelectedChinese = false;
-let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
+let currentSelectedParagraphIndex = null;
 
-let chapters = [
-  {
-    id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v2.5.1",
-    paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.5.1", src: "欢迎来到 NovelTranslate" },
-      { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
-    ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.5.1"
-  }
-];
-let currentChapterIndex = 0;
+// ---------------- INITIALIZATION ----------------
 
-function toggleFullscreenMode() {
-  const isCurrentlyFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains('is-fullscreen');
+document.addEventListener('DOMContentLoaded', async () => {
+  applyTheme(currentTheme);
+  applyFontSize(currentFontSize);
+  initModalListeners();
+  initSelectionDetection();
+  initScrollHandler();
+  initSettingsUI();
 
-  if (!isCurrentlyFullscreen) {
-    const elem = document.documentElement;
-    if (elem.requestFullscreen) elem.requestFullscreen().catch(() => {});
-    else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
-    document.body.classList.add('is-fullscreen');
-    document.getElementById('fullscreen-icon').innerText = '🗗';
-    document.getElementById('fullscreen-btn').title = 'ออกจากโหมดเต็มจอ';
-  } else {
-    if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
-    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
-    document.body.classList.remove('is-fullscreen');
-    document.getElementById('fullscreen-icon').innerText = '⛶';
-    document.getElementById('fullscreen-btn').title = 'โหมดอ่านเต็มจอ';
-  }
-}
+  await refreshLocalData();
+});
 
-function setupFullscreenListener() {
-  document.addEventListener('fullscreenchange', () => {
-    const isFS = !!document.fullscreenElement;
-    if (isFS) {
-      document.body.classList.add('is-fullscreen');
-      document.getElementById('fullscreen-icon').innerText = '🗗';
-      document.getElementById('fullscreen-btn').title = 'ออกจากโหมดเต็มจอ';
+async function refreshLocalData() {
+  if (typeof dbInit === 'function') await dbInit();
+  if (typeof loadGlossaryFromDb === 'function') await loadGlossaryFromDb();
+
+  if (currentBookId && typeof dbGetBook === 'function') {
+    const book = await dbGetBook(currentBookId);
+    if (book) {
+      currentBookTitle = book.title || "นิยาย";
+      currentBookGenre = book.genre || "xianxia";
+      currentAuthor = book.author || "";
+      chapters = await dbGetChaptersByBook(currentBookId);
+      chapters.sort((a, b) => a.order - b.order);
+
+      const savedOrder = parseInt(localStorage.getItem(`nov_last_read_${currentBookId}`) || '1', 10);
+      currentChapterIndex = chapters.findIndex(c => c.order === savedOrder);
+      if (currentChapterIndex < 0) currentChapterIndex = 0;
+
+      renderCurrentChapter();
     } else {
-      document.body.classList.remove('is-fullscreen');
-      document.getElementById('fullscreen-icon').innerText = '⛶';
-      document.getElementById('fullscreen-btn').title = 'โหมดอ่านเต็มจอ';
+      currentBookId = null;
+      renderEmptyState();
     }
-  });
-}
-
-function cycleTheme() {
-  const themes = ['sepia', 'light', 'dark'];
-  currentTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length];
-  document.getElementById('app-body').className = 'theme-' + currentTheme;
-  if (document.body.classList.contains('is-fullscreen')) document.body.classList.add('is-fullscreen');
-  
-  const themeText = currentTheme === 'sepia' ? 'ถนอมสายตา' : (currentTheme === 'light' ? 'สว่าง' : 'มืด');
-  const mobileBtn = document.getElementById('mobile-theme-btn');
-  const desktopBtn = document.getElementById('desktop-theme-btn');
-  if (mobileBtn) mobileBtn.innerText = themeText;
-  if (desktopBtn) desktopBtn.innerText = themeText;
-  localStorage.setItem('nov_theme', currentTheme);
-}
-
-function adjustFontSize(delta) {
-  currentFontSize = Math.min(28, Math.max(14, currentFontSize + delta));
-  document.getElementById('reading-content').style.fontSize = currentFontSize + 'px';
-  localStorage.setItem('nov_font_size', currentFontSize);
-}
-
-function openModal(id) { 
-  const modal = document.getElementById(id);
-  if (modal) {
-    modal.classList.add('active'); 
-    document.body.classList.add('modal-open');
+  } else {
+    renderEmptyState();
   }
 }
 
-function closeModal(id) { 
-  const modal = document.getElementById(id);
-  if (modal) {
-    modal.classList.remove('active'); 
-    if (!document.querySelector('.modal-overlay.active')) {
-      document.body.classList.remove('modal-open');
-    }
-  }
-}
-
-function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
-  let parasHtml = '';
-  chap.paragraphs.forEach((p, pIdx) => {
-    const highlightedTh = applyInlineTermHighlighting(p.th || "", activeTerms);
-    parasHtml += `
-      <div class="para-item" id="para-box-${chapIdx}-${pIdx}">
-        <div class="para-th" onclick="toggleParagraphSrc(event, '${chapIdx}-${pIdx}')" data-unique-key="${chapIdx}-${pIdx}" data-th="${encodeURIComponent(p.th || '')}" data-src="${encodeURIComponent(p.src || '')}">${highlightedTh}</div>
-        <div class="para-src" id="src-${chapIdx}-${pIdx}">${p.src || "ไม่มีข้อความต้นฉบับ"}</div>
-      </div>
-    `;
-  });
-
-  return `
-    <div class="chapter-block" id="chapter-block-${chapIdx}" data-index="${chapIdx}" data-id="${chap.id}">
-      <div class="chapter-block-divider">
-        <span class="chapter-divider-pill">📖 ${chap.title}</span>
-      </div>
-      <div class="chapter-body">${parasHtml}</div>
+function renderEmptyState() {
+  document.getElementById('display-book-title').textContent = "ยินดีต้อนรับสู่ NovelTranslate AI";
+  document.getElementById('display-chap-title').textContent = "กรุณาวางลิงก์นิยาย หรือเลือกจากชั้นหนังสือ";
+  document.getElementById('reading-content').innerHTML = `
+    <div style="text-align: center; padding: 60px 20px; opacity: 0.7;">
+      <div style="font-size: 48px; margin-bottom: 12px;">📖</div>
+      <p style="font-size: 16px;">ยังไม่มีนิยายที่กำลังอ่านอยู่ในขณะนี้</p>
+      <button class="btn btn-primary" style="margin-top: 10px;" onclick="openModal('import-modal')">+ วางลิงก์นิยายเพื่อเริ่มแปล</button>
     </div>
   `;
 }
 
-function updateInfiniteStatusBanner(htmlContent = '', isVisible = true) {
-  const banner = document.getElementById('infinite-status-banner');
-  if (!banner) return;
-  if (!isVisible || !htmlContent) {
-    banner.style.display = 'none';
-    banner.innerHTML = '';
-  } else {
-    banner.style.display = 'block';
-    banner.innerHTML = htmlContent;
-  }
+// ---------------- READING VIEW RENDERING ----------------
+
+function updateChapterHeaderUI(chap) {
+  const bookTitleEl = document.getElementById('display-book-title');
+  const chapTitleEl = document.getElementById('display-chap-title');
+
+  if (bookTitleEl) bookTitleEl.textContent = currentBookTitle;
+  if (chapTitleEl) chapTitleEl.textContent = chap.title || ("ตอนที่ " + chap.order);
 }
 
-async function renderVirtualWindow(targetIdx, scrollToTop = false) {
-  const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
-  const container = document.getElementById('reading-content');
-  container.style.fontSize = currentFontSize + 'px';
+function renderCurrentChapter() {
+  if (!chapters || chapters.length === 0 || !chapters[currentChapterIndex]) {
+    renderEmptyState();
+    return;
+  }
 
-  currentChapterIndex = Math.max(0, Math.min(targetIdx, chapters.length - 1));
   const curChap = chapters[currentChapterIndex];
+  localStorage.setItem(`nov_last_read_${currentBookId}`, curChap.order);
 
-  document.getElementById('display-book-title').innerText = currentBookTitle;
-  document.getElementById('display-chap-title').innerText = curChap.title;
+  updateChapterHeaderUI(curChap);
 
-  const activeTerms = await getActiveGlossaryForCurrentBook();
-
-  if (!isInfinite) {
-    if (chapterIntersectionObserver) {
-      chapterIntersectionObserver.disconnect();
-      chapterIntersectionObserver = null;
-    }
-    renderedWindowIndices = [currentChapterIndex];
-    container.innerHTML = buildChapterBlockHtml(curChap, currentChapterIndex, activeTerms);
-    document.getElementById('manual-chap-nav').style.display = 'flex';
-    updateInfiniteStatusBanner('', false);
-    if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
-    saveReadingPointer(currentChapterIndex);
-    return;
-  }
-
-  document.getElementById('manual-chap-nav').style.display = 'none';
-
-  const newIndices = [];
-  if (currentChapterIndex > 0) newIndices.push(currentChapterIndex - 1);
-  newIndices.push(currentChapterIndex);
-  if (currentChapterIndex < chapters.length - 1) newIndices.push(currentChapterIndex + 1);
-
-  renderedWindowIndices = newIndices;
-
-  let combinedHtml = '';
-  for (const idx of renderedWindowIndices) {
-    combinedHtml += buildChapterBlockHtml(chapters[idx], idx, activeTerms);
-  }
-
-  container.innerHTML = combinedHtml;
-  setupChapterIntersectionObserver();
-
-  if (scrollToTop) {
-    const targetEl = document.getElementById(`chapter-block-${currentChapterIndex}`);
-    if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    else window.scrollTo({ top: 0, behavior: 'smooth' });
-  }
-
-  saveReadingPointer(currentChapterIndex);
-  checkAndRefreshBottomStatus();
-  checkProactivePrefetch();
-}
-
-async function appendNextChapterToWindow() {
-  const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
-  if (!isInfinite) return;
-
-  if (isAppendingNextChapter) return;
-  const nextIdx = currentChapterIndex + 1;
-  if (nextIdx >= chapters.length) return;
-
-  const nextChap = chapters[nextIdx];
-  if (document.getElementById(`chapter-block-${nextIdx}`) || 
-      document.querySelector(`[data-id="${nextChap.id}"]`)) {
-    return;
-  }
-
-  isAppendingNextChapter = true;
   const container = document.getElementById('reading-content');
-  const activeTerms = await getActiveGlossaryForCurrentBook();
+  container.innerHTML = "";
 
-  const tempDiv = document.createElement('div');
-  tempDiv.innerHTML = buildChapterBlockHtml(nextChap, nextIdx, activeTerms);
-  container.appendChild(tempDiv.firstElementChild);
-  
-  if (!renderedWindowIndices.includes(nextIdx)) {
-    renderedWindowIndices.push(nextIdx);
+  const paragraphs = curChap.paragraphs || [];
+  if (paragraphs.length === 0) {
+    container.innerHTML = `<div style="text-align: center; padding: 40px; opacity: 0.6;">(ไม่มีเนื้อหาในตอนนี้)</div>`;
+    return;
   }
 
-  if (renderedWindowIndices.length > 3) {
-    const removeIdx = renderedWindowIndices.shift();
-    const removeEl = document.getElementById(`chapter-block-${removeIdx}`);
-    if (removeEl) removeEl.remove();
-  }
-
-  setupChapterIntersectionObserver();
-  isAppendingNextChapter = false;
-  checkAndRefreshBottomStatus();
-  checkProactivePrefetch();
-}
-
-function setupChapterIntersectionObserver() {
-  const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
-  if (!isInfinite) return;
-
-  if (chapterIntersectionObserver) chapterIntersectionObserver.disconnect();
-
-  const options = {
-    root: null,
-    rootMargin: '-20% 0px -60% 0px',
-    threshold: 0
-  };
-
-  chapterIntersectionObserver = new IntersectionObserver((entries) => {
-    entries.forEach(entry => {
-      if (entry.isIntersecting) {
-        const idx = parseInt(entry.target.getAttribute('data-index'), 10);
-        if (!isNaN(idx) && chapters[idx]) {
-          currentChapterIndex = idx;
-          document.getElementById('display-chap-title').innerText = chapters[idx].title;
-          saveReadingPointer(idx);
-          checkAndRefreshBottomStatus();
-          checkProactivePrefetch();
-        }
-      }
-    });
-  }, options);
-
-  document.querySelectorAll('.chapter-block').forEach(block => {
-    chapterIntersectionObserver.observe(block);
+  paragraphs.forEach((p, idx) => {
+    const pEl = document.createElement('p');
+    pEl.className = 'read-paragraph';
+    pEl.dataset.pIndex = idx;
+    pEl.innerHTML = renderParagraphWithGlossaryHighlights(p.th || "");
+    container.appendChild(pEl);
   });
+
+  window.scrollTo({ top: 0, behavior: 'instant' });
+  attachTermClickListeners();
 }
 
-function checkProactivePrefetch() {
-  const isPrefetchEnabled = localStorage.getItem('nov_enable_prefetch') !== 'false';
-  if (!isPrefetchEnabled || isPrefetching) return;
+function renderParagraphWithGlossaryHighlights(thaiText) {
+  let safeHtml = escapeHtml(thaiText);
+  const cache = window.inMemoryGlossaryCache || [];
+  if (cache.length === 0) return safeHtml;
 
-  if (currentChapterIndex >= chapters.length - 1) {
-    triggerReadingPrefetchIfEnabled(false);
+  const relevantTerms = cache.filter(t => 
+    t.scope === 'global' || (Array.isArray(t.books) && t.books.includes(currentBookId))
+  );
+
+  relevantTerms.sort((a, b) => (b.tgt || "").length - (a.tgt || "").length);
+
+  for (const term of relevantTerms) {
+    if (!term.tgt || term.tgt.length < 2) continue;
+    const escapedTgt = term.tgt.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(`(${escapedTgt})`, 'g');
+    safeHtml = safeHtml.replace(regex, `<span class="glossary-term-highlight" data-src="${escapeHtml(term.src)}" data-tgt="${escapeHtml(term.tgt)}" data-cat="${term.category || 'character'}">$1</span>`);
   }
+
+  return safeHtml;
 }
 
-function checkAndRefreshBottomStatus() {
-  const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
-  if (!isInfinite) {
-    updateInfiniteStatusBanner('', false);
-    return;
-  }
+// ---------------- TERM POPOVER & SELECTION DETECTION ----------------
 
-  if (currentChapterIndex < chapters.length - 1) {
-    updateInfiniteStatusBanner('', false);
-    return;
-  }
+function attachTermClickListeners() {
+  const spans = document.querySelectorAll('.glossary-term-highlight');
+  const popover = document.getElementById('term-popover');
+  const popText = document.getElementById('popover-text');
+  const editBtn = document.getElementById('popover-edit-btn');
 
-  const lastChap = chapters[chapters.length - 1];
-  const targetUrl = lastChap.nextUrl;
+  spans.forEach(span => {
+    span.onclick = (e) => {
+      e.stopPropagation();
+      const src = span.dataset.src;
+      const tgt = span.dataset.tgt;
+      const cat = span.dataset.cat;
 
-  if (isPrefetching) {
-    updateInfiniteStatusBanner(`
-      <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
-        <span class="spinner-icon"></span> กำลังดึงและแปลตอนถัดไปให้อัตโนมัติ...
-      </div>
-      <div style="font-size: 11px; opacity: 0.7; margin-top: 4px;">
-        เมื่อแปลเสร็จ เนื้อหาจะต่อท้ายสายตาของคุณทันที
-      </div>
-    `, true);
-  } else if (targetUrl) {
-    updateInfiniteStatusBanner(`
-      <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">
-        อ่านจบ "${lastChap.title}" แล้ว
-      </div>
-      <button class="btn btn-primary" style="padding: 6px 14px;" onclick="triggerManualFetchNext()">
-        ⚡ แปลตอนถัดไปทันที
-      </button>
-    `, true);
-  } else {
-    updateInfiniteStatusBanner(`
-      <div style="font-size: 13px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">
-        ⚠️ ไม่พบ URL ของตอนถัดไป (เลข URL อาจกระโดดข้าม)
-      </div>
-      <div style="font-size: 11px; opacity: 0.75; margin-bottom: 10px;">
-        กรุณาก๊อปปี้ URL ตอนถัดไปจากหน้าเว็บจริงมาวางเพื่อแปลต่อ
-      </div>
-      <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="promptFixNextUrlFromBottom()">
-        🔗 วาง URL ตอนถัดไป
-      </button>
-    `, true);
-  }
-}
+      popText.innerHTML = `<b>${escapeHtml(src)}</b> ➔ ${escapeHtml(tgt)} <span style="font-size: 10px; opacity: 0.7;">[${cat}]</span>`;
+      
+      const rect = span.getBoundingClientRect();
+      popover.style.display = 'flex';
+      popover.style.top = `${window.scrollY + rect.top - 42}px`;
+      popover.style.left = `${Math.max(10, window.scrollX + rect.left)}px`;
 
-function triggerManualFetchNext() { triggerReadingPrefetchIfEnabled(true); }
+      editBtn.onclick = () => openEditTermModal(src, tgt, cat);
+    };
+  });
 
-function promptFixNextUrlFromBottom() {
-  const lastChap = chapters[chapters.length - 1];
-  const input = prompt(`กรุณาวาง URL ของตอนถัดไปสำหรับ "${lastChap.title}":`, "");
-  if (input && input.trim()) {
-    const cleanUrl = input.trim();
-    lastChap.nextUrl = cleanUrl;
-    dbSaveChapter(lastChap);
-    nextUrlCalculated = cleanUrl;
-    triggerReadingPrefetchIfEnabled(true);
-  }
-}
-
-function setupScrollMonitor() {
-  window.addEventListener('scroll', () => {
-    const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
-    if (!isInfinite) return;
-
-    if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 1200) {
-      if (currentChapterIndex < chapters.length - 1) appendNextChapterToWindow();
-      else checkProactivePrefetch();
+  document.addEventListener('click', (e) => {
+    if (popover && !popover.contains(e.target) && !e.target.classList.contains('glossary-term-highlight')) {
+      popover.style.display = 'none';
     }
-  }, { passive: true });
-}
-
-async function saveReadingPointer(idx) {
-  if (currentBookId === "default_novel" || !chapters[idx]) return;
-  const targetChap = chapters[idx];
-
-  const books = await dbGetAllBooks();
-  const curBook = books.find(b => b.bookId === currentBookId);
-
-  await dbSaveBook({
-    bookId: currentBookId,
-    title: currentBookTitle,
-    author: currentAuthor,
-    genre: currentBookGenre,
-    isUserCustomTitle: isUserCustomTitle,
-    lastChapterId: targetChap.id,
-    lastChapterIndex: idx,
-    lastChapterTitle: targetChap.title,
-    totalChapters: chapters.length,
-    lastUrl: targetChap.sourceUrl || currentUrl,
-    updatedAt: Date.now()
   });
-  localStorage.setItem('nov_last_book_id', currentBookId);
 }
 
-async function promptEditBookTitle() {
-  const newTitle = prompt("แก้ไขชื่อนิยายเรื่องนี้ (ชื่อที่ตั้งใหม่จะถูกล็อกไว้ถาวร):", currentBookTitle);
-  if (newTitle !== null && newTitle.trim()) {
-    currentBookTitle = newTitle.trim();
-    isUserCustomTitle = true;
-    document.getElementById('display-book-title').innerText = currentBookTitle;
-    saveReadingPointer(currentChapterIndex);
-  }
-}
+function initSelectionDetection() {
+  const selectionBar = document.getElementById('selection-bar');
+  const previewText = document.getElementById('sel-preview-text');
 
-async function promptEditChapterTitle() {
-  const chap = chapters[currentChapterIndex];
-  const newTitle = prompt("แก้ไขชื่อตอนปัจจุบัน:", chap.title);
-  if (newTitle !== null && newTitle.trim()) {
-    chap.title = newTitle.trim();
-    document.getElementById('display-chap-title').innerText = chap.title;
-    await dbSaveChapter(chap);
-    saveReadingPointer(currentChapterIndex);
-  }
-}
-
-function toggleParagraphSrc(e, uniqueKey) {
-  if (e && e.target && e.target.closest('.inline-term-highlight')) return;
-  const selection = window.getSelection();
-  if (selection && selection.toString().trim().length > 0) return;
-
-  const srcEl = document.getElementById(`src-${uniqueKey}`);
-  if (srcEl) {
-    srcEl.style.display = (srcEl.style.display === 'block') ? 'none' : 'block';
-  }
-}
-
-function setupSelectionMonitor() {
-  const checkSelection = () => {
+  document.addEventListener('selectionchange', () => {
     const sel = window.getSelection();
     const text = sel ? sel.toString().trim() : "";
 
-    if (text && text.length >= 1 && text.length <= 40) {
+    if (text.length >= 1 && text.length <= 50) {
       selectedWordBuffer = text;
-      isSelectedChinese = /[\u4e00-\u9fa5]/.test(text);
+      previewText.textContent = text;
+      selectionBar.style.display = 'flex';
 
-      const tag = document.getElementById('sel-tag-label');
-      const preview = document.getElementById('sel-preview-text');
-      const pairBtn = document.getElementById('reverse-pair-btn');
-
-      tag.innerText = isSelectedChinese ? "คำจีนที่เลือก:" : "คำไทยที่เลือก:";
-      preview.innerText = text;
-      
-      let paraThEl = sel.anchorNode;
-      while (paraThEl && !paraThEl.classList?.contains('para-th')) {
-        paraThEl = paraThEl.parentElement;
+      let node = sel.anchorNode;
+      while (node && !node.classList?.contains('read-paragraph')) {
+        node = node.parentNode;
       }
-      if (paraThEl) {
-        selectedParagraphContext.th = decodeURIComponent(paraThEl.getAttribute('data-th') || "");
-        selectedParagraphContext.src = decodeURIComponent(paraThEl.getAttribute('data-src') || "");
-        selectedParagraphContext.uniqueKey = paraThEl.getAttribute('data-unique-key') || "";
+      if (node && node.dataset.pIndex) {
+        currentSelectedParagraphIndex = parseInt(node.dataset.pIndex, 10);
       }
-
-      pairBtn.style.display = isSelectedChinese ? 'none' : 'inline-flex';
-      document.getElementById('selection-bar').style.display = 'flex';
     }
-  };
-
-  document.addEventListener('mouseup', () => setTimeout(checkSelection, 50));
-  document.addEventListener('touchend', () => setTimeout(checkSelection, 100));
+  });
 }
 
 function dismissSelectionBar() {
-  document.getElementById('selection-bar').style.display = 'none';
-  if (window.getSelection) window.getSelection().removeAllRanges();
+  const bar = document.getElementById('selection-bar');
+  if (bar) bar.style.display = 'none';
+  selectedWordBuffer = "";
+  window.getSelection()?.removeAllRanges();
 }
 
-function abortAllRunningProcesses() {
-  if (activeAbortController) {
-    activeAbortController.abort();
-    activeAbortController = null;
-  }
-  isPrefetching = false;
-  document.getElementById('prefetch-badge').style.display = 'none';
-  checkAndRefreshBottomStatus();
+async function addFromSelectionBar() {
+  if (!selectedWordBuffer) return;
+  const word = selectedWordBuffer;
+  dismissSelectionBar();
+  openEditTermModal("", word, "character");
 }
 
-async function deleteSelectedChapters(bookId) {
-  const chks = document.querySelectorAll(`.chk-book-${bookId}:checked`);
-  const count = chks.length;
-  if (count === 0) return;
-
-  if (!confirm(`คุณต้องการลบตอนที่เลือกจำนวน ${count} ตอน ออกจากเครื่องใช่หรือไม่?`)) return;
-
-  abortAllRunningProcesses();
-
-  const idsToDelete = Array.from(chks).map(c => c.value);
-  await dbDeleteMultipleChapters(idsToDelete);
-
-  const remainingChaps = await dbGetChaptersByBook(bookId);
-  remainingChaps.sort((x, y) => x.order - y.order);
-
-  const books = await dbGetAllBooks();
-  const targetBook = books.find(b => b.bookId === bookId);
-
-  if (targetBook) {
-    if (remainingChaps.length > 0) {
-      let safeActiveId = targetBook.lastChapterId;
-      if (!remainingChaps.some(c => c.id === safeActiveId)) safeActiveId = remainingChaps[0].id;
-      const safeActiveChap = remainingChaps.find(c => c.id === safeActiveId) || remainingChaps[0];
-      const safeActiveIdx = remainingChaps.indexOf(safeActiveChap);
-      const latestChap = remainingChaps[remainingChaps.length - 1];
-
-      await dbSaveBook({
-        ...targetBook,
-        totalChapters: remainingChaps.length,
-        lastChapterId: safeActiveChap.id,
-        lastChapterTitle: safeActiveChap.title,
-        lastChapterIndex: safeActiveIdx,
-        lastUrl: latestChap.sourceUrl
-      });
-    } else {
-      await dbSaveBook({
-        ...targetBook,
-        totalChapters: 0,
-        lastChapterId: '',
-        lastChapterTitle: "ไม่มีตอน",
-        lastChapterIndex: 0,
-        lastUrl: ''
-      });
-    }
-  }
-
-  if (currentBookId === bookId) await loadBookFromDB(bookId);
-  else refreshShelfViewOnly(bookId);
-}
-
-async function loadBookFromDB(bookId, specifyChapIdOrIdx = null) {
-  const books = await dbGetAllBooks();
-  const targetBook = books.find(b => b.bookId === bookId);
-  if (!targetBook) return;
-
-  const loadedChaps = await dbGetChaptersByBook(bookId);
-  if (loadedChaps.length > 0) {
-    loadedChaps.sort((a, b) => a.order - b.order);
-    chapters = loadedChaps;
-    currentBookId = bookId;
-    currentBookTitle = targetBook.title;
-    currentAuthor = targetBook.author || "";
-    currentBookGenre = targetBook.genre || "xianxia";
-    isUserCustomTitle = targetBook.isUserCustomTitle || false;
-
-    if (typeof specifyChapIdOrIdx === 'string') {
-      const foundIdx = chapters.findIndex(c => c.id === specifyChapIdOrIdx);
-      currentChapterIndex = (foundIdx !== -1) ? foundIdx : 0;
-    } else if (typeof specifyChapIdOrIdx === 'number') {
-      currentChapterIndex = Math.min(specifyChapIdOrIdx, chapters.length - 1);
-    } else if (targetBook.lastChapterId) {
-      const foundIdx = chapters.findIndex(c => c.id === targetBook.lastChapterId);
-      currentChapterIndex = (foundIdx !== -1) ? foundIdx : Math.min(targetBook.lastChapterIndex || 0, chapters.length - 1);
-    } else {
-      currentChapterIndex = Math.min(targetBook.lastChapterIndex || 0, chapters.length - 1);
-    }
-
-    const currentActiveChap = chapters[currentChapterIndex];
-    const latestChap = chapters[chapters.length - 1];
-
-    currentUrl = currentActiveChap.sourceUrl || targetBook.lastUrl || "";
-    nextUrlCalculated = latestChap.nextUrl;
-    
-    renderVirtualWindow(currentChapterIndex, true);
-    refreshShelfViewOnly(bookId);
-  } else {
-    chapters = [{
-      id: "empty_chap",
-      title: "ไม่มีตอนในเครื่อง",
-      paragraphs: [{ th: "นิยายเรื่องนี้ยังไม่มีตอนที่บันทึกไว้ หรือถูกลบออกไปทั้งหมดแล้ว", src: "暂无内容" }],
-      summary: ""
-    }];
-    currentChapterIndex = 0;
-    renderVirtualWindow(0, true);
-    refreshShelfViewOnly(bookId);
-  }
-}
-
-async function removeBookFromShelf(e, bookId) {
-  e.stopPropagation();
-  if (!confirm("ต้องการลบนิยายเรื่องนี้และตอนที่เก็บไว้ทั้งหมดในเครื่องใช่หรือไม่?")) return;
-  abortAllRunningProcesses();
-  await dbDeleteBook(bookId);
-  openBookshelfModal();
-}
-
-async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
-  const isPrefetchEnabled = localStorage.getItem('nov_enable_prefetch') !== 'false';
-  if (!isPrefetchEnabled && !isManualClick) return;
-
-  const lastChap = chapters[chapters.length - 1];
-  const targetUrl = lastChap ? lastChap.nextUrl : null;
-  
-  if (!targetUrl) {
-    checkAndRefreshBottomStatus();
+async function findChineseForSelection() {
+  if (!selectedWordBuffer || currentSelectedParagraphIndex === null) return;
+  const thaiWord = selectedWordBuffer;
+  const curChap = chapters[currentChapterIndex];
+  const p = curChap?.paragraphs?.[currentSelectedParagraphIndex];
+  if (!p || !p.src) {
+    alert("ไม่พบข้อความภาษาจีนต้นฉบับในย่อหน้านี้");
     return;
   }
-  
-  if (isPrefetching) return;
-  isPrefetching = true;
-  checkAndRefreshBottomStatus();
+
+  showActionToast(`กำลังค้นหาอักษรจีนสำหรับ "${thaiWord}"...`);
+  try {
+    const matchedSrc = await pairThaiToSourceParagraph(thaiWord, p.src);
+    hideActionToast();
+    if (matchedSrc) {
+      dismissSelectionBar();
+      openEditTermModal(matchedSrc, thaiWord, "character");
+    } else {
+      alert(`ไม่พบคำจีนที่ตรงกับ "${thaiWord}" ในย่อหน้านี้`);
+    }
+  } catch (err) {
+    hideActionToast();
+    alert(`เกิดข้อผิดพลาด: ${err.message}`);
+  }
+}
+
+// ---------------- RETRANSLATE CURRENT CHAPTER ----------------
+
+async function retranslateCurrentChapter() {
+  if (!chapters || chapters.length === 0 || !chapters[currentChapterIndex]) {
+    alert("ไม่พบบทนิยายที่จะแปลใหม่");
+    return;
+  }
+
+  const cur = chapters[currentChapterIndex];
+  const rawChinese = (cur.paragraphs || []).map(p => p.src || "").filter(Boolean).join("\n\n");
+  if (!rawChinese.trim()) {
+    alert("บทนี้ไม่มีข้อมูลภาษาจีนต้นฉบับเก็บไว้ จึงไม่สามารถแปลใหม่ได้");
+    return;
+  }
+
+  if (!confirm(`ต้องการแปล "ตอนที่ ${cur.order}" ใหม่อีกครั้งเพื่ออัปเดตคำศัพท์ใช่หรือไม่?`)) return;
+
+  showActionToast(`กำลังแปลตอนที่ ${cur.order} ใหม่อีกครั้ง...`);
 
   try {
-    const bookChaps = await dbGetChaptersByBook(currentBookId);
-    if (bookChaps.some(c => c.sourceUrl === targetUrl)) {
-      document.getElementById('prefetch-badge').style.display = 'inline-block';
-      isPrefetching = false;
-      checkAndRefreshBottomStatus();
-      return;
-    }
+    const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-2.5-flash").trim();
+    const transResult = await executeApiCall(
+      rawChinese,
+      primaryModel,
+      cur.title,
+      currentBookTitle
+    );
 
-    updateInfiniteStatusBanner(`
-      <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
-        <span class="spinner-icon"></span> กำลังดึงเนื้อหาตอนถัดไปจากเว็บต้นฉบับ...
-      </div>
-    `, true);
+    cur.title = transResult.chapterTitle || cur.title;
+    cur.paragraphs = transResult.paragraphs || [];
 
-    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl);
-    if (author) currentAuthor = author;
-    
-    updateInfiniteStatusBanner(`
-      <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
-        <span class="spinner-icon"></span> กำลังวิเคราะห์ชื่อเฉพาะและแปล "${rawChapTitle}" ผ่าน AI...
-      </div>
-    `, true);
+    await dbSaveChapter(cur);
+    hideActionToast();
+    renderCurrentChapter();
+    alert("แปลบทนี้ใหม่เรียบร้อยแล้ว");
+  } catch (err) {
+    hideActionToast();
+    console.error(err);
+    alert(`เกิดข้อผิดพลาดในการแปลใหม่: ${err.message}`);
+  }
+}
 
-    const prevSummary = lastChap?.summary || "";
+// ---------------- CHAPTER NAVIGATION & SCROLL ----------------
 
-    const result = await translateTextWithPingPong(text, (msg) => {
-      updateInfiniteStatusBanner(`
-        <div style="font-size: 13px; font-weight: 500; color: #b45309;">
-          <span class="spinner-icon"></span> ${msg}
-        </div>
-      `, true);
-    }, rawChapTitle, rawBookTitle, prevSummary);
-    
-    const currentAll = await dbGetChaptersByBook(currentBookId);
-    if (currentAll.some(c => c.sourceUrl === targetUrl)) {
-      isPrefetching = false;
-      checkAndRefreshBottomStatus();
-      return;
-    }
-
-    const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
-    const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
-
-    const newChap = {
-      id: `${currentBookId}_chap_${Date.now()}`,
-      bookId: currentBookId,
-      order: maxOrder + 1,
-      title: chapTitle,
-      paragraphs: result.paragraphs,
-      summary: result.summary || "",
-      sourceUrl: targetUrl,
-      nextUrl: nextUrl
-    };
-
-    await dbSaveChapter(newChap);
-
-    const books = await dbGetAllBooks();
-    const curBook = books.find(b => b.bookId === currentBookId);
-    if (curBook) {
-      const resolvedTitle = curBook.isUserCustomTitle ? curBook.title : (result.bookTitle || curBook.title);
-      await dbSaveBook({
-        ...curBook,
-        title: resolvedTitle,
-        author: currentAuthor,
-        genre: curBook.genre || currentBookGenre,
-        totalChapters: maxOrder + 1,
-        lastChapterId: curBook.lastChapterId || chapters[currentChapterIndex]?.id,
-        lastChapterIndex: curBook.lastChapterIndex !== undefined ? curBook.lastChapterIndex : currentChapterIndex,
-        lastChapterTitle: curBook.lastChapterTitle || chapters[currentChapterIndex]?.title,
-        lastUrl: targetUrl,
-        updatedAt: Date.now()
-      });
-    }
-
-    chapters.push(newChap);
-    nextUrlCalculated = nextUrl;
-    document.getElementById('prefetch-badge').style.display = 'inline-block';
-
-    const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
-    if (isInfinite) appendNextChapterToWindow();
-  } catch (e) {
-    console.warn("Reading prefetch failed:", e);
-    if (e.message && (e.message.includes('404') || e.message.includes('ไม่พบเนื้อหา'))) {
-      lastChap.nextUrl = null;
-      await dbSaveChapter(lastChap);
-      nextUrlCalculated = null;
-    }
-  } finally {
-    isPrefetching = false;
-    checkAndRefreshBottomStatus();
+async function prevChapter() {
+  if (currentChapterIndex > 0) {
+    currentChapterIndex--;
+    renderCurrentChapter();
+  } else {
+    alert("นี่คือบทแรกสุดแล้วครับ");
   }
 }
 
 async function handleNextChapterClick() {
   if (currentChapterIndex < chapters.length - 1) {
     currentChapterIndex++;
-    document.getElementById('prefetch-badge').style.display = 'none';
-    renderVirtualWindow(currentChapterIndex, true);
-    checkProactivePrefetch();
-    return;
-  }
-
-  if (nextUrlCalculated) {
-    const btnText = document.getElementById('next-btn-text');
-    const nextBtn = document.getElementById('next-chap-btn');
-    const cancelBtn = document.getElementById('cancel-retry-btn');
-    
-    btnText.innerText = "กำลังแปลตอนถัดไป...";
-    nextBtn.disabled = true;
-    cancelBtn.style.display = 'inline-flex';
-
-    try {
-      currentUrl = nextUrlCalculated;
-      const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(currentUrl);
-      nextUrlCalculated = nextUrl;
-      if (author) currentAuthor = author;
-
-      const lastChap = chapters[chapters.length - 1];
-      const prevSummary = lastChap?.summary || "";
-
-      const result = await translateTextWithPingPong(text, (msg) => {
-        btnText.innerText = msg.substring(0, 30) + "...";
-      }, rawChapTitle, rawBookTitle, prevSummary);
-
-      const currentAll = await dbGetChaptersByBook(currentBookId);
-      const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
-
-      const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
-
-      const newChap = {
-        id: `${currentBookId}_chap_${Date.now()}`,
-        bookId: currentBookId,
-        order: maxOrder + 1,
-        title: chapTitle,
-        paragraphs: result.paragraphs,
-        summary: result.summary || "",
-        sourceUrl: currentUrl,
-        nextUrl: nextUrl
-      };
-
-      await dbSaveChapter(newChap);
-      chapters.push(newChap);
-
-      currentChapterIndex = chapters.length - 1;
-      renderVirtualWindow(currentChapterIndex, true);
-      checkProactivePrefetch();
-    } catch (err) {
-      if (!retryAbortRequested) {
-        document.getElementById('import-url').value = nextUrlCalculated || '';
-        const modalTitle = document.getElementById('import-modal-title');
-        if (modalTitle) modalTitle.innerText = "ไม่พบ URL ตอนถัดไป (กรุณาวาง URL ใหม่)";
-        openModal('import-modal');
-      }
-    } finally {
-      btnText.innerText = "ตอนถัดไป →";
-      nextBtn.disabled = false;
-      cancelBtn.style.display = 'none';
-    }
+    renderCurrentChapter();
   } else {
-    openModal('import-modal');
+    alert("คุณอ่านถึงตอนล่าสุดในเครื่องแล้ว หากต้องการอ่านต่อ กรุณาวาง URL บทถัดไปที่ปุ่ม '+ วางลิงก์'");
   }
 }
 
-function prevChapter() {
-  if (currentChapterIndex > 0) {
-    currentChapterIndex--;
-    renderVirtualWindow(currentChapterIndex, true);
-  }
-}
+function initScrollHandler() {
+  window.addEventListener('scroll', () => {
+    const isInfiniteEnabled = localStorage.getItem('nov_enable_infinite_scroll') !== 'false';
+    if (!isInfiniteEnabled) return;
 
-async function startTranslateFirst() {
-  const url = document.getElementById('import-url').value.trim();
-  const chosenGenre = document.getElementById('import-novel-genre').value;
-  if (!url) return alert("กรุณาใส่ URL หน้านิยาย");
-
-  const status = document.getElementById('import-status');
-  const startBtn = document.getElementById('start-btn');
-  const btnText = document.getElementById('start-btn-text');
-
-  status.style.display = 'block';
-  status.style.background = '#eff6ff';
-  status.style.color = '#1e40af';
-  status.innerText = "กำลังสแกนหาเนื้อหา...";
-  startBtn.disabled = true;
-  btnText.innerText = "กำลังทำงาน...";
-
-  try {
-    const targetBookId = extractBookIdFromUrl(url);
-
-    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(url);
-    nextUrlCalculated = nextUrl;
-    if (author) currentAuthor = author;
-    currentBookGenre = chosenGenre;
-
-    status.innerText = `พบ "${rawChapTitle}" กำลังวิเคราะห์ชื่อเฉพาะและแปลผ่าน AI...`;
-
-    const existingChaps = await dbGetChaptersByBook(targetBookId);
-    const maxOrder = existingChaps.reduce((max, c) => Math.max(max, c.order || 0), 0);
-
-    const prevChap = existingChaps.find(c => c.order === maxOrder);
-    const prevSummary = prevChap?.summary || "";
-
-    const result = await translateTextWithPingPong(text, (msg) => {
-      status.style.background = '#fffbeb';
-      status.style.color = '#b45309';
-      status.innerText = msg;
-    }, rawChapTitle, rawBookTitle, prevSummary);
-
-    const books = await dbGetAllBooks();
-    const existingBook = books.find(b => b.bookId === targetBookId);
-    
-    let finalBookTitle = currentBookTitle;
-    let isCustom = false;
-
-    if (existingBook && existingBook.isUserCustomTitle) {
-      finalBookTitle = existingBook.title;
-      isCustom = true;
-    } else if (result.bookTitle) {
-      finalBookTitle = result.bookTitle;
-      isCustom = false;
+    if ((window.innerHeight + window.scrollY) >= document.body.offsetHeight - 500) {
+      appendNextChapterSeamlessly();
     }
-
-    const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
-
-    const newChapter = {
-      id: `${targetBookId}_chap_${Date.now()}`,
-      bookId: targetBookId,
-      order: maxOrder + 1,
-      title: chapTitle,
-      paragraphs: result.paragraphs,
-      summary: result.summary || "",
-      sourceUrl: url,
-      nextUrl: nextUrl
-    };
-
-    await dbSaveChapter(newChapter);
-
-    if (currentBookId === targetBookId) {
-      chapters.push(newChapter);
-      currentChapterIndex = chapters.length - 1;
-    } else {
-      currentBookId = targetBookId;
-      chapters = [newChapter];
-      currentChapterIndex = 0;
-    }
-
-    currentBookTitle = finalBookTitle;
-    isUserCustomTitle = isCustom;
-    currentUrl = url;
-
-    await dbSaveBook({
-      bookId: currentBookId,
-      title: currentBookTitle,
-      author: currentAuthor,
-      genre: currentBookGenre,
-      isUserCustomTitle: isUserCustomTitle,
-      lastChapterId: newChapter.id,
-      lastChapterIndex: currentChapterIndex,
-      lastChapterTitle: newChapter.title,
-      totalChapters: maxOrder + 1,
-      lastUrl: url,
-      updatedAt: Date.now()
-    });
-    localStorage.setItem('nov_last_book_id', currentBookId);
-
-    renderVirtualWindow(currentChapterIndex, true);
-    closeModal('import-modal');
-  } catch (err) {
-    status.style.background = '#fef2f2';
-    status.style.color = '#991b1b';
-    status.innerText = "ข้อผิดพลาด: " + (err.message === '404' ? 'ไม่พบหน้านิยาย (404 Not Found)' : err.message);
-  } finally {
-    startBtn.disabled = false;
-    btnText.innerText = "เริ่มแปลตอนนี้";
-  }
-}
-
-async function fetchLiveModels() {
-  const activeKey = getActiveApiKey();
-  const statusText = document.getElementById('fetch-status-text');
-  const fetchBtn = document.getElementById('fetch-models-btn');
-
-  if (!activeKey) return alert("กรุณากรอก API Key ก่อนกดตรวจเช็กโมเดล");
-
-  fetchBtn.disabled = true;
-  fetchBtn.innerText = "กำลังตรวจเช็ก...";
-  statusText.style.display = "block";
-  statusText.style.color = "#2563eb";
-  statusText.innerText = "กำลังเชื่อมต่อไปยัง Google API...";
-
-  try {
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${activeKey}`);
-    const data = await res.json();
-
-    if (!res.ok) throw new Error(data.error?.message || "ไม่สามารถดึงรายชื่อโมเดลได้");
-    if (!data.models || !Array.isArray(data.models)) throw new Error("ไม่พบข้อมูลโมเดลในบัญชีนี้");
-
-    const availableModels = data.models
-      .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
-      .map(m => m.name.replace(/^models\//, ''))
-      .filter(name => name.toLowerCase().includes("gemini"));
-
-    if (availableModels.length === 0) throw new Error("ไม่พบโมเดล Gemini ที่พร้อมใช้งาน");
-
-    localStorage.setItem('nov_cached_models', JSON.stringify(availableModels));
-    populateModelDropdowns(availableModels);
-
-    statusText.style.color = "#16a34a";
-    statusText.innerText = `✓ ตรวจพบโมเดลพร้อมใช้งาน ${availableModels.length} รุ่น (อัปเดตลงตัวเลือกแล้ว)`;
-  } catch (err) {
-    statusText.style.color = "#dc2626";
-    statusText.innerText = "เกิดข้อผิดพลาด: " + err.message;
-  } finally {
-    fetchBtn.disabled = false;
-    fetchBtn.innerText = "ตรวจเช็กโมเดล";
-  }
-}
-
-function populateModelDropdowns(modelsList) {
-  const primarySelect = document.getElementById('gemini-primary-model');
-  const savedPrimary = localStorage.getItem('nov_primary_model') || primarySelect.value;
-
-  primarySelect.innerHTML = "";
-  modelsList.forEach(m => {
-    const opt = document.createElement('option');
-    opt.value = m;
-    opt.innerText = m;
-    if (m === savedPrimary) opt.selected = true;
-    primarySelect.appendChild(opt);
   });
 }
 
-function saveSettings() {
-  const keysRaw = document.getElementById('gemini-keys-area').value;
-  const parsedKeys = keysRaw.split('\n').map(k => k.trim()).filter(k => k.length > 5);
+let isAppendingChapter = false;
+async function appendNextChapterSeamlessly() {
+  if (isAppendingChapter) return;
+  if (currentChapterIndex >= chapters.length - 1) return;
 
-  apiKeyPool = parsedKeys;
-  currentApiKeyIndex = 0;
+  isAppendingChapter = true;
+  currentChapterIndex++;
+  const nextChap = chapters[currentChapterIndex];
+  localStorage.setItem(`nov_last_read_${currentBookId}`, nextChap.order);
 
-  localStorage.setItem('nov_gemini_keys_pool', JSON.stringify(parsedKeys));
-  if (parsedKeys.length > 0) {
-    localStorage.setItem('nov_gemini_key', parsedKeys[0]);
-  } else {
-    localStorage.removeItem('nov_gemini_key');
-  }
+  const container = document.getElementById('reading-content');
+  const divider = document.createElement('div');
+  divider.className = 'chapter-divider-bar';
+  divider.innerHTML = `<span>ตอนที่ ${nextChap.order}: ${escapeHtml(nextChap.title)}</span>`;
+  container.appendChild(divider);
 
-  localStorage.setItem('nov_primary_model', document.getElementById('gemini-primary-model').value);
-  localStorage.setItem('nov_retry_limit', document.getElementById('retry-limit').value || "10");
-  
-  const deepNerChk = document.getElementById('enable-deep-ner-scan');
-  localStorage.setItem('nov_enable_deep_ner', deepNerChk.checked ? 'true' : 'false');
+  (nextChap.paragraphs || []).forEach((p, idx) => {
+    const pEl = document.createElement('p');
+    pEl.className = 'read-paragraph';
+    pEl.dataset.pIndex = idx;
+    pEl.innerHTML = renderParagraphWithGlossaryHighlights(p.th || "");
+    container.appendChild(pEl);
+  });
 
-  const bilingualVerifyChk = document.getElementById('enable-bilingual-verify');
-  localStorage.setItem('nov_enable_bilingual_verify', bilingualVerifyChk.checked ? 'true' : 'false');
-
-  const infiniteChk = document.getElementById('enable-infinite-scroll');
-  localStorage.setItem('nov_enable_infinite', infiniteChk.checked ? 'true' : 'false');
-
-  const prefetchChk = document.getElementById('enable-live-prefetch');
-  localStorage.setItem('nov_enable_prefetch', prefetchChk.checked ? 'true' : 'false');
-
-  const autoGlossChk = document.getElementById('enable-auto-glossary');
-  localStorage.setItem('nov_enable_auto_glossary', autoGlossChk.checked ? 'true' : 'false');
-
-  closeModal('settings-modal');
-  renderVirtualWindow(currentChapterIndex, true);
-  alert(`บันทึกการตั้งค่าเรียบร้อยแล้ว (คลัง API Key พร้อมใช้งาน ${parsedKeys.length} ตัว)`);
+  attachTermClickListeners();
+  updateChapterHeaderUI(nextChap);
+  isAppendingChapter = false;
 }
 
-function loadSettings() {
+// ---------------- IMPORT & TRANSLATE HANDLERS ----------------
+
+async function startTranslateFirst(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  const urlInput = document.getElementById('import-url');
+  const genreInput = document.getElementById('import-novel-genre');
+  const statusEl = document.getElementById('import-status');
+  const startBtn = document.getElementById('start-btn');
+  const startBtnText = document.getElementById('start-btn-text');
+
+  const url = urlInput ? urlInput.value.trim() : "";
+  const genre = genreInput ? genreInput.value : "xianxia";
+
+  if (!url) {
+    alert("กรุณากรอก URL หน้านิยาย");
+    return;
+  }
+
+  const activeKey = getActiveApiKey();
+  if (!activeKey) {
+    alert("กรุณาใส่ Gemini API Key ในเมนู 'ตั้งค่า' ก่อนเริ่มแปล");
+    openModal('settings-modal');
+    return;
+  }
+
+  if (startBtn) startBtn.disabled = true;
+  if (startBtnText) startBtnText.textContent = "กำลังดึงเนื้อหา...";
+  if (statusEl) {
+    statusEl.style.display = "block";
+    statusEl.style.color = "#38bdf8";
+    statusEl.textContent = "กำลังดึงเนื้อหาภาษาจีนจากเว็บต้นทาง...";
+  }
+
   try {
-    const poolRaw = localStorage.getItem('nov_gemini_keys_pool');
-    if (poolRaw) {
-      apiKeyPool = JSON.parse(poolRaw);
-    } else if (localStorage.getItem('nov_gemini_key')) {
-      apiKeyPool = [localStorage.getItem('nov_gemini_key').trim()];
+    const scraped = await fetchNovelChapterContent(url);
+    if (!scraped || !scraped.content || scraped.content.length < 50) {
+      throw new Error("ไม่สามารถดึงเนื้อหานิยายได้ (เว็บอาจติดบล็อก Anti-Bot หรือ URL ไม่ถูกต้อง)");
     }
-  } catch (e) {
-    apiKeyPool = [];
+
+    if (startBtnText) startBtnText.textContent = "กำลังแปลด้วย AI...";
+    if (statusEl) statusEl.textContent = `พบเนื้อหา "${scraped.chapterTitle}" กำลังแปล...`;
+
+    let book = null;
+    if (typeof dbFindBookByTitle === 'function') {
+      book = await dbFindBookByTitle(scraped.bookTitle || "นิยายใหม่");
+    }
+
+    if (!book) {
+      const newBookId = "book_" + Date.now();
+      book = {
+        id: newBookId,
+        title: scraped.bookTitle || "นิยายใหม่",
+        genre: genre,
+        author: scraped.author || "",
+        sourceUrl: url,
+        createdAt: Date.now()
+      };
+      if (typeof dbSaveBook === 'function') await dbSaveBook(book);
+    }
+
+    currentBookId = book.id;
+    currentBookTitle = book.title;
+    currentBookGenre = book.genre;
+    currentAuthor = book.author;
+    localStorage.setItem('nov_current_book_id', currentBookId);
+
+    const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-2.5-flash").trim();
+    const transResult = await executeApiCall(
+      scraped.content,
+      primaryModel,
+      scraped.chapterTitle,
+      scraped.bookTitle,
+      "",
+      null,
+      (msg) => { if (statusEl) statusEl.textContent = msg; }
+    );
+
+    let nextOrder = 1;
+    if (typeof dbGetChaptersByBook === 'function') {
+      const existingChaps = await dbGetChaptersByBook(currentBookId);
+      nextOrder = existingChaps.length + 1;
+    }
+
+    const newChapter = {
+      bookId: currentBookId,
+      order: nextOrder,
+      title: transResult.chapterTitle || scraped.chapterTitle || `ตอนที่ ${nextOrder}`,
+      paragraphs: transResult.paragraphs || [],
+      sourceUrl: url,
+      createdAt: Date.now()
+    };
+
+    if (typeof dbSaveChapter === 'function') {
+      await dbSaveChapter(newChapter);
+    }
+
+    closeModal('import-modal');
+    if (urlInput) urlInput.value = "";
+    if (statusEl) statusEl.textContent = "";
+
+    await refreshLocalData();
+  } catch (err) {
+    console.error("Translation Error:", err);
+    if (statusEl) {
+      statusEl.style.display = "block";
+      statusEl.style.color = "#ef4444";
+      statusEl.textContent = `❌ ${err.message}`;
+    }
+    alert(`การแปลล้มเหลว: ${err.message}`);
+  } finally {
+    if (startBtn) startBtn.disabled = false;
+    if (startBtnText) startBtnText.textContent = "เริ่มแปลตอนนี้";
   }
+}
 
-  const keysArea = document.getElementById('gemini-keys-area');
-  if (keysArea) {
-    keysArea.value = (apiKeyPool || []).join('\n');
-  }
+function handleImportCancel() {
+  closeModal('import-modal');
+  const statusEl = document.getElementById('import-status');
+  if (statusEl) statusEl.textContent = "";
+}
 
-  if (localStorage.getItem('nov_theme')) {
-    currentTheme = localStorage.getItem('nov_theme');
-    document.getElementById('app-body').className = 'theme-' + currentTheme;
-    const themeText = currentTheme === 'sepia' ? 'ถนอมสายตา' : (currentTheme === 'light' ? 'สว่าง' : 'มืด');
-    const mobileBtn = document.getElementById('mobile-theme-btn');
-    const desktopBtn = document.getElementById('desktop-theme-btn');
-    if (mobileBtn) mobileBtn.innerText = themeText;
-    if (desktopBtn) desktopBtn.innerText = themeText;
-    localStorage.setItem('nov_theme', currentTheme);
-  }
+// ---------------- SETTINGS UI & SAVE ----------------
 
-  if (localStorage.getItem('nov_font_size')) {
-    currentFontSize = parseInt(localStorage.getItem('nov_font_size'), 10);
-  }
-
-  try {
-    const cached = JSON.parse(localStorage.getItem('nov_cached_models') || '[]');
-    if (Array.isArray(cached) && cached.length > 0) populateModelDropdowns(cached);
-  } catch(e) {}
-
-  if (localStorage.getItem('nov_primary_model')) document.getElementById('gemini-primary-model').value = localStorage.getItem('nov_primary_model');
-  if (localStorage.getItem('nov_retry_limit')) document.getElementById('retry-limit').value = localStorage.getItem('nov_retry_limit');
-
-  const deepNerVal = localStorage.getItem('nov_enable_deep_ner');
-  const deepNerChk = document.getElementById('enable-deep-ner-scan');
-  if (deepNerChk) deepNerChk.checked = (deepNerVal === 'true');
-
-  const bilingualVerifyVal = localStorage.getItem('nov_enable_bilingual_verify');
-  const bilingualVerifyChk = document.getElementById('enable-bilingual-verify');
-  if (bilingualVerifyChk) bilingualVerifyChk.checked = (bilingualVerifyVal !== 'false');
-
-  const prefetchVal = localStorage.getItem('nov_enable_prefetch');
-  const prefetchChk = document.getElementById('enable-live-prefetch');
-  if (prefetchChk) prefetchChk.checked = (prefetchVal !== 'false');
-
-  const infiniteVal = localStorage.getItem('nov_enable_infinite');
+function initSettingsUI() {
+  const area = document.getElementById('gemini-keys-area');
+  const modelSelect = document.getElementById('gemini-primary-model');
   const infiniteChk = document.getElementById('enable-infinite-scroll');
-  if (infiniteChk) infiniteChk.checked = (infiniteVal !== 'false');
 
-  const autoGlossVal = localStorage.getItem('nov_enable_auto_glossary');
-  const autoGlossChk = document.getElementById('enable-auto-glossary');
-  if (autoGlossChk) autoGlossChk.checked = (autoGlossVal !== 'false');
+  if (area) area.value = localStorage.getItem('nov_gemini_keys') || '';
+  if (modelSelect) modelSelect.value = localStorage.getItem('nov_primary_model') || 'gemini-2.5-flash';
+  if (infiniteChk) infiniteChk.checked = localStorage.getItem('nov_enable_infinite_scroll') !== 'false';
+}
+
+function saveSettings() {
+  const area = document.getElementById('gemini-keys-area');
+  const modelSelect = document.getElementById('gemini-primary-model');
+  const infiniteChk = document.getElementById('enable-infinite-scroll');
+
+  if (area) localStorage.setItem('nov_gemini_keys', area.value.trim());
+  if (modelSelect) localStorage.setItem('nov_primary_model', modelSelect.value);
+  if (infiniteChk) localStorage.setItem('nov_enable_infinite_scroll', infiniteChk.checked);
+
+  currentApiKeyIndex = 0;
+  closeModal('settings-modal');
+  alert('บันทึกการตั้งค่าเรียบร้อยแล้ว');
+}
+
+// ---------------- THEME & FONT HELPERS ----------------
+
+function applyFontSize(size) {
+  currentFontSize = Math.max(14, Math.min(32, size));
+  localStorage.setItem('nov_font_size', currentFontSize);
+  document.documentElement.style.setProperty('--reading-font-size', `${currentFontSize}px`);
+  const content = document.getElementById('reading-content');
+  if (content) content.style.fontSize = `${currentFontSize}px`;
+}
+
+function adjustFontSize(delta) {
+  applyFontSize(currentFontSize + delta);
+}
+
+function applyTheme(themeClass) {
+  currentTheme = themeClass;
+  localStorage.setItem('nov_theme', currentTheme);
+  const body = document.getElementById('app-body');
+  if (body) body.className = themeClass;
+
+  const deskBtn = document.getElementById('desktop-theme-btn');
+  const label = themeClass === 'theme-sepia' ? 'ถนอมสายตา' : (themeClass === 'theme-dark' ? 'โหมดมืด' : 'โหมดสว่าง');
+  if (deskBtn) deskBtn.textContent = label;
+}
+
+function cycleTheme() {
+  if (currentTheme === 'theme-sepia') applyTheme('theme-dark');
+  else if (currentTheme === 'theme-dark') applyTheme('theme-light');
+  else applyTheme('theme-sepia');
+}
+
+function showActionToast(msg) {
+  const toast = document.getElementById('global-action-toast');
+  const txt = document.getElementById('global-toast-msg');
+  if (toast && txt) {
+    txt.textContent = msg;
+    toast.style.display = 'flex';
+  }
+}
+
+function hideActionToast() {
+  const toast = document.getElementById('global-action-toast');
+  if (toast) toast.style.display = 'none';
+}
+
+function openModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
+}
+
+function closeModal(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.remove('active');
+}
+
+function openGlossaryModal() {
+  openModal('glossary-modal');
+  if (typeof renderGlossaryUI === 'function') renderGlossaryUI();
+}
+
+function openBookshelfModal() {
+  openModal('bookshelf-modal');
+  if (typeof renderBookshelfUI === 'function') renderBookshelfUI();
+}
+
+function initModalListeners() {
+  document.querySelectorAll('.modal-overlay').forEach(modal => {
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) modal.classList.remove('active');
+    });
+  });
 }
 
 function exportTxt() {
-  const chap = chapters[currentChapterIndex];
-  let txt = `${currentBookTitle}\n${chap.title}\n\n`;
-  chap.paragraphs.forEach(p => { txt += p.th + "\n\n"; });
-  const blob = new Blob([txt], { type: 'text/plain;charset=utf-8' });
+  if (!chapters || chapters.length === 0 || !chapters[currentChapterIndex]) return;
+  const cur = chapters[currentChapterIndex];
+  const text = `${cur.title}\n\n` + (cur.paragraphs || []).map(p => p.th).join('\n\n');
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `${chap.title}.txt`;
+  a.download = `${currentBookTitle}_ตอนที่_${cur.order}.txt`;
   a.click();
 }
 
-window.addEventListener('DOMContentLoaded', async () => {
-  await initDB();
-  await refreshInMemoryGlossaryCache();
-  loadSettings();
-  setupSelectionMonitor();
-  setupScrollMonitor();
-  setupFullscreenListener();
-  setupPopoverDelegation();
-  
-  const lastBookId = localStorage.getItem('nov_last_book_id');
-  if (lastBookId) {
-    await loadBookFromDB(lastBookId);
-  } else {
-    renderVirtualWindow(0, true);
-  }
-});
+function escapeHtml(str) {
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
