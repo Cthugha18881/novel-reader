@@ -404,3 +404,128 @@ function escapeHtml(str) {
   if (!str) return '';
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+// ---------------- IMPORT & TRANSLATE HANDLERS ----------------
+
+async function startTranslateFirst() {
+  const urlInput = document.getElementById('import-url');
+  const genreInput = document.getElementById('import-novel-genre');
+  const statusEl = document.getElementById('import-status');
+  const startBtn = document.getElementById('start-btn');
+  const startBtnText = document.getElementById('start-btn-text');
+
+  const url = urlInput ? urlInput.value.trim() : "";
+  const genre = genreInput ? genreInput.value : "xianxia";
+
+  if (!url) {
+    if (statusEl) statusEl.textContent = "กรุณากรอก URL หน้านิยาย";
+    return;
+  }
+
+  const activeKey = getActiveApiKey();
+  if (!activeKey) {
+    alert("กรุณาใส่ Gemini API Key ในเมนู 'ตั้งค่า' ก่อนเริ่มแปล");
+    openModal('settings-modal');
+    return;
+  }
+
+  if (startBtn) startBtn.disabled = true;
+  if (startBtnText) startBtnText.textContent = "กำลังดึงเนื้อหาและแปล...";
+  if (statusEl) statusEl.textContent = "กำลังดึงเนื้อหาภาษาจีนจากเว็บต้นทาง...";
+
+  try {
+    // 1. ดึงเนื้อหาเว็บจีนผ่าน Scraper/CORS Proxy
+    const scraped = await fetchNovelChapterContent(url);
+    if (!scraped || !scraped.content) {
+      throw new Error("ไม่สามารถดึงเนื้อหาจาก URL นี้ได้ กรุณาตรวจสอบลิงก์");
+    }
+
+    if (statusEl) statusEl.textContent = "กำลังแปลเนื้อหาและสกัด Dossier ด้วย AI...";
+
+    // 2. ตรวจสอบหรือสร้างข้อมูลหนังสือใน DB
+    let book = await dbFindBookByTitle(scraped.bookTitle || "นิยายใหม่");
+    if (!book) {
+      const newBookId = "book_" + Date.now();
+      book = {
+        id: newBookId,
+        title: scraped.bookTitle || "นิยายใหม่",
+        genre: genre,
+        author: scraped.author || "",
+        sourceUrl: url,
+        createdAt: Date.now()
+      };
+      await dbSaveBook(book);
+    }
+
+    currentBookId = book.id;
+    currentBookTitle = book.title;
+    currentBookGenre = book.genre;
+    currentAuthor = book.author;
+    localStorage.setItem('nov_current_book_id', currentBookId);
+
+    // 3. ส่งแปลผ่าน api.js
+    const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
+    const transResult = await executeApiCall(
+      scraped.content,
+      primaryModel,
+      scraped.chapterTitle,
+      scraped.bookTitle,
+      "",
+      null,
+      (msg) => { if (statusEl) statusEl.textContent = msg; }
+    );
+
+    // 4. บันทึกลง IndexedDB
+    const existingChaps = await dbGetChaptersByBook(currentBookId);
+    const nextOrder = existingChaps.length + 1;
+
+    const newChapter = {
+      bookId: currentBookId,
+      order: nextOrder,
+      title: transResult.chapterTitle || scraped.chapterTitle || `ตอนที่ ${nextOrder}`,
+      chapterType: transResult.chapterType || "regular",
+      summary: transResult.summary || "",
+      dossier: transResult.dossier || null,
+      paragraphs: transResult.paragraphs || [],
+      sourceUrl: url,
+      createdAt: Date.now()
+    };
+
+    await dbSaveChapter(newChapter);
+
+    // 5. ปิด Modal และแสดงผลบทที่แปล
+    closeModal('import-modal');
+    if (urlInput) urlInput.value = "";
+    if (statusEl) statusEl.textContent = "";
+
+    await refreshLocalData();
+  } catch (err) {
+    if (statusEl) statusEl.textContent = `เกิดข้อผิดพลาด: ${err.message}`;
+    console.error(err);
+  } finally {
+    if (startBtn) startBtn.disabled = false;
+    if (startBtnText) startBtnText.textContent = "เริ่มแปลตอนนี้";
+  }
+}
+
+function handleImportCancel() {
+  closeModal('import-modal');
+  const statusEl = document.getElementById('import-status');
+  if (statusEl) statusEl.textContent = "";
+}
+
+// ---------------- GLOSSARY MODAL HOOK ----------------
+
+function openGlossaryModal() {
+  openModal('glossary-modal');
+  if (typeof renderGlossaryUI === 'function') {
+    renderGlossaryUI();
+  }
+}
+
+function openBookshelfModal() {
+  openModal('bookshelf-modal');
+  if (typeof renderBookshelfUI === 'function') {
+    renderBookshelfUI();
+  }
+}
