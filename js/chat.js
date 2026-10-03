@@ -1,5 +1,12 @@
-// ==================== AI READING COMPANION (PRODUCTION UNIVERSAL RAG) ====================
-let chatSessionsByBook = {}; // แยกประวัติแชตตาม ID เรื่อง (ป้องกัน Context Contamination)
+// ==================== AI READING COMPANION (FULL PRODUCTION ENGINE) ====================
+// ครบถ้วนทั้ง 5 รายการ:
+// 1. Hard Chapter Fence (ป้องกันสปอยล์ข้ามตอน)
+// 2. Book-Isolated Chat Session (แยกประวัติรายเรื่อง)
+// 3. Alias Graph (เครือข่ายฉายา/ชื่อแฝง)
+// 4. Quote / Dialogue Back-Reference (ดึงคำพูดจริงจากบท)
+// 5. Delta-State Analyzer (วิเคราะห์จุดเปลี่ยน อดีต VS ปัจจุบัน)
+
+let chatSessionsByBook = {};
 let isChatResponding = false;
 
 function getCurrentBookChatHistory() {
@@ -37,7 +44,7 @@ function renderCurrentBookChatSession() {
   if (history.length === 0) {
     body.innerHTML = `
       <div class="chat-msg chat-msg-bot">
-        สวัสดีครับ! ผมคือผู้ช่วยอ่านนิยายเรื่อง <b>${escapeHtml(currentBookTitle || 'เล่มนี้')}</b> ถามสเตตัส สรุปเนื้อหา ทบทวนเหตุการณ์ หรือชวนคุยเปรียบเทียบสเกลพลังกับเรื่องอื่นได้เต็มที่เลยครับ 📖
+        สวัสดีครับ! ผมคือผู้ช่วยอ่านนิยายเรื่อง <b>${escapeHtml(currentBookTitle || 'เล่มนี้')}</b> ถามสเตตัส สรุปเนื้อหา ทบทวนเหตุการณ์ เปรียบเทียบพัฒนาการตัวละคร หรือคุยเทียบสเกลพลังได้เลยครับ 📖
       </div>
     `;
   } else {
@@ -66,43 +73,151 @@ function clearChatHistory() {
   renderCurrentBookChatSession();
 }
 
-// ---------------- LOCAL INVERTED INDEX & MULTI-BOOK DOSSIER SCANNER ----------------
+// ---------------- 1. ALIAS GRAPH ENGINE (ข้อ 3) ----------------
+
+async function buildAliasGraph(availableChaps) {
+  const aliasMap = new Map(); // Canonical Name -> Set of Aliases
+  const activeTerms = await getActiveGlossaryForCurrentBook();
+
+  // สร้างโหนดเริ่มต้นจาก Glossary
+  for (const [src, item] of Object.entries(activeTerms)) {
+    const tgt = item.resolvedTgt || "";
+    if (tgt) {
+      if (!aliasMap.has(tgt)) aliasMap.set(tgt, new Set());
+      aliasMap.get(tgt).add(src);
+      aliasMap.get(tgt).add(tgt);
+
+      if (Array.isArray(item.aliases)) {
+        item.aliases.forEach(a => aliasMap.get(tgt).add(a));
+      }
+    }
+  }
+
+  // เชื่อมโยงฉายาและตำแหน่งจาก Dossier
+  availableChaps.forEach(ch => {
+    const d = ch.dossier;
+    if (d && Array.isArray(d.state_transitions)) {
+      d.state_transitions.forEach(st => {
+        if (st.category === 'character' || st.category === 'title') {
+          const mainName = st.th || st.src;
+          if (!aliasMap.has(mainName)) aliasMap.set(mainName, new Set());
+          aliasMap.get(mainName).add(st.src);
+          if (st.th) aliasMap.get(mainName).add(st.th);
+          if (st.owner) aliasMap.get(mainName).add(st.owner);
+        }
+      });
+    }
+  });
+
+  return aliasMap;
+}
+
+function resolveAllQueryAliases(query, aliasGraph) {
+  const allRelatedNames = new Set();
+  const qLower = query.toLowerCase();
+
+  for (const [canonical, aliases] of aliasGraph.entries()) {
+    let matched = false;
+    for (const name of aliases) {
+      if (name && qLower.includes(name.toLowerCase())) {
+        matched = true;
+        break;
+      }
+    }
+    if (matched) {
+      aliases.forEach(a => allRelatedNames.add(a));
+    }
+  }
+
+  return Array.from(allRelatedNames);
+}
+
+// ---------------- 2. DELTA-STATE ANALYZER (ข้อ 5) ----------------
+
+function analyzeDeltaState(userQuery, availableChaps, expandedTerms) {
+  const q = userQuery.toLowerCase();
+  // ดักจับคำถามเชิงเปรียบเทียบเวลา พัฒนาการ หรือการเปลี่ยนแปลง
+  const isComparisonQuery = /แต่ก่อน|ตอนนี้|ทำไมถึง|เทียบกับ|เปลี่ยนไป|พัฒนา|เก่งขึ้น|แรกเริ่ม|ตอนแรก|กลายเป็น/.test(q);
+  if (!isComparisonQuery || expandedTerms.length === 0) return null;
+
+  const timelineRecords = [];
+
+  availableChaps.forEach(ch => {
+    const d = ch.dossier;
+    if (!d) return;
+
+    // เช็คจาก State transitions
+    if (Array.isArray(d.state_transitions)) {
+      d.state_transitions.forEach(st => {
+        const matches = expandedTerms.some(term => 
+          (st.src && st.src.toLowerCase().includes(term.toLowerCase())) ||
+          (st.th && st.th.toLowerCase().includes(term.toLowerCase())) ||
+          (st.owner && st.owner.toLowerCase().includes(term.toLowerCase()))
+        );
+        if (matches) {
+          timelineRecords.push({
+            chapter: ch.order,
+            title: ch.title,
+            action: st.action,
+            details: st.details,
+            realm: d.current_status_snapshot?.protagonist_realm || "ไม่ระบุ"
+          });
+        }
+      });
+    }
+  });
+
+  if (timelineRecords.length < 2) return null;
+
+  const earliest = timelineRecords[0];
+  const latest = timelineRecords[timelineRecords.length - 1];
+
+  return {
+    isDetected: true,
+    earliest: `[จุดเริ่มต้น - ตอนที่ ${earliest.chapter}] สถานะ: ${earliest.action} | รายละเอียด: ${earliest.details}`,
+    latest: `[จุดปัจจุบัน - ตอนที่ ${latest.chapter}] สถานะ: ${latest.action} | รายละเอียด: ${latest.details}`,
+    milestonesCount: timelineRecords.length,
+    intermediateSteps: timelineRecords.slice(1, -1).map(r => `ตอนที่ ${r.chapter}: ${r.details}`).slice(-4)
+  };
+}
+
+// ---------------- 3. INVERTED INDEX & DOSSIER SCANNER ----------------
 
 async function findBilingualStateTimeline(userQuery, maxAllowedOrder) {
   const query = userQuery.trim().toLowerCase();
   const bookChaps = await dbGetChaptersByBook(currentBookId);
   bookChaps.sort((a, b) => a.order - b.order);
 
-  // 1. HARD CHAPTER FENCE: กักข้อมูลไว้แค่ตอนที่กำลังเปิดอ่าน ป้องกันการสปอยล์จากตอนที่พรีเฟตช์ไว้
+  // 1. HARD CHAPTER FENCE: กักข้อมูลไว้แค่ตอนที่กำลังอ่านอยู่
   const availableChaps = bookChaps.filter(c => (c.order || 0) <= maxAllowedOrder);
 
-  // 2. ดึงคลังศัพท์เพื่อแมปคำจีน - ไทย
-  const activeTerms = await getActiveGlossaryForCurrentBook();
-  const matchedTerms = [];
-
-  for (const [chineseSrc, data] of Object.entries(activeTerms)) {
-    const thaiTgt = (data.resolvedTgt || "").toLowerCase();
-    if (query.includes(chineseSrc.toLowerCase()) || (thaiTgt && query.includes(thaiTgt))) {
-      matchedTerms.push({ src: chineseSrc, th: data.resolvedTgt, category: data.category });
-    }
+  // 2. ALIAS GRAPH: ขยายคำค้นด้วยเครือข่ายฉายา/ชื่อแฝง
+  const aliasGraph = await buildAliasGraph(availableChaps);
+  let expandedTerms = resolveAllQueryAliases(query, aliasGraph);
+  if (expandedTerms.length === 0) {
+    expandedTerms = query.split(/\s+/).filter(w => w.length >= 2);
   }
+
+  // 3. DELTA-STATE ANALYZER: ตรวจจับการเปรียบเทียบอดีต VS ปัจจุบัน
+  const deltaComparison = analyzeDeltaState(userQuery, availableChaps, expandedTerms);
 
   const matchedTransitions = [];
   const matchedEvents = [];
   const matchedQuotes = [];
 
-  // ตรวจจับว่าผู้ใช้ถามหาบทสนทนาหรือคำพูดเด็ดหรือไม่
+  // ตรวจจับคำถามหาบทสนทนา (Quote Back-Reference)
   const isAskingForQuotes = /พูดว่า|คำพูด|ประโยค|สั่งเสีย|ตะโกน|กล่าวว่า|อุทาน/.test(query);
 
   availableChaps.forEach(ch => {
     const d = ch.dossier;
 
-    // ตรวจจับ State Transitions
     if (d && Array.isArray(d.state_transitions)) {
       d.state_transitions.forEach(st => {
-        let isHit = false;
-        if (query.includes(st.src.toLowerCase()) || query.includes((st.th || "").toLowerCase())) isHit = true;
-        if (matchedTerms.some(t => t.src === st.src || (st.th && t.th === st.th))) isHit = true;
+        const isHit = expandedTerms.some(term => 
+          (st.src && st.src.toLowerCase().includes(term.toLowerCase())) ||
+          (st.th && st.th.toLowerCase().includes(term.toLowerCase())) ||
+          (st.owner && st.owner.toLowerCase().includes(term.toLowerCase()))
+        );
 
         if (isHit) {
           matchedTransitions.push({
@@ -114,23 +229,21 @@ async function findBilingualStateTimeline(userQuery, maxAllowedOrder) {
       });
     }
 
-    // ตรวจจับ Key Events
     if (d && Array.isArray(d.key_events)) {
       d.key_events.forEach(ev => {
-        let isHit = query.split(/\s+/).some(w => w.length >= 2 && ev.toLowerCase().includes(w));
-        if (matchedTerms.some(t => ev.includes(t.th) || ev.includes(t.src))) isHit = true;
+        const isHit = expandedTerms.some(term => ev.toLowerCase().includes(term.toLowerCase()));
         if (isHit) {
           matchedEvents.push(`- ตอนที่ ${ch.order} (${ch.title}): ${ev}`);
         }
       });
     }
 
-    // ดึง Quote จริงจากย่อหน้าที่มีบทสนทนาหากผู้ใช้ถามหา
+    // ดึงบทสนทนาจริงจากตอน
     if (isAskingForQuotes && Array.isArray(ch.paragraphs)) {
       ch.paragraphs.forEach(p => {
         if (!p.th) return;
         if ((p.th.includes('“') || p.th.includes('"') || p.th.includes('「')) && 
-            (matchedTerms.some(t => p.th.includes(t.th)) || query.split(/\s+/).some(w => w.length >= 2 && p.th.includes(w)))) {
+            expandedTerms.some(term => p.th.toLowerCase().includes(term.toLowerCase()))) {
           matchedQuotes.push(`[ตอนที่ ${ch.order}] ${p.th.trim()}`);
         }
       });
@@ -138,14 +251,14 @@ async function findBilingualStateTimeline(userQuery, maxAllowedOrder) {
   });
 
   return {
-    matchedTerms,
+    expandedTerms,
+    deltaComparison,
     matchedTransitions,
     matchedEvents: matchedEvents.slice(-8),
     matchedQuotes: matchedQuotes.slice(-5)
   };
 }
 
-// รวมยอด Snapshot สถานะสุทธิของตัวเอก
 function consolidateCurrentInventory(bookChaps, maxAllowedOrder) {
   const inventory = new Map();
   let latestRealm = "ไม่ระบุ";
@@ -181,7 +294,6 @@ function consolidateCurrentInventory(bookChaps, maxAllowedOrder) {
   };
 }
 
-// ตรวจสอบว่าในชั้นหนังสือมีนิยายเรื่องอื่นที่ผู้ใช้กำลังเอ่ยถึงเพื่อเปรียบเทียบหรือไม่ (Cross-Book Shelf Search)
 async function findCrossBookContextIfAny(userQuery) {
   const query = userQuery.toLowerCase();
   const allBooks = await dbGetAllBooks();
@@ -216,7 +328,6 @@ async function buildHierarchicalStoryContext(userQuery, isFullRecapMode = false)
   const bookChaps = await dbGetChaptersByBook(currentBookId);
   bookChaps.sort((a, b) => a.order - b.order);
 
-  // คำนวณเพดานตอนปัจจุบัน (Hard Fence)
   const maxAllowedOrder = curChap.order || (currentChapterIndex + 1);
   const availableChaps = bookChaps.filter(c => (c.order || 0) <= maxAllowedOrder);
 
@@ -297,7 +408,7 @@ async function sendChatMessage(customPrompt = null, forceRecapMode = false) {
   const loadingBubble = document.createElement('div');
   loadingBubble.className = "chat-msg chat-msg-bot";
   loadingBubble.id = loadingBubbleId;
-  loadingBubble.innerHTML = `<span class="spinner-icon" style="margin-right: 6px;"></span> ${forceRecapMode ? 'กำลังประมวลผลสรุป 4 มิติ...' : 'กำลังสืบค้นข้อมูลในคลังบันทึก...'}`;
+  loadingBubble.innerHTML = `<span class="spinner-icon" style="margin-right: 6px;"></span> ${forceRecapMode ? 'กำลังประมวลผลสรุป 4 มิติ...' : 'กำลังวิเคราะห์ไทม์ไลน์และสืบค้นข้อมูล...'}`;
   chatBody.appendChild(loadingBubble);
   scrollChatToBottom();
 
@@ -309,7 +420,7 @@ async function sendChatMessage(customPrompt = null, forceRecapMode = false) {
 
     let evidenceSection = "ไม่มีหลักฐานเจาะจงเฉพาะคำ";
     if (ctx.evidence.matchedTransitions.length > 0) {
-      evidenceSection = "ประวัติความเคลื่อนไหว (State Transitions) ที่ระบบสแกนพบ:\n" + 
+      evidenceSection = "ประวัติความเคลื่อนไหว (State Transitions) ที่ตรวจพบ:\n" + 
         ctx.evidence.matchedTransitions.map(t => 
           `* [ตอนที่ ${t.chapter} - ${t.title}] คำจีน: "${t.src}" (${t.th}) | การกระทำ: [${t.action}] โดย: ${t.owner} -> รายละเอียด: ${t.details}`
         ).join("\n");
@@ -318,6 +429,17 @@ async function sendChatMessage(customPrompt = null, forceRecapMode = false) {
     let holdingsSection = ctx.netStatus.currentHoldings.length > 0 
       ? ctx.netStatus.currentHoldings.map(h => `- ${h.th} (${h.src}) [${h.category}] ได้รับในตอนที่ ${h.lastUpdatedChapter}`).join("\n")
       : "ไม่มีรายการของวิเศษคงเหลือที่บันทึกไว้";
+
+    // จัดเตรียมข้อมูล Delta State Analysis หากมีการเปรียบเทียบเวลา
+    let deltaSection = "";
+    if (ctx.evidence.deltaComparison) {
+      const d = ctx.evidence.deltaComparison;
+      deltaSection = `[การวิเคราะห์ความเปลี่ยนแปลงเชิงเวลา (Delta-State Analysis)]:\n` +
+        `- สภาพในอดีต: ${d.earliest}\n` +
+        `- สภาพปัจจุบัน: ${d.latest}\n` +
+        `- ลำดับจุดเปลี่ยนสำคัญระหว่างทาง:\n` +
+        d.intermediateSteps.map(s => `  * ${s}`).join('\n') + `\n`;
+    }
 
     let crossBooksSection = "";
     if (ctx.crossBooks.length > 0) {
@@ -336,30 +458,29 @@ async function sendChatMessage(customPrompt = null, forceRecapMode = false) {
 
 [กฎเหล็กเรื่องกำแพงความรู้ (Strict Knowledge Boundary)]:
 1. คุณมีความรู้ในเรื่อง "${ctx.bookTitle}" สิ้นสุดที่ตอนที่ ${ctx.currentChapOrder} เท่านั้น ห้ามเดาหรือสปอยล์เหตุการณ์ในตอนอนาคตเด็ดขาด
-2. สำหรับข้อเท็จจริงในเรื่อง (ใครได้อะไร, เลเวลไหน, ของพังตอนไหน) ให้ยึดตาม [หลักฐานและสถานะสุทธิ] ที่ให้มาอย่างเคร่งครัด
+2. สำหรับข้อเท็จจริงในเรื่อง ให้ยึดตาม [หลักฐานและสถานะสุทธิ] ที่ให้มาอย่างเคร่งครัด
 
-[หลักฐานประวัติความเคลื่อนไหว (Ground Truth Evidence)]:
+${deltaSection ? deltaSection + "\n" : ""}[หลักฐานประวัติความเคลื่อนไหว (Ground Truth Evidence)]:
 ${evidenceSection}
 
 [เหตุการณ์สำคัญที่เกี่ยวข้อง]:
 ${ctx.evidence.matchedEvents.join("\n") || "- ไม่มี"}
 
-${quotesSection ? quotesSection + "\n" : ""}
-[สถานะสุทธิล่าสุดของตัวเอก ณ ตอนที่ ${ctx.currentChapOrder}]:
+${quotesSection ? quotesSection + "\n" : ""}[สถานะสุทธิล่าสุดของตัวเอก ณ ตอนที่ ${ctx.currentChapOrder}]:
 - ระดับพลัง: ${ctx.netStatus.latestRealm}
 - อาการบาดเจ็บ: ${ctx.netStatus.latestInjuries}
 - ไอเทม/วิชาที่ถือครองอยู่จริงในปัจจุบัน (Active Inventory):
 ${holdingsSection}
 
-${crossBooksSection ? crossBooksSection + "\n" : ""}
-[สรุปเนื้อหาตอนล่าสุด]:
+${crossBooksSection ? crossBooksSection + "\n" : ""}[สรุปเนื้อหาตอนล่าสุด]:
 ${ctx.recentSummaries || "- ไม่มีสรุป"}
 
-[แนวทางการคุยและเปรียบเทียบข้ามจักรวาล (Cross-Universe & Discussion Guide)]:
-- หากผู้ใช้ถามเปรียบเทียบพลัง ตัวละคร หรือวิชากับนิยายเรื่องอื่น (เช่น ตัวละครจากนิยายดังเรื่องอื่น หรือเรื่องในชั้นหนังสือ):
-  * ให้ใช้ความรู้สากลของคุณเกี่ยวกับวรรณกรรมเรื่องนั้นๆ มาร่วมวิเคราะห์อย่างออกรส
-  * ใช้เกณฑ์เทียบสเกลพลังจากผลงานการทำลายล้างจริง (Feats / Universal Tiers: ระดับมนุษย์/ทำลายหิน -> ระดับทำลายภูเขา/เมือง -> ระดับทำลายทวีป/ดวงดาว -> ระดับจักรวาล/มหาเต๋า)
-  * ออกความเห็น วิเคราะห์จุดเด่นจุดด้อย และพูดคุยสนุกสนานเหมือนเพื่อนนั่งเมาท์นิยายข้างๆ กัน
+[แนวทางการคุยและเปรียบเทียบ (Discussion & Universal Scaling Guide)]:
+- หากมีการวิเคราะห์ความเปลี่ยนแปลงเชิงเวลา (Delta-State) ให้อธิบายชัดเจนว่าเดิมทีสถานะเป็นอย่างไร เกิดจุดเปลี่ยนอะไรในตอนไหน และทำไมปัจจุบันถึงกลายมาเป็นแบบนี้
+- หากผู้ใช้ถามเปรียบเทียบพลัง ตัวละคร หรือวิชากับนิยายเรื่องอื่น:
+  * ใช้ความรู้สากลของคุณเกี่ยวกับวรรณกรรมเรื่องนั้นๆ มาร่วมวิเคราะห์อย่างออกรส
+  * ใช้เกณฑ์เทียบสเกลพลังจากผลงานการทำลายล้างจริง (Feats / Universal Tiers: ระดับมนุษย์ -> ระดับทำลายภูเขา/เมือง -> ระดับทำลายทวีป/ดวงดาว -> ระดับจักรวาล/มหาเต๋า)
+  * ออกความเห็นและคุยสนุกสนานเหมือนเพื่อนนั่งเมาท์นิยายข้างๆ กัน
 - ตอบเป็นภาษาไทย สำนวนเป็นกันเอง สนุกสนาน คมชัด ตรงประเด็น`;
 
     const contents = [
