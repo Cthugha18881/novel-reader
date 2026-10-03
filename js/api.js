@@ -1,3 +1,106 @@
+// ============================================================================
+// NOVELTRANSLATE AI - API & TRANSLATION ENGINE (api.js)
+// ============================================================================
+
+// 1. แคชคลังศัพท์ระดับ Global
+if (typeof window.inMemoryGlossaryCache === 'undefined') {
+  window.inMemoryGlossaryCache = [];
+}
+
+// 2. ระบบหมุนเวียน API Key (Key Rotator)
+let currentApiKeyIndex = 0;
+
+function getStoredApiKeys() {
+  const raw = localStorage.getItem('nov_gemini_keys') || localStorage.getItem('gemini_api_keys') || '';
+  return raw.split('\n').map(k => k.trim()).filter(Boolean);
+}
+
+function getActiveApiKey() {
+  const keys = getStoredApiKeys();
+  if (keys.length === 0) return null;
+  if (currentApiKeyIndex >= keys.length) currentApiKeyIndex = 0;
+  return keys[currentApiKeyIndex];
+}
+
+function rotateApiKey() {
+  const keys = getStoredApiKeys();
+  if (keys.length <= 1) return;
+  currentApiKeyIndex = (currentApiKeyIndex + 1) % keys.length;
+  console.log(`[Key Rotator] สลับไปใช้ Key ลำดับที่ ${currentApiKeyIndex + 1}/${keys.length}`);
+}
+
+// 3. ตัวดึงเนื้อหานิยายจาก URL (CORS Proxy Scraper)
+async function fetchNovelChapterContent(targetUrl) {
+  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
+  const res = await fetch(proxyUrl);
+  if (!res.ok) throw new Error("ไม่สามารถเชื่อมต่อเว็บต้นทางผ่าน Proxy ได้");
+
+  const data = await res.json();
+  const html = data.contents;
+
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, "text/html");
+
+  let title = doc.querySelector("h1")?.innerText?.trim() || "";
+  let bookTitle = doc.querySelector(".novel-title, .title, h2")?.innerText?.trim() || "นิยายจีน";
+
+  const contentEl = doc.querySelector("#content, .content, .txtnav") || doc.body;
+  contentEl.querySelectorAll("script, style, a, .ads").forEach(el => el.remove());
+
+  const rawText = contentEl.innerText || contentEl.textContent || "";
+  if (!rawText.trim()) {
+    throw new Error("ดึงเนื้อหาไม่สำเร็จ หรือเนื้อหาในหน้านี้ว่างเปล่า");
+  }
+
+  return {
+    bookTitle: bookTitle,
+    chapterTitle: title,
+    author: "",
+    content: rawText
+  };
+}
+
+// 4. สไตล์สำนวนตามแนวเรื่อง (Genre Prompting)
+function getGenreInstruction(genre) {
+  switch (genre) {
+    case 'xianxia':
+      return "สำนวนเทพเซียน บำเพ็ญเพียร วิถีเต๋า สงบนิ่ง ปราณฟ้าดิน มรรคผล อภิญญา และค่ายกลโบราณ";
+    case 'wuxia':
+      return "สำนวนยุทธภพ กำลังภายใน บุญคุณความแค้น เพลงดาบ กระบี่สุรา และคุณธรรมน้ำมิตร";
+    case 'system_game':
+      return "สำนวนระบบ ดันเจี้ยน การอัปเลเวล แจ้งเตือนสเตตัส ภาษาอ่านง่าย กระชับ ทันสมัย";
+    case 'scifi':
+      return "สำนวนมหากาพย์ไซไฟ อวกาศ เทคโนโลยี ควอนตัม สเกลระดับจักรวาลและดวงดาว";
+    default:
+      return "สำนวนนิยายแปลจีนอ่านสนุก สละสลวย กระชับ ลื่นไหล เป็นธรรมชาติ";
+  }
+}
+
+// 5. ตัวช่วยทำความสะอาด JSON และกู้คืนข้อความ
+function cleanAndParseJSON(rawStr) {
+  let cleaned = rawStr.replace(/```json/gi, '').replace(/```/g, '').trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    const firstBrace = cleaned.indexOf('{');
+    const lastBrace = cleaned.lastIndexOf('}');
+    if (firstBrace !== -1 && lastBrace !== -1) {
+      return JSON.parse(cleaned.substring(firstBrace, lastBrace + 1));
+    }
+    throw err;
+  }
+}
+
+function cleanTermString(str) {
+  return (str || '').replace(/[【】\[\]\s]/g, '').trim();
+}
+
+function rescueEmptyBrackets(thText, srcText) {
+  if (!thText) return "";
+  return thText.replace(/【\s*】/g, `【${srcText.substring(0, 8)}】`);
+}
+
+// 6. ฟังก์ชันแปลหลัก (พร้อม Structured Dossier และ Chapter Classification)
 async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "", prevSummary = "", signal = null, onStatusUpdate = null) {
   const activeKey = getActiveApiKey();
   const genre = currentBookGenre || "xianxia";
@@ -11,7 +114,6 @@ async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTit
   const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
   const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
 
-  // เช็กเบื้องต้นจากชื่อตอนด้วย Regex
   const isSuspectedAnnouncement = /请假|感言|通知|说明|上架|完本|月票|汇报|推书/.test(rawChapTitle);
   const isSuspectedSideStory = /番外|外传|特别篇|if线|IF线|后记/.test(rawChapTitle);
 
@@ -35,7 +137,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
 - หากเป็น "announcement":
   * ห้ามสร้างข้อมูลใน "dossier" เด็ดขาด (ให้ส่ง key_events ว่าง [], state_transitions ว่าง [])
   * ห้ามนำชื่อคนเขียน แพลตฟอร์ม หรือเรื่องส่วนตัวไปใส่ใน "used_entities"
-  * ให้สรุปใน "chapter_summary" สั้นๆ เช่น "ประกาศของผู้เขียน: แจ้งขอลาหยุดเนื่องจาก..."
+  * ให้สรุปใน "chapter_summary" สั้นๆ เช่น "ประกาศของผู้เขียน: แจ้งขอลาหยุด..."
 - หากเป็น "side_story":
   * แปลเนื้อหาตามปกติ สกัด key_events ได้ แต่ห้ามนำ state_transitions ไปเปลี่ยนแปลงสถานะของตัวเอกในเนื้อเรื่องหลัก
 - หากเป็น "regular":
@@ -80,7 +182,7 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
 }`;
 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${activeKey}`;
-  
+
   const res = await fetch(endpoint, {
     method: 'POST',
     signal: signal,
@@ -107,7 +209,6 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
   let chapterSummary = parsedResult.chapter_summary || "";
   let chapterDossier = parsedResult.dossier || { key_events: [], state_transitions: [], current_status_snapshot: {} };
 
-  // เคลียร์ความปลอดภัยซ้ำสอง หากเป็น announcement
   if (chapterType === "announcement") {
     chapterDossier = { key_events: [], state_transitions: [], current_status_snapshot: {} };
   }
@@ -117,14 +218,13 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
     src: p.src
   }));
 
-  // Auto-sync used entities เข้าคลังศัพท์ (เฉพาะกรณีที่เป็นเนื้อเรื่องนิยาย regular หรือ side_story เท่านั้น)
   if (chapterType !== "announcement" && Array.isArray(parsedResult.used_entities) && parsedResult.used_entities.length > 0) {
     for (const ent of parsedResult.used_entities) {
       if (ent.src && ent.tgt) {
         const cleanSrc = cleanTermString(ent.src);
         const cleanTgt = cleanTermString(ent.tgt);
-        const existing = inMemoryGlossaryCache.find(x => x.src === cleanSrc);
-        if (!existing) {
+        const existing = (window.inMemoryGlossaryCache || []).find(x => x.src === cleanSrc);
+        if (!existing && typeof dbSaveGlossaryItem === 'function') {
           await dbSaveGlossaryItem({
             src: cleanSrc,
             tgt: cleanTgt,
@@ -140,17 +240,33 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
     }
   }
 
-  const isBilingualVerifyEnabled = localStorage.getItem('nov_enable_bilingual_verify') !== 'false';
-  if (isBilingualVerifyEnabled && paragraphs.length > 0) {
-    paragraphs = await bilingualCrossVerificationPass(paragraphs, modelToUse, signal, onStatusUpdate);
-  }
-
   return {
     bookTitle: translatedBookTitle,
     chapterTitle: translatedChapTitle,
-    chapterType: chapterType, // regular | announcement | side_story
+    chapterType: chapterType,
     summary: chapterSummary,
     dossier: chapterDossier,
     paragraphs: paragraphs
   };
+}
+
+// 7. จับคู่คำไทยกับอักษรจีนในย่อหน้า
+async function pairThaiToSourceParagraph(thaiWord, chinesePara) {
+  const activeKey = getActiveApiKey();
+  if (!activeKey) return null;
+
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${activeKey}`;
+  const prompt = `จากย่อหน้าภาษาจีนนี้: "${chinesePara}"\nจงหาคำภาษาจีนต้นฉบับที่ตรงกับคำแปลไทยว่า: "${thaiWord}" ตอบเฉพาะตัวอักษรจีนคำนั้นเท่านั้น ไม่ต้องใส่คำอธิบายอื่น`;
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }]
+    })
+  });
+
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || null;
 }
