@@ -63,9 +63,10 @@
       <span class="sel-tag" id="sel-tag-label">คำที่เลือก</span>
       <span class="sel-text" id="sel-preview-text">...</span>
     </div>
-    <div style="display: flex; gap: 6px;">
+    <div style="display: flex; gap: 6px; align-items: center;">
       <button class="btn" style="color:#fff; border-color:rgba(255,255,255,0.2); padding: 4px 6px; font-size: 11px;" onclick="dismissSelectionBar()">ปิด</button>
       <button class="btn" id="reverse-pair-btn" style="color:#38bdf8; border-color:#38bdf8; padding: 4px 8px; font-size: 11px;" onclick="findChineseForSelection()" title="ให้ AI ค้นหาและไฮไลต์อักษรจีนต้นฉบับในย่อหน้า">🔍 หาคำจีน</button>
+      <button class="btn" style="color:#a855f7; border-color:#a855f7; padding: 4px 8px; font-size: 11px;" onclick="askBotAboutSelection()" title="ถาม AI เกี่ยวกับคำนี้">💬 ถามบอท</button>
       <button class="btn btn-primary" style="padding: 4px 8px; font-size: 11px;" onclick="addFromSelectionBar()">+ ใส่คลัง</button>
     </div>
   </div>
@@ -115,6 +116,49 @@
     <button class="btn" onclick="adjustFontSize(1)">A+</button>
     <button class="btn" onclick="openGlossaryModal()">คลังศัพท์</button>
   </nav>
+
+  <!-- AI CHAT FLOATING BUBBLE -->
+  <button id="chat-bubble-btn" onclick="toggleChatDrawer()" title="เปิดเพื่อนคุยนิยาย AI">
+    💬
+  </button>
+
+  <!-- AI READING COMPANION DRAWER -->
+  <div id="chat-drawer">
+    <div class="chat-drawer-header">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="font-size: 16px;">🤖</span>
+        <div>
+          <b style="font-size: 13px;">เพื่อนอ่านนิยาย AI</b>
+          <div style="font-size: 10px; opacity: 0.65;">ถามสเตตัส สรุปเนื้อหา หรือคุยเรื่องนิยาย</div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 4px;">
+        <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="clearChatHistory()" title="ล้างบทสนทนา">🗑️</button>
+        <button class="btn" style="padding: 2px 7px; font-size: 12px;" onclick="toggleChatDrawer()">✕</button>
+      </div>
+    </div>
+
+    <!-- QUICK PROMPT CHIPS -->
+    <div class="chat-quick-chips">
+      <button class="chip-btn" onclick="sendChatMessage('ช่วยสรุปเนื้อหาสำคัญในตอนปัจจุบันนี้ให้ฟังแบบสั้นๆ หน่อยครับ')">📌 สรุปบทปัจจุบัน</button>
+      <button class="chip-btn" onclick="sendChatMessage('ในตอนปัจจุบันมีตัวละครคนไหนบ้าง และแต่ละคนทำอะไรอยู่?')">👥 ตัวละครในบทนี้</button>
+      <button class="chip-btn" onclick="sendChatMessage('เช็กระดับพลัง/ขอบเขต และวิชาที่ปรากฏในบทนี้ให้หน่อยครับ')">🧬 ระดับพลัง/วิชา</button>
+      <button class="chip-btn" onclick="sendChatMessage('ทบทวนเหตุการณ์ 3 ตอนล่าสุดก่อนหน้านี้ให้ฟังหน่อย ลืมไปแล้ว')">⏪ ทบทวนบทก่อนหน้า</button>
+    </div>
+
+    <!-- CHAT MESSAGES BODY -->
+    <div class="chat-messages-container" id="chat-messages-body">
+      <div class="chat-msg chat-msg-bot">
+        สวัสดีครับ! ผมคือผู้ช่วยอ่านนิยายของคุณ สงสัยจุดไหนในเนื้อเรื่อง ลืมชื่อตัวละคร หรืออยากให้สรุปตอนให้ฟัง ถามได้เลยครับ 📖
+      </div>
+    </div>
+
+    <!-- CHAT INPUT -->
+    <div class="chat-input-area">
+      <input type="text" id="chat-user-input" class="form-input" placeholder="พิมพ์คุยกับ AI เกี่ยวกับนิยาย..." onkeydown="if(event.key==='Enter') sendChatMessage()">
+      <button class="btn btn-primary" onclick="sendChatMessage()">ส่ง</button>
+    </div>
+  </div>
 
   <!-- MODAL: BOOKSHELF -->
   <div class="modal-overlay" id="bookshelf-modal">
@@ -390,9 +434,21 @@
           <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
             <input type="checkbox" id="enable-bilingual-verify" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
             <div>
-              <span>🛡️ ตรวจสอบความถูกต้องเทียบต้นฉบับ 2 ภาษา (Bilingual Cross-Verification Pass)</span>
+              <span>🛡️️ ตรวจสอบความถูกต้องเทียบต้นฉบับ 2 ภาษา (Bilingual Cross-Verification Pass)</span>
               <div style="font-size: 11px; font-weight: normal; opacity: 0.65; margin-top: 2px;">
                 เทียบประโยคไทยกับจีนต้นฉบับ 1:1 ป้องกันใจความสลับ, ล็อกสรรพนามไม่ให้เปลี่ยน, ล็อกคำศัพท์คลังขึ้นเส้นประ 100%, แก้คำสะกดผิด และป้องกันคำในกรอบ 【 】 หาย
+              </div>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-group" style="margin-top: 10px;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
+            <input type="checkbox" id="enable-proofread-pass" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;">
+            <div>
+              <span>✨ เกลาสำนวนภาษาไทยรอบสองแบบเดี่ยว (Monolingual Polish Pass)</span>
+              <div style="font-size: 11px; font-weight: normal; opacity: 0.65; margin-top: 2px;">
+                *หากเปิดระบบตรวจสอบ 2 ภาษาด้านบนแล้ว ระบบจะใช้ระบบ 2 ภาษาเป็นหลักโดยอัตโนมัติ เพื่อป้องกันการยิง API ซ้ำซ้อนและประหยัดโทเคน
               </div>
             </div>
           </label>
@@ -431,6 +487,7 @@
   <script src="js/api.js"></script>
   <script src="js/glossary.js"></script>
   <script src="js/shelf.js"></script>
+  <script src="js/chat.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>
