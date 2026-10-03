@@ -2,12 +2,10 @@
 // NOVELTRANSLATE AI - API & TRANSLATION ENGINE (api.js)
 // ============================================================================
 
-// 1. แคชคลังศัพท์ระดับ Global
 if (typeof window.inMemoryGlossaryCache === 'undefined') {
   window.inMemoryGlossaryCache = [];
 }
 
-// 2. ระบบหมุนเวียน API Key (Key Rotator)
 let currentApiKeyIndex = 0;
 
 function getStoredApiKeys() {
@@ -29,7 +27,100 @@ function rotateApiKey() {
   console.log(`[Key Rotator] สลับไปใช้ Key ลำดับที่ ${currentApiKeyIndex + 1}/${keys.length}`);
 }
 
-// 3. ตัวดึงเนื้อหานิยายจาก URL (CORS Proxy Scraper)
+// ---------------- FETCH LIVE MODELS ----------------
+
+async function fetchLiveModels() {
+  const statusEl = document.getElementById('fetch-status-text');
+  const modelSelect = document.getElementById('gemini-primary-model');
+  const btn = document.getElementById('fetch-models-btn');
+  const keyArea = document.getElementById('gemini-keys-area');
+
+  let keys = [];
+  if (keyArea && keyArea.value.trim()) {
+    keys = keyArea.value.trim().split('\n').map(k => k.trim()).filter(Boolean);
+  } else {
+    keys = getStoredApiKeys();
+  }
+
+  if (keys.length === 0) {
+    alert("กรุณากรอก API Key ในช่องข้อความก่อนตรวจเช็ก");
+    if (statusEl) {
+      statusEl.style.display = 'block';
+      statusEl.style.color = '#ef4444';
+      statusEl.textContent = '❌ กรุณาวาง API Key ก่อนตรวจเช็กโมเดล';
+    }
+    return;
+  }
+
+  const testKey = keys[0];
+
+  if (btn) btn.disabled = true;
+  if (statusEl) {
+    statusEl.style.display = 'block';
+    statusEl.style.color = '#38bdf8';
+    statusEl.textContent = 'กำลังเชื่อมต่อเพื่อตรวจสอบรายการโมเดล...';
+  }
+
+  try {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models`;
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-goog-api-key': testKey
+      }
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error?.message || `HTTP ${res.status}: ยิง API ไม่สำเร็จ`);
+    }
+
+    const availableModels = (data.models || []).filter(m => 
+      m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent')
+    );
+
+    if (availableModels.length === 0) {
+      throw new Error('ไม่พบโมเดลที่รองรับในคีย์นี้');
+    }
+
+    if (modelSelect) {
+      const currentSelected = modelSelect.value;
+      modelSelect.innerHTML = '';
+
+      availableModels.forEach(m => {
+        const modelCode = m.name.replace(/^models\//, '');
+        const opt = document.createElement('option');
+        opt.value = modelCode;
+        opt.textContent = `${m.displayName || modelCode} (${modelCode})`;
+        if (modelCode === currentSelected) opt.selected = true;
+        modelSelect.appendChild(opt);
+      });
+
+      if (!availableModels.some(m => m.name.replace(/^models\//, '') === currentSelected)) {
+        modelSelect.selectedIndex = 0;
+      }
+    }
+
+    if (statusEl) {
+      statusEl.style.color = '#22c55e';
+      statusEl.textContent = `✅ ตรวจสอบสำเร็จ! พบ ${availableModels.length} โมเดลที่พร้อมใช้งาน`;
+    }
+  } catch (err) {
+    console.error("fetchLiveModels error:", err);
+    if (statusEl) {
+      statusEl.style.color = '#ef4444';
+      statusEl.textContent = `❌ เชื่อมต่อล้มเหลว: ${err.message}`;
+    }
+    alert(`เชื่อมต่อไม่สำเร็จ: ${err.message}`);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+// ---------------- CORS PROXY SCRAPER ----------------
+
 async function fetchNovelChapterContent(targetUrl) {
   const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
   const res = await fetch(proxyUrl);
@@ -60,7 +151,8 @@ async function fetchNovelChapterContent(targetUrl) {
   };
 }
 
-// 4. สไตล์สำนวนตามแนวเรื่อง (Genre Prompting)
+// ---------------- PROMPTING & HELPERS ----------------
+
 function getGenreInstruction(genre) {
   switch (genre) {
     case 'xianxia':
@@ -76,7 +168,6 @@ function getGenreInstruction(genre) {
   }
 }
 
-// 5. ตัวช่วยทำความสะอาด JSON และกู้คืนข้อความ
 function cleanAndParseJSON(rawStr) {
   let cleaned = rawStr.replace(/```json/gi, '').replace(/```/g, '').trim();
   try {
@@ -100,7 +191,8 @@ function rescueEmptyBrackets(thText, srcText) {
   return thText.replace(/【\s*】/g, `【${srcText.substring(0, 8)}】`);
 }
 
-// 6. ฟังก์ชันแปลหลัก (พร้อม Structured Dossier และ Chapter Classification)
+// ---------------- EXECUTE API CALL ----------------
+
 async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "", prevSummary = "", signal = null, onStatusUpdate = null) {
   const activeKey = getActiveApiKey();
   const genre = currentBookGenre || "xianxia";
@@ -181,12 +273,15 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
   ]
 }`;
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent?key=${activeKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelToUse}:generateContent`;
 
   const res = await fetch(endpoint, {
     method: 'POST',
     signal: signal,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      'x-goog-api-key': activeKey
+    },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาที่ต้องแปล:\n${rawText}` }] }],
       generationConfig: { response_mime_type: "application/json" }
@@ -250,17 +345,19 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
   };
 }
 
-// 7. จับคู่คำไทยกับอักษรจีนในย่อหน้า
 async function pairThaiToSourceParagraph(thaiWord, chinesePara) {
   const activeKey = getActiveApiKey();
   if (!activeKey) return null;
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent?key=${activeKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent`;
   const prompt = `จากย่อหน้าภาษาจีนนี้: "${chinesePara}"\nจงหาคำภาษาจีนต้นฉบับที่ตรงกับคำแปลไทยว่า: "${thaiWord}" ตอบเฉพาะตัวอักษรจีนคำนั้นเท่านั้น ไม่ต้องใส่คำอธิบายอื่น`;
 
   const res = await fetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 
+      'Content-Type': 'application/json',
+      'x-goog-api-key': activeKey
+    },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }]
     })
