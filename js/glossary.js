@@ -63,22 +63,18 @@ function renderGlossaryUI() {
   const scopeVal = scopeFilter ? scopeFilter.value : 'all';
   const sortVal = sortSelect ? sortSelect.value : 'count_desc';
 
-  // ป้องกัน undefined filter
   let items = (window.inMemoryGlossaryCache || []).slice();
 
-  // กรองตามหมวดหมู่
   if (currentGlossaryCategory !== 'all') {
     items = items.filter(it => (it.category || 'character') === currentGlossaryCategory);
   }
 
-  // กรองตามขอบเขต (Scope)
   if (scopeVal === 'current_book' && currentBookId) {
     items = items.filter(it => it.scope === 'global' || (Array.isArray(it.books) && it.books.includes(currentBookId)));
   } else if (scopeVal === 'global_only') {
     items = items.filter(it => it.scope === 'global');
   }
 
-  // กรองคำค้นหา
   if (query) {
     items = items.filter(it => 
       it.src.toLowerCase().includes(query) || 
@@ -86,7 +82,6 @@ function renderGlossaryUI() {
     );
   }
 
-  // การจัดเรียง
   items.sort((a, b) => {
     if (sortVal === 'count_desc') return (b.count || 1) - (a.count || 1);
     if (sortVal === 'time_desc') return (b.updatedAt || 0) - (a.updatedAt || 0);
