@@ -1,261 +1,358 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>NovelTranslate AI - เว็บแปลและอ่านนิยายจีน</title>
-  <link rel="stylesheet" href="css/style.css">
-</head>
-<body id="app-body" class="theme-sepia">
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  font-family: 'Sarabun', sans-serif;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.2s, color 0.2s;
+}
 
-  <!-- TOP APP BAR -->
-  <header class="app-header">
-    <div class="header-left">
-      <button class="icon-btn" onclick="openBookshelfModal()" title="ชั้นหนังสือ">📚 ชั้นหนังสือ</button>
-      <button class="icon-btn" onclick="openGlossaryModal()" title="คลังคำศัพท์">📖 คลังศัพท์</button>
-      <button class="btn btn-primary" onclick="openModal('import-modal')">+ วางลิงก์</button>
-    </div>
-    <div class="header-center">
-      <div id="display-book-title" class="truncate font-semibold">NovelTranslate AI</div>
-      <div id="display-chap-title" class="truncate text-sm opacity-75">พร้อมใช้งาน</div>
-    </div>
-    <div class="header-right">
-      <div class="font-controls">
-        <button class="icon-btn" onclick="adjustFontSize(-2)" title="ลดขนาดอักษร">A-</button>
-        <button class="icon-btn" onclick="adjustFontSize(2)" title="เพิ่มขนาดอักษร">A+</button>
-      </div>
-      <button id="desktop-theme-btn" class="icon-btn" onclick="cycleTheme()" title="เปลี่ยนธีม">ถนอมสายตา</button>
-      <button class="icon-btn" onclick="exportTxt()" title="ดาวน์โหลดไฟล์ TXT">💾 TXT</button>
-      <button class="icon-btn" onclick="openModal('settings-modal')" title="ตั้งค่าระบบ">⚙️</button>
-    </div>
-  </header>
+body.modal-open {
+  overflow: hidden !important;
+  touch-action: none;
+}
 
-  <!-- MAIN READING CONTAINER -->
-  <main class="reading-viewport">
-    <div id="reading-content" class="reading-content-container">
-      <!-- เนื้อหาจะถูกเรนเดอร์ที่นี่ -->
-    </div>
+/* THEMES */
+body.theme-sepia { background-color: #f4ecd8; color: #2b2114; }
+body.theme-light { background-color: #f8fafc; color: #1e293b; }
+body.theme-dark  { background-color: #0d1117; color: #e6edf3; }
 
-    <!-- BOTTOM FLOATING CONTROLS -->
-    <nav class="bottom-nav-bar">
-      <button class="btn nav-btn" onclick="prevChapter()">◀ ตอนก่อนหน้า</button>
-      <button class="btn nav-btn btn-primary" onclick="handleNextChapterClick()">ตอนถัดไป ▶</button>
-    </nav>
-  </main>
+/* HEADER */
+header {
+  position: sticky; top: 0; z-index: 40;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 16px; border-bottom: 1px solid rgba(0,0,0,0.08);
+  backdrop-filter: blur(8px); background-color: inherit;
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+body.theme-dark header { border-bottom-color: rgba(255,255,255,0.1); }
+.brand-box { display: flex; align-items: center; gap: 8px; }
+.brand-icon {
+  width: 32px; height: 32px; border-radius: 8px;
+  background: #2563eb; color: #fff; font-family: 'Kanit', sans-serif;
+  font-weight: 600; font-size: 16px; display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 2px 5px rgba(37,99,235,0.3);
+}
+.brand-title { font-family: 'Kanit', sans-serif; font-weight: 600; font-size: 16px; line-height: 1.2; }
 
-  <!-- FLOATING SELECTION BAR -->
-  <div id="selection-bar" class="selection-action-bar" style="display: none;">
-    <span id="sel-preview-text" class="sel-text-truncate"></span>
-    <button class="btn btn-sm" onclick="findChineseForSelection()">🔍 หาคำจีน</button>
-    <button class="btn btn-sm btn-primary" onclick="addFromSelectionBar()">+ ใส่คลังศัพท์</button>
-    <button class="btn btn-sm btn-danger" onclick="dismissSelectionBar()">✕</button>
-  </div>
+.header-actions { display: flex; align-items: center; gap: 5px; }
+.btn {
+  padding: 6px 11px; font-size: 12px; font-weight: 500;
+  border-radius: 6px; border: 1px solid rgba(0,0,0,0.12);
+  background: transparent; color: inherit; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  font-family: inherit;
+}
+body.theme-dark .btn { border-color: rgba(255,255,255,0.15); }
+.btn:hover { background-color: rgba(0,0,0,0.05); }
+body.theme-dark .btn:hover { background-color: rgba(255,255,255,0.08); }
+.btn-primary { background: #2563eb !important; color: #fff !important; border: none !important; }
+.btn-primary:hover { background: #1d4ed8 !important; }
+.btn-secondary { background: rgba(0,0,0,0.06); }
+body.theme-dark .btn-secondary { background: rgba(255,255,255,0.1); }
+.btn-danger { background: #dc2626 !important; color: #fff !important; border: none !important; }
 
-  <!-- TERM QUICK POPOVER -->
-  <div id="term-popover" class="term-popover-box" style="display: none;">
-    <div id="popover-text" class="popover-content"></div>
-    <div class="popover-actions">
-      <button id="popover-edit-btn" class="btn btn-sm">แก้ไขคำแปล</button>
-    </div>
-  </div>
+.desktop-controls { display: none; align-items: center; gap: 4px; }
+@media (min-width: 768px) { .desktop-controls { display: flex; } }
 
-  <!-- GLOBAL ACTION TOAST -->
-  <div id="global-action-toast" class="action-toast" style="display: none;">
-    <span class="spinner-icon"></span>
-    <span id="global-toast-msg">กำลังประมวลผล...</span>
-  </div>
+#prefetch-badge {
+  display: none; font-size: 10px; padding: 2px 7px; border-radius: 999px;
+  background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
+}
 
-  <!-- ==================== MODALS ==================== -->
+/* FLOATING ACTION STATUS TOAST */
+#global-action-toast {
+  display: none; position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+  z-index: 80; background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 30px;
+  font-size: 13px; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+  align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,0.15);
+  animation: fadeInDown 0.2s ease-out;
+}
+@keyframes fadeInDown { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
-  <!-- 1. IMPORT MODAL -->
-  <div id="import-modal" class="modal-overlay">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3>วาง URL หน้านิยาย</h3>
-        <button class="close-btn" onclick="handleImportCancel()">✕</button>
-      </div>
-      <div class="modal-body">
-        <label>URL หน้านิยาย (เช่น 69shuba, biquge ฯลฯ)</label>
-        <input type="text" id="import-url" class="form-input" placeholder="https://www.69shuba.com/txt/..." />
-        
-        <label style="margin-top: 12px; display: block;">แนวเรื่อง / สไตล์สำนวน (Genre)</label>
-        <select id="import-novel-genre" class="form-select">
-          <option value="xianxia">เซียนเซีย / เทพเซียนบำเพ็ญเพียรเต๋า</option>
-          <option value="wuxia">กำลังภายใน / ยุทธภพดั้งเดิม</option>
-          <option value="system_game">ระบบเกม / ดันเจี้ยน / เกิดใหม่</option>
-          <option value="scifi">ไซไฟ / ผจญภัยอวกาศดวงดาว</option>
-          <option value="general">ทั่วไป / วรรณกรรมแปลจีน</option>
-        </select>
+/* TOP-RIGHT FLOATING BUTTONS */
+.top-floating-btn {
+  position: fixed; top: 62px; z-index: 35; width: 32px; height: 32px; border-radius: 50%;
+  background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.12);
+  backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center;
+  cursor: pointer; color: inherit; opacity: 0.65;
+  transition: opacity 0.2s, background-color 0.2s, transform 0.2s, top 0.2s;
+}
+body.theme-dark .top-floating-btn { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
+.top-floating-btn:hover { opacity: 1; transform: scale(1.05); background-color: rgba(0,0,0,0.1); }
+body.theme-dark .top-floating-btn:hover { background-color: rgba(255,255,255,0.15); }
 
-        <div id="import-status" style="margin-top: 10px; font-size: 13px; color: #38bdf8;"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn" onclick="handleImportCancel()">ยกเลิก</button>
-        <button type="button" id="start-btn" class="btn btn-primary" onclick="startTranslateFirst(event)">
-          <span id="start-btn-text">เริ่มแปลตอนนี้</span>
-        </button>
-      </div>
-    </div>
-  </div>
+#fullscreen-btn { right: 16px; }
+#scan-terms-btn { right: 54px; font-size: 13px; }
+#retranslate-chap-btn { right: 92px; font-size: 13px; }
 
-  <!-- 2. BOOKSHELF MODAL -->
-  <div id="bookshelf-modal" class="modal-overlay">
-    <div class="modal-card modal-lg">
-      <div class="modal-header">
-        <h3>📚 ชั้นหนังสือส่วนตัว</h3>
-        <button class="close-btn" onclick="closeModal('bookshelf-modal')">✕</button>
-      </div>
-      <div class="modal-body">
-        <div id="bookshelf-grid" class="bookshelf-grid-container">
-          <!-- รายการหนังสือ -->
-        </div>
-      </div>
-    </div>
-  </div>
+body.is-fullscreen header { transform: translateY(-100%); opacity: 0; pointer-events: none; }
+body.is-fullscreen .mobile-dock { transform: translateY(100%); opacity: 0; pointer-events: none; }
+body.is-fullscreen .top-floating-btn { top: 14px; opacity: 0.4; }
+body.is-fullscreen .top-floating-btn:hover { opacity: 0.9; }
+body.is-fullscreen main { padding-top: 14px; }
 
-  <!-- 3. GLOSSARY MODAL -->
-  <div id="glossary-modal" class="modal-overlay">
-    <div class="modal-card modal-lg">
-      <div class="modal-header">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <h3>📖 คลังคำศัพท์แปลเฉพาะ</h3>
-          <span id="glossary-book-context" style="font-size:12px; opacity:0.7;"></span>
-        </div>
-        <button class="close-btn" onclick="closeModal('glossary-modal')">✕</button>
-      </div>
-      <div class="modal-body">
-        <!-- ADD TERM FORM -->
-        <div class="glossary-add-bar">
-          <input type="text" id="gloss-src" class="form-input" placeholder="ภาษาจีน (เช่น 李林)" style="flex: 2;" />
-          <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปลไทย (เช่น หลี่หลิน)" style="flex: 2;" />
-          <select id="gloss-cat" class="form-select" style="flex: 1.5;">
-            <option value="character">ตัวละคร</option>
-            <option value="title">ฉายา/ตำแหน่ง</option>
-            <option value="location">สถานที่</option>
-            <option value="skill">วิชา/ทักษะ</option>
-            <option value="equipment">ของวิเศษ/ไอเทม</option>
-            <option value="resource">ทรัพยากร/สมุนไพร</option>
-            <option value="realm">ระดับพลัง</option>
-          </select>
-          <button type="button" class="btn btn-primary" onclick="addGlossary()">+ เพิ่มคำศัพท์</button>
-        </div>
+/* MAIN CANVAS */
+main {
+  flex: 1; width: 100%; max-width: 740px; margin: 0 auto;
+  padding: 20px 16px 120px 16px; transition: padding 0.2s ease;
+}
+@media (min-width: 768px) { main { padding-bottom: 50px; } }
 
-        <!-- CATEGORY TABS -->
-        <div class="glossary-tabs-bar">
-          <button class="cat-tab-btn active" onclick="switchGlossaryCategory('all', event)">ทั้งหมด</button>
-          <button class="cat-tab-btn" onclick="switchGlossaryCategory('character', event)">👤 ตัวละคร</button>
-          <button class="cat-tab-btn" onclick="switchGlossaryCategory('title', event)">🎖️ ฉายา/ตำแหน่ง</button>
-          <button class="cat-tab-btn" onclick="switchGlossaryCategory('location', event)">🏰 สถานที่</button>
-          <button class="cat-tab-btn" onclick="switchGlossaryCategory('skill', event)">⚡ วิชา/ทักษะ</button>
-          <button class="cat-tab-btn" onclick="switchGlossaryCategory('equipment', event)">🗡️ ของวิเศษ</button>
-          <button class="cat-tab-btn" onclick="switchGlossaryCategory('resource', event)">🌿 สมุนไพร</button>
-          <button class="cat-tab-btn" onclick="switchGlossaryCategory('realm', event)">🧬 ระดับพลัง</button>
-        </div>
+.chapter-toolbar {
+  display: flex; justify-content: space-between; align-items: flex-start;
+  border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 12px; margin-bottom: 20px;
+}
+body.theme-dark .chapter-toolbar { border-bottom-color: rgba(255,255,255,0.1); }
 
-        <!-- SEARCH & FILTER CONTROLS -->
-        <div class="glossary-filter-bar">
-          <input type="text" id="gloss-search-input" class="form-input" placeholder="ค้นหาคำศัพท์..." oninput="renderGlossaryUI()" style="flex: 2;" />
-          <select id="gloss-scope-filter" class="form-select" onchange="renderGlossaryUI()" style="flex: 1;">
-            <option value="all">คำศัพท์ทั้งหมด</option>
-            <option value="current_book">เฉพาะเรื่องปัจจุบัน</option>
-            <option value="global_only">เฉพาะสากล (Global)</option>
-          </select>
-          <select id="gloss-sort-select" class="form-select" onchange="renderGlossaryUI()" style="flex: 1;">
-            <option value="count_desc">ความถี่ (มาก ➔ น้อย)</option>
-            <option value="time_desc">เพิ่มล่าสุด</option>
-            <option value="time_asc">เก่าสุด</option>
-            <option value="th_asc">ก-ฮ</option>
-            <option value="len_desc">ความยาวคำจีน</option>
-          </select>
-        </div>
+.editable-title-wrap {
+  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  border-radius: 6px; padding: 3px 6px; margin-left: -6px;
+  transition: background-color 0.15s ease;
+}
+.editable-title-wrap:hover { background-color: rgba(0,0,0,0.05); }
+body.theme-dark .editable-title-wrap:hover { background-color: rgba(255,255,255,0.08); }
 
-        <!-- BATCH TOOLBAR -->
-        <div id="gloss-batch-toolbar" class="batch-toolbar" style="display: none;">
-          <span id="gloss-batch-count">เลือก 0 คำ</span>
-          <button class="btn btn-sm btn-danger" onclick="deleteSelectedGlossaryTerms()">ลบคำที่เลือก</button>
-        </div>
+.edit-badge-btn {
+  font-size: 10px; padding: 2px 6px; border-radius: 4px;
+  background: rgba(37,99,235,0.1); color: #2563eb; font-weight: 600;
+  border: 1px solid rgba(37,99,235,0.2); transition: all 0.15s ease;
+}
+body.theme-dark .edit-badge-btn { background: rgba(96,165,250,0.15); color: #93c5fd; border-color: rgba(96,165,250,0.3); }
+.editable-title-wrap:hover .edit-badge-btn { background: #2563eb; color: #fff; }
 
-        <!-- GLOSSARY LIST CONTAINER -->
-        <div id="glossary-list" class="glossary-items-container">
-          <!-- รายการคำศัพท์ -->
-        </div>
-      </div>
-    </div>
-  </div>
+.book-heading { font-size: 13px; opacity: 0.8; font-weight: 600; text-transform: uppercase; }
+.chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; line-height: 1.3; }
 
-  <!-- 4. EDIT TERM MODAL -->
-  <div id="edit-term-modal" class="modal-overlay">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3>แก้ไขคำแปลในคลังศัพท์</h3>
-        <button class="close-btn" onclick="closeModal('edit-term-modal')">✕</button>
-      </div>
-      <div class="modal-body">
-        <label>คำภาษาจีนต้นฉบับ:</label>
-        <div id="edit-term-src-label" style="font-size: 16px; font-weight: bold; margin-bottom: 10px; color: #2563eb;"></div>
-        
-        <label>คำแปลภาษาไทยที่ต้องการ:</label>
-        <input type="text" id="edit-term-tgt-input" class="form-input" />
+/* CHAPTER RENDERING */
+.chapter-block { margin-bottom: 50px; position: relative; }
+.chapter-block-divider {
+  display: flex; align-items: center; justify-content: center;
+  margin: 45px 0 25px 0; border-top: 1px dashed rgba(0,0,0,0.15); position: relative;
+}
+body.theme-dark .chapter-block-divider { border-top-color: rgba(255,255,255,0.15); }
+.chapter-divider-pill {
+  position: absolute; top: -11px; background: inherit; padding: 0 14px;
+  font-size: 12px; font-weight: 600; opacity: 0.6;
+}
 
-        <label style="margin-top: 10px; display: block;">หมวดหมู่:</label>
-        <select id="edit-term-cat-select" class="form-select">
-          <option value="character">ตัวละคร</option>
-          <option value="title">ฉายา/ตำแหน่ง</option>
-          <option value="location">สถานที่</option>
-          <option value="skill">วิชา/ทักษะ</option>
-          <option value="equipment">ของวิเศษ/ไอเทม</option>
-          <option value="resource">ทรัพยากร/สมุนไพร</option>
-          <option value="realm">ระดับพลัง</option>
-        </select>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn" onclick="closeModal('edit-term-modal')">ยกเลิก</button>
-        <button type="button" class="btn btn-primary" onclick="saveEditedGlossaryTerm()">บันทึกการแก้ไข</button>
-      </div>
-    </div>
-  </div>
+#reading-content { line-height: 1.9; user-select: text; }
+.para-item { padding: 6px 8px; margin-bottom: 14px; border-radius: 6px; transition: background-color 0.15s ease; }
+.para-th { font-size: inherit; cursor: pointer; text-indent: 1.5em; }
+.para-th:hover { background-color: rgba(0,0,0,0.02); }
+body.theme-dark .para-th:hover { background-color: rgba(255,255,255,0.02); }
 
-  <!-- 5. SETTINGS MODAL -->
-  <div id="settings-modal" class="modal-overlay">
-    <div class="modal-card">
-      <div class="modal-header">
-        <h3>⚙️ ตั้งค่าระบบและการแปล</h3>
-        <button class="close-btn" onclick="closeModal('settings-modal')">✕</button>
-      </div>
-      <div class="modal-body">
-        <div style="display:flex; justify-content:space-between; align-items:center;">
-          <label>Google Gemini API Keys (คลังคีย์หมุนเวียน)</label>
-          <button id="fetch-models-btn" type="button" class="btn btn-sm" onclick="fetchLiveModels()">ตรวจเช็กโมเดล</button>
-        </div>
-        <textarea id="gemini-keys-area" class="form-input" rows="3" placeholder="วาง Gemini API Key ที่นี่ (ขึ้นต้นด้วย AIzaSy... หรือ AQ... คั่นด้วยบรรทัดใหม่กรณีมีหลายคีย์)"></textarea>
-        <div id="fetch-status-text" style="display:none; font-size:12px; margin-top:4px;"></div>
-        <p style="font-size: 11px; opacity: 0.7; margin-top: 4px;">* เมื่อคีย์ติด Rate Limit (429) ระบบจะสลับไปใช้คีย์ถัดไปให้อัตโนมัติ</p>
+.para-src {
+  display: none; margin-top: 8px; padding: 10px 14px; border-radius: 6px; font-size: 14px;
+  opacity: 0.95; background: rgba(0,0,0,0.04); border-left: 3px solid #f59e0b;
+  font-family: monospace; line-height: 1.7; user-select: text;
+}
+body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
 
-        <label style="margin-top: 12px; display: block;">โมเดล AI ตัวหลัก (Primary Model)</label>
-        <select id="gemini-primary-model" class="form-select">
-          <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-          <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
-        </select>
+.ai-src-candidate-mark {
+  background-color: #fef08a !important;
+  color: #854d0e !important;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-weight: 600;
+  border: 1px dashed #ca8a04;
+  cursor: pointer;
+}
+body.theme-dark .ai-src-candidate-mark {
+  background-color: #854d0e !important;
+  color: #fef08a !important;
+  border-color: #eab308;
+}
 
-        <div style="margin-top: 14px; display: flex; flex-direction: column; gap: 8px;">
-          <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
-            <input type="checkbox" id="enable-infinite-scroll" checked />
-            เปิดใช้ Infinite Scroll (เลื่อนอ่านต่อเนื่องอัตโนมัติ)
-          </label>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn" onclick="closeModal('settings-modal')">ยกเลิก</button>
-        <button type="button" class="btn btn-primary" onclick="saveSettings()">บันทึกการตั้งค่า</button>
-      </div>
-    </div>
-  </div>
+.inline-term-highlight {
+  border-bottom: 1.5px dotted rgba(37,99,235,0.7);
+  cursor: pointer; border-radius: 2px;
+  transition: background-color 0.15s, border-color 0.15s;
+  position: relative; z-index: 10;
+}
+.inline-term-highlight:hover {
+  background-color: rgba(37,99,235,0.18);
+  border-bottom-color: #2563eb;
+}
+body.theme-dark .inline-term-highlight { border-bottom-color: rgba(96,165,250,0.7); }
+body.theme-dark .inline-term-highlight:hover { background-color: rgba(96,165,250,0.25); }
 
-  <!-- SCRIPTS EXECUTION ORDER -->
-  <script src="js/db.js"></script>
-  <script src="js/api.js"></script>
-  <script src="js/glossary.js"></script>
-  <script src="js/shelf.js"></script>
-  <script src="js/app.js"></script>
-</body>
-</html>
+/* INLINE TERM QUICK POPOVER */
+#term-popover {
+  display: none; position: fixed; z-index: 100;
+  background: #1e293b; color: #fff; padding: 7px 12px; border-radius: 8px;
+  font-size: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.35);
+  animation: fadeIn 0.15s ease-out; gap: 6px; align-items: center; pointer-events: auto;
+}
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+#infinite-status-banner {
+  display: none; margin: 30px 0 50px 0; padding: 16px 20px; border-radius: 12px;
+  background: rgba(37,99,235,0.06); border: 1px dashed rgba(37,99,235,0.3);
+  text-align: center; transition: all 0.2s ease;
+}
+body.theme-dark #infinite-status-banner { background: rgba(37,99,235,0.12); border-color: rgba(96,165,250,0.3); }
+.spinner-icon {
+  display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor;
+  border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;
+  margin-right: 6px; vertical-align: middle;
+}
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+.chap-nav {
+  margin-top: 30px; padding-top: 18px; border-top: 1px solid rgba(0,0,0,0.08);
+  display: flex; justify-content: space-between; align-items: center; gap: 8px;
+}
+body.theme-dark .chap-nav { border-top-color: rgba(255,255,255,0.1); }
+
+.mobile-dock {
+  display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+  background: inherit; border-top: 1px solid rgba(0,0,0,0.08); padding: 8px 12px;
+  justify-content: space-around; align-items: center; backdrop-filter: blur(12px);
+  transition: transform 0.2s ease, opacity 0.2s ease;
+}
+body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
+@media (min-width: 768px) { .mobile-dock { display: none; } }
+
+#selection-bar {
+  display: none; position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
+  z-index: 45; width: calc(100% - 24px); max-width: 520px;
+  background: #1e293b; color: #fff; padding: 10px 14px; border-radius: 10px;
+  box-shadow: 0 10px 25px rgba(0,0,0,0.35); align-items: center; justify-content: space-between;
+  animation: slideUp 0.15s ease-out;
+}
+@media (min-width: 768px) { #selection-bar { bottom: 20px; } }
+@keyframes slideUp { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
+.sel-info { display: flex; flex-direction: column; overflow: hidden; max-width: 48%; }
+.sel-tag { font-size: 10px; opacity: 0.6; text-transform: uppercase; font-weight: 600; }
+.sel-text { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #38bdf8; }
+
+/* MODALS */
+.modal-overlay {
+  display: none; position: fixed; inset: 0; z-index: 50;
+  background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
+  align-items: center; justify-content: center; padding: 16px;
+  overscroll-behavior: contain;
+}
+.modal-overlay.active { display: flex !important; }
+.modal-box {
+  width: 100%; max-width: 660px; max-height: 90vh; border-radius: 12px;
+  padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+  background-color: #fff; color: #1e293b;
+  display: flex; flex-direction: column; overflow: hidden;
+  overscroll-behavior: contain;
+}
+body.theme-sepia .modal-box { background-color: #fbf7ee; color: #2b2114; border: 1px solid #e9dac1; }
+body.theme-dark .modal-box  { background-color: #161b22; color: #e6edf3; border: 1px solid #30363d; }
+
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; shrink: 0; }
+.modal-title { font-family: 'Kanit', sans-serif; font-size: 16px; font-weight: 600; }
+.modal-close { background: transparent; border: none; font-size: 18px; cursor: pointer; color: inherit; opacity: 0.6; }
+
+.modal-scrollable-body {
+  overflow-y: auto; overscroll-behavior: contain; padding-right: 4px;
+}
+
+.form-group { margin-bottom: 12px; }
+.form-label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; opacity: 0.8; }
+.form-input {
+  width: 100%; padding: 8px 10px; font-size: 13px; border-radius: 6px;
+  border: 1px solid rgba(0,0,0,0.15); outline: none; background: #fff; color: #000;
+  font-family: inherit;
+}
+body.theme-dark .form-input { background: #0d1117; color: #fff; border-color: rgba(255,255,255,0.2); }
+.status-msg {
+  display: none; padding: 8px 10px; border-radius: 6px; font-size: 12px;
+  margin-top: 8px; line-height: 1.4;
+}
+
+/* GLOSSARY STYLES */
+.gloss-category-tabs {
+  display: flex; gap: 4px; margin-bottom: 10px; overflow-x: auto; padding-bottom: 4px;
+}
+.cat-tab-btn {
+  padding: 4px 9px; font-size: 11px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.1);
+  background: transparent; color: inherit; cursor: pointer; white-space: nowrap;
+}
+body.theme-dark .cat-tab-btn { border-color: rgba(255,255,255,0.15); }
+.cat-tab-btn.active {
+  background: #2563eb !important; color: #fff !important; border-color: #2563eb !important; font-weight: 600;
+}
+
+.glossary-filter-bar {
+  display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;
+}
+
+.gloss-item-row {
+  display: flex; align-items: center; justify-content: space-between; padding: 8px 6px;
+  border-bottom: 1px solid rgba(0,0,0,0.06); gap: 6px; font-size: 12px;
+}
+body.theme-dark .gloss-item-row { border-bottom-color: rgba(255,255,255,0.06); }
+
+.gloss-badge {
+  font-size: 9px; padding: 1px 5px; border-radius: 4px; font-weight: 600;
+  background: rgba(37,99,235,0.1); color: #2563eb;
+}
+body.theme-dark .gloss-badge { background: rgba(96,165,250,0.15); color: #93c5fd; }
+
+.gloss-scope-tag {
+  font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 600; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 2px;
+}
+.gloss-scope-global { background: #dcfce7; color: #166534; }
+.gloss-scope-local { background: #fef3c7; color: #92400e; }
+
+.gloss-batch-toolbar {
+  display: none; align-items: center; justify-content: space-between;
+  padding: 8px 12px; margin-bottom: 8px; border-radius: 6px;
+  background: rgba(37,99,235,0.08); border: 1px solid rgba(37,99,235,0.2); font-size: 11px;
+}
+body.theme-dark .gloss-batch-toolbar { background: rgba(37,99,235,0.18); border-color: rgba(96,165,250,0.3); }
+
+/* BOOKSHELF */
+.book-item-container {
+  border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; margin-bottom: 12px;
+  overflow: hidden; background: rgba(0,0,0,0.01);
+}
+body.theme-dark .book-item-container { border-color: rgba(255,255,255,0.1); background: rgba(255,255,255,0.02); }
+.book-card-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; cursor: pointer; }
+.book-card-header:hover { background-color: rgba(0,0,0,0.03); }
+body.theme-dark .book-card-header:hover { background-color: rgba(255,255,255,0.04); }
+.book-info { flex: 1; overflow: hidden; padding-right: 8px; }
+.book-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #2563eb; }
+body.theme-dark .book-title { color: #60a5fa; }
+.book-meta { font-size: 11px; opacity: 0.65; margin-top: 2px; }
+
+.batch-bar {
+  display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+  background: rgba(0,0,0,0.02); border-top: 1px dashed rgba(0,0,0,0.08); font-size: 12px; flex-wrap: wrap;
+}
+body.theme-dark .batch-bar { background: rgba(255,255,255,0.03); border-top-color: rgba(255,255,255,0.08); }
+.shelf-sub-toolbar {
+  display: flex; justify-content: space-between; align-items: center; padding: 6px 14px;
+  background: rgba(0,0,0,0.03); font-size: 11px; border-top: 1px solid rgba(0,0,0,0.06);
+}
+body.theme-dark .shelf-sub-toolbar { background: rgba(255,255,255,0.04); border-top-color: rgba(255,255,255,0.08); }
+.book-chapters-list {
+  display: none; border-top: 1px solid rgba(0,0,0,0.06); max-height: 220px;
+  overflow-y: auto; overscroll-behavior: contain; background: rgba(0,0,0,0.02); padding: 4px 0;
+}
+body.theme-dark .book-chapters-list { border-top-color: rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); }
+.chap-subitem {
+  padding: 6px 14px; font-size: 12px; display: flex; justify-content: space-between;
+  align-items: center; transition: background 0.1s ease; gap: 8px;
+}
+.chap-subitem:hover { background-color: rgba(37,99,235,0.08); }
+.chap-subitem.active { font-weight: 600; color: #2563eb; background-color: rgba(37,99,235,0.08); }
+.chap-chk { cursor: pointer; accent-color: #2563eb; }
+.chap-name-btn { flex: 1; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chap-action-btn { padding: 2px 6px; font-size: 10px; border-radius: 4px; border: none; cursor: pointer; }
+
+.progress-box {
+  display: none; margin: 10px 0; padding: 10px 12px; border-radius: 8px;
+  background: #eff6ff; color: #1e40af; font-size: 12px; transition: all 0.2s ease; border: 1px solid #bfdbfe;
+}
+body.theme-dark .progress-box { background: rgba(37,99,235,0.15); color: #93c5fd; border-color: rgba(37,99,235,0.3); }
+.progress-box.success { background: #f0fdf4 !important; color: #166534 !important; border-color: #bbf7d0 !important; }
+body.theme-dark .progress-box.success { background: rgba(34,197,94,0.15) !important; color: #86efac !important; border-color: rgba(34,197,94,0.3) !important; }
