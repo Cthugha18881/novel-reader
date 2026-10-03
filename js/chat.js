@@ -1,10 +1,14 @@
-// ==================== AI READING COMPANION (FULL PRODUCTION ENGINE) ====================
-// ครบถ้วนทั้ง 5 รายการ:
+// ============================================================================
+// NOVELTRANSLATE AI - CHAT & READING COMPANION MODULE (chat.js)
+// รองรับ:
 // 1. Hard Chapter Fence (ป้องกันสปอยล์ข้ามตอน)
-// 2. Book-Isolated Chat Session (แยกประวัติรายเรื่อง)
-// 3. Alias Graph (เครือข่ายฉายา/ชื่อแฝง)
-// 4. Quote / Dialogue Back-Reference (ดึงคำพูดจริงจากบท)
+// 2. Book-Isolated Chat Session (แยกประวัติรายเรื่อง ป้องกันบริบทปนเปื้อน)
+// 3. Alias Graph Engine (ค้นหาฉายา / ชื่อแฝง / ตำแหน่งในอดีต)
+// 4. Quote / Dialogue Back-Reference (ดึงคำพูดจริงจากย่อหน้าในบท)
 // 5. Delta-State Analyzer (วิเคราะห์จุดเปลี่ยน อดีต VS ปัจจุบัน)
+// 6. Chapter Classification Filter (กรองข้ามประกาศคนเขียน และแยกตอนพิเศษ)
+// 7. Universal Scaling & Cross-Book Shelf Comparison (ถกสเกลพลังข้ามเรื่อง)
+// ============================================================================
 
 let chatSessionsByBook = {};
 let isChatResponding = false;
@@ -44,7 +48,7 @@ function renderCurrentBookChatSession() {
   if (history.length === 0) {
     body.innerHTML = `
       <div class="chat-msg chat-msg-bot">
-        สวัสดีครับ! ผมคือผู้ช่วยอ่านนิยายเรื่อง <b>${escapeHtml(currentBookTitle || 'เล่มนี้')}</b> ถามสเตตัส สรุปเนื้อหา ทบทวนเหตุการณ์ เปรียบเทียบพัฒนาการตัวละคร หรือคุยเทียบสเกลพลังได้เลยครับ 📖
+        สวัสดีครับ! ผมคือเพื่อนอ่านนิยายเรื่อง <b>${escapeHtml(currentBookTitle || 'เล่มนี้')}</b> ถามสเตตัส สรุปเนื้อหา ทบทวนเหตุการณ์ย้อนหลัง เปรียบเทียบพัฒนาการ หรือคุยเทียบสเกลพลังได้เต็มที่เลยครับ 📖
       </div>
     `;
   } else {
@@ -73,13 +77,12 @@ function clearChatHistory() {
   renderCurrentBookChatSession();
 }
 
-// ---------------- 1. ALIAS GRAPH ENGINE (ข้อ 3) ----------------
+// ---------------- 1. ALIAS GRAPH ENGINE ----------------
 
 async function buildAliasGraph(availableChaps) {
-  const aliasMap = new Map(); // Canonical Name -> Set of Aliases
+  const aliasMap = new Map();
   const activeTerms = await getActiveGlossaryForCurrentBook();
 
-  // สร้างโหนดเริ่มต้นจาก Glossary
   for (const [src, item] of Object.entries(activeTerms)) {
     const tgt = item.resolvedTgt || "";
     if (tgt) {
@@ -93,8 +96,8 @@ async function buildAliasGraph(availableChaps) {
     }
   }
 
-  // เชื่อมโยงฉายาและตำแหน่งจาก Dossier
-  availableChaps.forEach(ch => {
+  // ดึงความสัมพันธ์จาก Dossier (ข้ามบทที่เป็นประกาศคนเขียน)
+  availableChaps.filter(c => c.chapterType !== 'announcement').forEach(ch => {
     const d = ch.dossier;
     if (d && Array.isArray(d.state_transitions)) {
       d.state_transitions.forEach(st => {
@@ -132,21 +135,20 @@ function resolveAllQueryAliases(query, aliasGraph) {
   return Array.from(allRelatedNames);
 }
 
-// ---------------- 2. DELTA-STATE ANALYZER (ข้อ 5) ----------------
+// ---------------- 2. DELTA-STATE ANALYZER ----------------
 
 function analyzeDeltaState(userQuery, availableChaps, expandedTerms) {
   const q = userQuery.toLowerCase();
-  // ดักจับคำถามเชิงเปรียบเทียบเวลา พัฒนาการ หรือการเปลี่ยนแปลง
   const isComparisonQuery = /แต่ก่อน|ตอนนี้|ทำไมถึง|เทียบกับ|เปลี่ยนไป|พัฒนา|เก่งขึ้น|แรกเริ่ม|ตอนแรก|กลายเป็น/.test(q);
   if (!isComparisonQuery || expandedTerms.length === 0) return null;
 
   const timelineRecords = [];
 
-  availableChaps.forEach(ch => {
+  // กรองเฉพาะเนื้อหาหลัก (ข้ามประกาศและตอนพิเศษนอกเส้นเรื่องหลัก)
+  availableChaps.filter(c => c.chapterType !== 'announcement' && c.chapterType !== 'side_story').forEach(ch => {
     const d = ch.dossier;
     if (!d) return;
 
-    // เช็คจาก State transitions
     if (Array.isArray(d.state_transitions)) {
       d.state_transitions.forEach(st => {
         const matches = expandedTerms.some(term => 
@@ -181,7 +183,7 @@ function analyzeDeltaState(userQuery, availableChaps, expandedTerms) {
   };
 }
 
-// ---------------- 3. INVERTED INDEX & DOSSIER SCANNER ----------------
+// ---------------- 3. INVERTED INDEX & SCANNER ----------------
 
 async function findBilingualStateTimeline(userQuery, maxAllowedOrder) {
   const query = userQuery.trim().toLowerCase();
@@ -191,24 +193,26 @@ async function findBilingualStateTimeline(userQuery, maxAllowedOrder) {
   // 1. HARD CHAPTER FENCE: กักข้อมูลไว้แค่ตอนที่กำลังอ่านอยู่
   const availableChaps = bookChaps.filter(c => (c.order || 0) <= maxAllowedOrder);
 
-  // 2. ALIAS GRAPH: ขยายคำค้นด้วยเครือข่ายฉายา/ชื่อแฝง
+  // 2. ALIAS GRAPH
   const aliasGraph = await buildAliasGraph(availableChaps);
   let expandedTerms = resolveAllQueryAliases(query, aliasGraph);
   if (expandedTerms.length === 0) {
     expandedTerms = query.split(/\s+/).filter(w => w.length >= 2);
   }
 
-  // 3. DELTA-STATE ANALYZER: ตรวจจับการเปรียบเทียบอดีต VS ปัจจุบัน
+  // 3. DELTA-STATE ANALYZER
   const deltaComparison = analyzeDeltaState(userQuery, availableChaps, expandedTerms);
 
   const matchedTransitions = [];
   const matchedEvents = [];
   const matchedQuotes = [];
 
-  // ตรวจจับคำถามหาบทสนทนา (Quote Back-Reference)
   const isAskingForQuotes = /พูดว่า|คำพูด|ประโยค|สั่งเสีย|ตะโกน|กล่าวว่า|อุทาน/.test(query);
 
   availableChaps.forEach(ch => {
+    // ข้ามบทประกาศเด็ดขาด
+    if (ch.chapterType === 'announcement') return;
+
     const d = ch.dossier;
 
     if (d && Array.isArray(d.state_transitions)) {
@@ -223,6 +227,7 @@ async function findBilingualStateTimeline(userQuery, maxAllowedOrder) {
           matchedTransitions.push({
             chapter: ch.order,
             title: ch.title,
+            isSideStory: ch.chapterType === 'side_story',
             ...st
           });
         }
@@ -233,12 +238,12 @@ async function findBilingualStateTimeline(userQuery, maxAllowedOrder) {
       d.key_events.forEach(ev => {
         const isHit = expandedTerms.some(term => ev.toLowerCase().includes(term.toLowerCase()));
         if (isHit) {
-          matchedEvents.push(`- ตอนที่ ${ch.order} (${ch.title}): ${ev}`);
+          const prefix = ch.chapterType === 'side_story' ? '[ตอนพิเศษ] ' : '';
+          matchedEvents.push(`- ตอนที่ ${ch.order} ${prefix}(${ch.title}): ${ev}`);
         }
       });
     }
 
-    // ดึงบทสนทนาจริงจากตอน
     if (isAskingForQuotes && Array.isArray(ch.paragraphs)) {
       ch.paragraphs.forEach(p => {
         if (!p.th) return;
@@ -264,28 +269,31 @@ function consolidateCurrentInventory(bookChaps, maxAllowedOrder) {
   let latestRealm = "ไม่ระบุ";
   let latestInjuries = "ปกติ";
 
-  bookChaps.filter(c => (c.order || 0) <= maxAllowedOrder).forEach(ch => {
-    const d = ch.dossier;
-    if (!d) return;
+  // กรองเฉพาะเนื้อเรื่องหลัก regular (ไม่เอา announcement และ side_story)
+  bookChaps
+    .filter(c => (c.order || 0) <= maxAllowedOrder && c.chapterType !== 'announcement' && c.chapterType !== 'side_story')
+    .forEach(ch => {
+      const d = ch.dossier;
+      if (!d) return;
 
-    if (d.current_status_snapshot) {
-      if (d.current_status_snapshot.protagonist_realm) latestRealm = d.current_status_snapshot.protagonist_realm;
-      if (d.current_status_snapshot.injuries) latestInjuries = d.current_status_snapshot.injuries;
-    }
+      if (d.current_status_snapshot) {
+        if (d.current_status_snapshot.protagonist_realm) latestRealm = d.current_status_snapshot.protagonist_realm;
+        if (d.current_status_snapshot.injuries) latestInjuries = d.current_status_snapshot.injuries;
+      }
 
-    if (Array.isArray(d.state_transitions)) {
-      d.state_transitions.forEach(st => {
-        if (!st.is_protagonist && st.owner && !st.owner.includes("ตัวเอก") && !st.owner.includes("หลี่")) return;
+      if (Array.isArray(d.state_transitions)) {
+        d.state_transitions.forEach(st => {
+          if (!st.is_protagonist && st.owner && !st.owner.includes("ตัวเอก") && !st.owner.includes("หลี่")) return;
 
-        const key = st.src;
-        if (st.action === 'acquired' || st.action === 'modified' || st.action === 'retcon') {
-          inventory.set(key, { ...st, lastUpdatedChapter: ch.order });
-        } else if (st.action === 'lost' || st.action === 'consumed' || st.action === 'transferred') {
-          inventory.delete(key);
-        }
-      });
-    }
-  });
+          const key = st.src;
+          if (st.action === 'acquired' || st.action === 'modified' || st.action === 'retcon') {
+            inventory.set(key, { ...st, lastUpdatedChapter: ch.order });
+          } else if (st.action === 'lost' || st.action === 'consumed' || st.action === 'transferred') {
+            inventory.delete(key);
+          }
+        });
+      }
+    });
 
   return {
     currentHoldings: Array.from(inventory.values()),
@@ -321,7 +329,7 @@ async function findCrossBookContextIfAny(userQuery) {
   return matchedOtherBooks;
 }
 
-// ---------------- HIERARCHICAL CONTEXT BUILDER ----------------
+// ---------------- 4. HIERARCHICAL CONTEXT BUILDER ----------------
 
 async function buildHierarchicalStoryContext(userQuery, isFullRecapMode = false) {
   const curChap = chapters[currentChapterIndex] || {};
@@ -337,10 +345,13 @@ async function buildHierarchicalStoryContext(userQuery, isFullRecapMode = false)
 
   const timelineMilestones = [];
   availableChaps.forEach(ch => {
+    if (ch.chapterType === 'announcement') return;
+
+    const tag = ch.chapterType === 'side_story' ? '[ตอนพิเศษ] ' : '';
     if (ch.dossier && Array.isArray(ch.dossier.key_events) && ch.dossier.key_events.length > 0) {
-      timelineMilestones.push(`[ตอนที่ ${ch.order}] ${ch.dossier.key_events.join('; ')}`);
+      timelineMilestones.push(`[ตอนที่ ${ch.order}] ${tag}${ch.dossier.key_events.join('; ')}`);
     } else if (ch.summary) {
-      timelineMilestones.push(`[ตอนที่ ${ch.order}] ${ch.summary}`);
+      timelineMilestones.push(`[ตอนที่ ${ch.order}] ${tag}${ch.summary}`);
     }
   });
 
@@ -351,7 +362,7 @@ async function buildHierarchicalStoryContext(userQuery, isFullRecapMode = false)
   }
 
   const recentSummaries = [];
-  availableChaps.slice(-8).forEach(ch => {
+  availableChaps.filter(c => c.chapterType !== 'announcement').slice(-8).forEach(ch => {
     if (ch.summary) recentSummaries.push(`- ตอนที่ ${ch.order} (${ch.title}): ${ch.summary}`);
   });
 
@@ -366,6 +377,7 @@ async function buildHierarchicalStoryContext(userQuery, isFullRecapMode = false)
     author: currentAuthor,
     currentChapTitle: curChap.title || "บทปัจจุบัน",
     currentChapOrder: maxAllowedOrder,
+    currentChapType: curChap.chapterType || "regular",
     evidence: searchEvidence,
     netStatus: netStatus,
     crossBooks: crossBooks,
@@ -382,7 +394,7 @@ async function requestFullStoryRecap() {
   await sendChatMessage(prompt, true);
 }
 
-// ---------------- MAIN CHAT CONTROLLER ----------------
+// ---------------- 5. MAIN CHAT CONTROLLER ----------------
 
 async function sendChatMessage(customPrompt = null, forceRecapMode = false) {
   if (isChatResponding) return;
@@ -422,7 +434,7 @@ async function sendChatMessage(customPrompt = null, forceRecapMode = false) {
     if (ctx.evidence.matchedTransitions.length > 0) {
       evidenceSection = "ประวัติความเคลื่อนไหว (State Transitions) ที่ตรวจพบ:\n" + 
         ctx.evidence.matchedTransitions.map(t => 
-          `* [ตอนที่ ${t.chapter} - ${t.title}] คำจีน: "${t.src}" (${t.th}) | การกระทำ: [${t.action}] โดย: ${t.owner} -> รายละเอียด: ${t.details}`
+          `* [ตอนที่ ${t.chapter} - ${t.title}${t.isSideStory ? ' (ตอนพิเศษ)' : ''}] คำจีน: "${t.src}" (${t.th}) | การกระทำ: [${t.action}] โดย: ${t.owner} -> รายละเอียด: ${t.details}`
         ).join("\n");
     }
 
@@ -430,7 +442,6 @@ async function sendChatMessage(customPrompt = null, forceRecapMode = false) {
       ? ctx.netStatus.currentHoldings.map(h => `- ${h.th} (${h.src}) [${h.category}] ได้รับในตอนที่ ${h.lastUpdatedChapter}`).join("\n")
       : "ไม่มีรายการของวิเศษคงเหลือที่บันทึกไว้";
 
-    // จัดเตรียมข้อมูล Delta State Analysis หากมีการเปรียบเทียบเวลา
     let deltaSection = "";
     if (ctx.evidence.deltaComparison) {
       const d = ctx.evidence.deltaComparison;
@@ -452,7 +463,30 @@ async function sendChatMessage(customPrompt = null, forceRecapMode = false) {
       quotesSection = `[บทสนทนา/คำพูดจริงที่คัดลอกมาจากเนื้อหาในตอน]:\n` + ctx.evidence.matchedQuotes.join('\n');
     }
 
-    const systemPrompt = `คุณคือ "เพื่อนสนิทร่วมอ่านนิยาย" (Reading Companion) ผู้เชี่ยวชาญวรรณกรรมนิยายจีน กำลังภายใน และแฟนตาซีทุกแขนง
+    let systemPrompt = "";
+
+    if (isRecap) {
+      systemPrompt = `คุณคือ "เพื่อนร่วมอ่านนิยายและผู้เชี่ยวชาญการวิเคราะห์วรรณกรรม" แนว ${ctx.genre}
+งานของคุณคือสรุปภาพรวมเนื้อเรื่องของ "${ctx.bookTitle}" ตั้งแต่ตอนที่ 1 จนถึงตอนที่ ${ctx.currentChapOrder} ("${ctx.currentChapTitle}")
+
+[ฐานข้อมูลเหตุการณ์สำคัญตั้งแต่เริ่มต้นจนถึงปัจจุบัน (Historical Milestones)]:
+${ctx.sampledTimeline || "(ไม่มีบันทึกเหตุการณ์)"}
+
+[สถานะสุทธิของตัวเอก ณ ปัจจุบัน]:
+- ขอบเขตพลัง: ${ctx.netStatus.latestRealm}
+- สภาพร่างกาย/บาดแผล: ${ctx.netStatus.latestInjuries}
+- ไอเทม/วิชาที่ครอบครองอยู่จริง:
+${holdingsSection}
+
+จงวิเคราะห์และเขียนสรุปภาพรวมให้นักอ่านเห็นภาพชัดเจน โดยจัดแบ่งเป็น 4 แกนสำคัญ:
+1. 🗺️ **เส้นเรื่องหลักและหมุดหมายสำคัญ:** เล่าลำดับการเดินทาง เหตุการณ์พลิกผันใหญ่ๆ ตั้งแต่เริ่มเรื่องจนถึงจุดปัจจุบัน
+2. ⚔️ **สถานะขั้วอำนาจและศัตรู:** ฝ่ายใดเป็นมิตร ฝ่ายใดเป็นศัตรู มีความแค้นหรือข้อพิพาทกับใครอยู่
+3. 🧬 **พัฒนาการของตัวเอก:** การเติบโตของระดับพลัง วิชาประจำตัว และการเปลี่ยนแปลงสถานะในยุทธภพ
+4. 🚩 **เป้าหมายเร่งด่วนในปัจจุบัน:** สิ่งที่ตัวเอกกำลังมุ่งหน้าไปทำในบทปัจจุบัน
+
+ข้อบังคับ: เขียนกระชับ ลื่นไหล เป็นกันเอง ห้ามแต่งเรื่องขึ้นมาเอง และห้ามสปอยล์เกินตอนที่ ${ctx.currentChapOrder}`;
+    } else {
+      systemPrompt = `คุณคือ "เพื่อนสนิทร่วมอ่านนิยาย" (Reading Companion) ผู้เชี่ยวชาญวรรณกรรมนิยายจีน กำลังภายใน และแฟนตาซีทุกแขนง
 นักอ่านกำลังเปิดอ่านเรื่อง: "${ctx.bookTitle}" (ผู้แต่ง: ${ctx.author || 'ไม่ระบุ'}, แนว: ${ctx.genre})
 สายตานักอ่านอยู่ที่: ตอนที่ ${ctx.currentChapOrder} ("${ctx.currentChapTitle}")
 
@@ -482,6 +516,7 @@ ${ctx.recentSummaries || "- ไม่มีสรุป"}
   * ใช้เกณฑ์เทียบสเกลพลังจากผลงานการทำลายล้างจริง (Feats / Universal Tiers: ระดับมนุษย์ -> ระดับทำลายภูเขา/เมือง -> ระดับทำลายทวีป/ดวงดาว -> ระดับจักรวาล/มหาเต๋า)
   * ออกความเห็นและคุยสนุกสนานเหมือนเพื่อนนั่งเมาท์นิยายข้างๆ กัน
 - ตอบเป็นภาษาไทย สำนวนเป็นกันเอง สนุกสนาน คมชัด ตรงประเด็น`;
+    }
 
     const contents = [
       { role: 'user', parts: [{ text: systemPrompt }] },
