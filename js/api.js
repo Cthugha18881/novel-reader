@@ -27,7 +27,7 @@ function rotateApiKey() {
   console.log(`[Key Rotator] สลับไปใช้ Key ลำดับที่ ${currentApiKeyIndex + 1}/${keys.length}`);
 }
 
-// ---------------- FETCH LIVE MODELS ----------------
+// ---------------- LIVE MODEL CHECKER ----------------
 
 async function fetchLiveModels() {
   const statusEl = document.getElementById('fetch-status-text');
@@ -72,23 +72,17 @@ async function fetchLiveModels() {
     });
 
     const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error?.message || `HTTP ${res.status}: ยิง API ไม่สำเร็จ`);
-    }
+    if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
 
     const availableModels = (data.models || []).filter(m => 
       m.supportedGenerationMethods && m.supportedGenerationMethods.includes('generateContent')
     );
 
-    if (availableModels.length === 0) {
-      throw new Error('ไม่พบโมเดลที่รองรับในคีย์นี้');
-    }
+    if (availableModels.length === 0) throw new Error('ไม่พบโมเดลที่รองรับในคีย์นี้');
 
     if (modelSelect) {
       const currentSelected = modelSelect.value;
       modelSelect.innerHTML = '';
-
       availableModels.forEach(m => {
         const modelCode = m.name.replace(/^models\//, '');
         const opt = document.createElement('option');
@@ -97,7 +91,6 @@ async function fetchLiveModels() {
         if (modelCode === currentSelected) opt.selected = true;
         modelSelect.appendChild(opt);
       });
-
       if (!availableModels.some(m => m.name.replace(/^models\//, '') === currentSelected)) {
         modelSelect.selectedIndex = 0;
       }
@@ -122,26 +115,43 @@ async function fetchLiveModels() {
 // ---------------- CORS PROXY SCRAPER ----------------
 
 async function fetchNovelChapterContent(targetUrl) {
-  const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(targetUrl)}`;
-  const res = await fetch(proxyUrl);
-  if (!res.ok) throw new Error("ไม่สามารถเชื่อมต่อเว็บต้นทางผ่าน Proxy ได้");
+  let html = "";
+  const proxyList = [
+    `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+    `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`
+  ];
 
-  const data = await res.json();
-  const html = data.contents;
+  let fetchSuccess = false;
+  for (const pUrl of proxyList) {
+    try {
+      const res = await fetch(pUrl);
+      if (res.ok) {
+        html = await res.text();
+        if (html && html.length > 500 && !html.includes("cf-browser-verification")) {
+          fetchSuccess = true;
+          break;
+        }
+      }
+    } catch (e) {
+      console.warn("Proxy failed, trying next...", e);
+    }
+  }
+
+  if (!fetchSuccess || !html) {
+    throw new Error("ไม่สามารถดึงข้อมูลเว็บต้นทางได้ (ติด Anti-Bot หรือเน็ตเวิร์กขัดข้อง)");
+  }
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(html, "text/html");
 
   let title = doc.querySelector("h1")?.innerText?.trim() || "";
-  let bookTitle = doc.querySelector(".novel-title, .title, h2")?.innerText?.trim() || "นิยายจีน";
+  let bookTitle = doc.querySelector(".novel-title, .title, .mybox .nav a:last-child")?.innerText?.trim() || "นิยายจีน";
 
-  const contentEl = doc.querySelector("#content, .content, .txtnav") || doc.body;
-  contentEl.querySelectorAll("script, style, a, .ads").forEach(el => el.remove());
+  const contentEl = doc.querySelector("#content, .content, .txtnav, .read-content") || doc.body;
+  contentEl.querySelectorAll("script, style, a, .ads, ins").forEach(el => el.remove());
 
   const rawText = contentEl.innerText || contentEl.textContent || "";
-  if (!rawText.trim()) {
-    throw new Error("ดึงเนื้อหาไม่สำเร็จ หรือเนื้อหาในหน้านี้ว่างเปล่า");
-  }
+  if (!rawText.trim()) throw new Error("ดึงเนื้อหาไม่สำเร็จ หรือเนื้อหาในหน้านี้ว่างเปล่า");
 
   return {
     bookTitle: bookTitle,
@@ -151,7 +161,7 @@ async function fetchNovelChapterContent(targetUrl) {
   };
 }
 
-// ---------------- PROMPTING & HELPERS ----------------
+// ---------------- PROMPTING & TRANSLATION ----------------
 
 function getGenreInstruction(genre) {
   switch (genre) {
@@ -191,8 +201,6 @@ function rescueEmptyBrackets(thText, srcText) {
   return thText.replace(/【\s*】/g, `【${srcText.substring(0, 8)}】`);
 }
 
-// ---------------- EXECUTE API CALL ----------------
-
 async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "", prevSummary = "", signal = null, onStatusUpdate = null) {
   const activeKey = getActiveApiKey();
   const genre = currentBookGenre || "xianxia";
@@ -206,10 +214,7 @@ async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTit
   const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
   const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
 
-  const isSuspectedAnnouncement = /请假|感言|通知|说明|上架|完本|月票|汇报|推书/.test(rawChapTitle);
-  const isSuspectedSideStory = /番外|外传|特别篇|if线|IF线|后记/.test(rawChapTitle);
-
-  const prompt = `คุณคือนักแปลนิยายมืออาชีพและผู้บันทึกฐานข้อมูลวรรณกรรม (Lore & State Tracker)
+  const prompt = `คุณคือนักแปลนิยายมืออาชีพ
 แปลเนื้อหาภาษาจีนต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย เป็นธรรมชาติ โดยคงความหมายและรูปประโยคให้ใกล้เคียงต้นฉบับที่สุด
 
 สไตล์และบรรยากาศหลักของแนวเรื่อง:
@@ -217,23 +222,6 @@ ${genreRule}
 
 ข้อมูลบริบท:
 - ${bookCtx} ${authorCtx}
-${prevSummary ? `- เหตุการณ์ในตอนก่อนหน้า: "${prevSummary}"` : ''}
-
-[การจำแนกประเภทของบท (Chapter Classification)]:
-จงวิเคราะห์ว่าบทนี้เป็นเนื้อหาประเภทใด แล้วระบุลงใน "chapter_type":
-1. "announcement" = เป็นประกาศของนักเขียน, ขอลาหยุด, ขอบคุณยอดวิว/ยอดโหวต, แจ้งป่วย, พูดคุยกับผู้อ่าน หรือบ่นเรื่องชีวิตส่วนตัว
-2. "side_story" = ตอนพิเศษนอกเรื่อง (番外), เรื่องเล่าแยกเดี่ยว, โลกคู่ขนาน (IF Line) ที่ไม่นับรวมในไทม์ไลน์หลัก
-3. "regular" = เนื้อเรื่องนิยายบทหลักตามปกติ
-
-กฎเหล็กสำหรับการจัดการ Dossier ตามประเภทบท:
-- หากเป็น "announcement":
-  * ห้ามสร้างข้อมูลใน "dossier" เด็ดขาด (ให้ส่ง key_events ว่าง [], state_transitions ว่าง [])
-  * ห้ามนำชื่อคนเขียน แพลตฟอร์ม หรือเรื่องส่วนตัวไปใส่ใน "used_entities"
-  * ให้สรุปใน "chapter_summary" สั้นๆ เช่น "ประกาศของผู้เขียน: แจ้งขอลาหยุด..."
-- หากเป็น "side_story":
-  * แปลเนื้อหาตามปกติ สกัด key_events ได้ แต่ห้ามนำ state_transitions ไปเปลี่ยนแปลงสถานะของตัวเอกในเนื้อเรื่องหลัก
-- หากเป็น "regular":
-  * ดำเนินการสกัด Dossier, Key Events, และ State Transitions เต็มรูปแบบตามมาตรฐาน
 
 กฎเหล็กเรื่องการจัดย่อหน้า สรรพนาม และคำศัพท์:
 1. ล็อกสรรพนามให้คงที่ 100% ตลอดทั้งบท ห้ามสลับข้า/เจ้า กับ ผม/คุณ เด็ดขาด
@@ -243,28 +231,8 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
 
 ผลลัพธ์ต้องส่งกลับเป็น JSON Object ตามโครงสร้างนี้เท่านั้น:
 {
-  "chapter_type": "regular|announcement|side_story",
   "translatedBookTitle": "คำแปลชื่อเรื่องภาษาไทย",
   "translatedChapterTitle": "คำแปลชื่อตอนภาษาไทย",
-  "chapter_summary": "สรุปสั้นๆ 1-2 ประโยค",
-  "dossier": {
-    "key_events": ["เหตุการณ์สำคัญ"],
-    "state_transitions": [
-      {
-        "src": "คำจีน",
-        "th": "คำไทย",
-        "category": "equipment|skill|resource|realm|character",
-        "owner": "ชื่อเจ้าของ",
-        "is_protagonist": true,
-        "action": "acquired|lost|consumed|transferred|modified|retcon",
-        "details": "รายละเอียดเหตุการณ์"
-      }
-    ],
-    "current_status_snapshot": {
-      "protagonist_realm": "ระดับพลังปัจจุบัน",
-      "injuries": "ไม่มี หรือ บาดเจ็บจุดใด"
-    }
-  },
   "paragraphs": [
     {"th": "คำแปลไทยของย่อหน้านั้น", "src": "ข้อความจีนของย่อหน้านั้น"}
   ],
@@ -297,23 +265,17 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
   let outText = data.candidates[0].content.parts[0].text;
   const parsedResult = cleanAndParseJSON(outText);
 
-  let chapterType = parsedResult.chapter_type || (isSuspectedAnnouncement ? "announcement" : (isSuspectedSideStory ? "side_story" : "regular"));
   let paragraphs = Array.isArray(parsedResult) ? parsedResult : (parsedResult.paragraphs || []);
   let translatedChapTitle = parsedResult.translatedChapterTitle || rawChapTitle;
   let translatedBookTitle = parsedResult.translatedBookTitle || rawBookTitle;
-  let chapterSummary = parsedResult.chapter_summary || "";
-  let chapterDossier = parsedResult.dossier || { key_events: [], state_transitions: [], current_status_snapshot: {} };
-
-  if (chapterType === "announcement") {
-    chapterDossier = { key_events: [], state_transitions: [], current_status_snapshot: {} };
-  }
 
   paragraphs = paragraphs.map(p => ({
     th: rescueEmptyBrackets(p.th, p.src),
     src: p.src
   }));
 
-  if (chapterType !== "announcement" && Array.isArray(parsedResult.used_entities) && parsedResult.used_entities.length > 0) {
+  // Auto-sync คำศัพท์ลง IndexedDB
+  if (Array.isArray(parsedResult.used_entities) && parsedResult.used_entities.length > 0) {
     for (const ent of parsedResult.used_entities) {
       if (ent.src && ent.tgt) {
         const cleanSrc = cleanTermString(ent.src);
@@ -338,9 +300,6 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
   return {
     bookTitle: translatedBookTitle,
     chapterTitle: translatedChapTitle,
-    chapterType: chapterType,
-    summary: chapterSummary,
-    dossier: chapterDossier,
     paragraphs: paragraphs
   };
 }
@@ -349,7 +308,7 @@ async function pairThaiToSourceParagraph(thaiWord, chinesePara) {
   const activeKey = getActiveApiKey();
   if (!activeKey) return null;
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash-lite:generateContent`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent`;
   const prompt = `จากย่อหน้าภาษาจีนนี้: "${chinesePara}"\nจงหาคำภาษาจีนต้นฉบับที่ตรงกับคำแปลไทยว่า: "${thaiWord}" ตอบเฉพาะตัวอักษรจีนคำนั้นเท่านั้น ไม่ต้องใส่คำอธิบายอื่น`;
 
   const res = await fetch(endpoint, {
