@@ -1,13 +1,5 @@
 // ============================================================================
 // NOVELTRANSLATE AI - CHAT & READING COMPANION MODULE (chat.js)
-// รองรับ:
-// 1. Hard Chapter Fence (ป้องกันสปอยล์ข้ามตอน)
-// 2. Book-Isolated Chat Session (แยกประวัติรายเรื่อง ป้องกันบริบทปนเปื้อน)
-// 3. Alias Graph Engine (ค้นหาฉายา / ชื่อแฝง / ตำแหน่งในอดีต)
-// 4. Quote / Dialogue Back-Reference (ดึงคำพูดจริงจากย่อหน้าในบท)
-// 5. Delta-State Analyzer (วิเคราะห์จุดเปลี่ยน อดีต VS ปัจจุบัน)
-// 6. Chapter Classification Filter (กรองข้ามประกาศคนเขียน และแยกตอนพิเศษ)
-// 7. Universal Scaling & Cross-Book Shelf Comparison (ถกสเกลพลังข้ามเรื่อง)
 // ============================================================================
 
 let chatSessionsByBook = {};
@@ -96,7 +88,6 @@ async function buildAliasGraph(availableChaps) {
     }
   }
 
-  // ดึงความสัมพันธ์จาก Dossier (ข้ามบทที่เป็นประกาศคนเขียน)
   availableChaps.filter(c => c.chapterType !== 'announcement').forEach(ch => {
     const d = ch.dossier;
     if (d && Array.isArray(d.state_transitions)) {
@@ -144,7 +135,6 @@ function analyzeDeltaState(userQuery, availableChaps, expandedTerms) {
 
   const timelineRecords = [];
 
-  // กรองเฉพาะเนื้อหาหลัก (ข้ามประกาศและตอนพิเศษนอกเส้นเรื่องหลัก)
   availableChaps.filter(c => c.chapterType !== 'announcement' && c.chapterType !== 'side_story').forEach(ch => {
     const d = ch.dossier;
     if (!d) return;
@@ -190,17 +180,14 @@ async function findBilingualStateTimeline(userQuery, maxAllowedOrder) {
   const bookChaps = await dbGetChaptersByBook(currentBookId);
   bookChaps.sort((a, b) => a.order - b.order);
 
-  // 1. HARD CHAPTER FENCE: กักข้อมูลไว้แค่ตอนที่กำลังอ่านอยู่
   const availableChaps = bookChaps.filter(c => (c.order || 0) <= maxAllowedOrder);
 
-  // 2. ALIAS GRAPH
   const aliasGraph = await buildAliasGraph(availableChaps);
   let expandedTerms = resolveAllQueryAliases(query, aliasGraph);
   if (expandedTerms.length === 0) {
     expandedTerms = query.split(/\s+/).filter(w => w.length >= 2);
   }
 
-  // 3. DELTA-STATE ANALYZER
   const deltaComparison = analyzeDeltaState(userQuery, availableChaps, expandedTerms);
 
   const matchedTransitions = [];
@@ -210,7 +197,6 @@ async function findBilingualStateTimeline(userQuery, maxAllowedOrder) {
   const isAskingForQuotes = /พูดว่า|คำพูด|ประโยค|สั่งเสีย|ตะโกน|กล่าวว่า|อุทาน/.test(query);
 
   availableChaps.forEach(ch => {
-    // ข้ามบทประกาศเด็ดขาด
     if (ch.chapterType === 'announcement') return;
 
     const d = ch.dossier;
@@ -269,7 +255,6 @@ function consolidateCurrentInventory(bookChaps, maxAllowedOrder) {
   let latestRealm = "ไม่ระบุ";
   let latestInjuries = "ปกติ";
 
-  // กรองเฉพาะเนื้อเรื่องหลัก regular (ไม่เอา announcement และ side_story)
   bookChaps
     .filter(c => (c.order || 0) <= maxAllowedOrder && c.chapterType !== 'announcement' && c.chapterType !== 'side_story')
     .forEach(ch => {
@@ -530,10 +515,13 @@ ${ctx.recentSummaries || "- ไม่มีสรุป"}
 
     contents.push({ role: 'user', parts: [{ text: userText }] });
 
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent?key=${activeKey}`;
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${primaryModel}:generateContent`;
     const res = await fetch(endpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'x-goog-api-key': activeKey
+      },
       body: JSON.stringify({
         contents: contents,
         generationConfig: { temperature: 0.6, maxOutputTokens: 1500 }
