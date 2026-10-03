@@ -1,358 +1,436 @@
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
-body {
-  font-family: 'Sarabun', sans-serif;
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-  transition: background-color 0.2s, color 0.2s;
-}
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>NovelTranslate AI v2.5.1</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="theme-sepia" id="app-body">
 
-body.modal-open {
-  overflow: hidden !important;
-  touch-action: none;
-}
+  <!-- FLOATING ACTION STATUS TOAST -->
+  <div id="global-action-toast">
+    <span class="spinner-icon" style="margin: 0; width: 14px; height: 14px;"></span>
+    <span id="global-toast-msg">กำลังทำงาน...</span>
+  </div>
 
-/* THEMES */
-body.theme-sepia { background-color: #f4ecd8; color: #2b2114; }
-body.theme-light { background-color: #f8fafc; color: #1e293b; }
-body.theme-dark  { background-color: #0d1117; color: #e6edf3; }
+  <!-- TOP HEADER -->
+  <header>
+    <div class="brand-box">
+      <div class="brand-icon">N</div>
+      <div class="brand-title">NovelTranslate AI</div>
+    </div>
+    
+    <div class="header-actions">
+      <div class="desktop-controls">
+        <button class="btn" onclick="adjustFontSize(-1)" title="ลดขนาดตัวอักษร">A-</button>
+        <button class="btn" onclick="adjustFontSize(1)" title="เพิ่มขนาดตัวอักษร">A+</button>
+        <button class="btn" id="desktop-theme-btn" onclick="cycleTheme()" title="เปลี่ยนธีม">ถนอมสายตา</button>
+      </div>
 
-/* HEADER */
-header {
-  position: sticky; top: 0; z-index: 40;
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 16px; border-bottom: 1px solid rgba(0,0,0,0.08);
-  backdrop-filter: blur(8px); background-color: inherit;
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-body.theme-dark header { border-bottom-color: rgba(255,255,255,0.1); }
-.brand-box { display: flex; align-items: center; gap: 8px; }
-.brand-icon {
-  width: 32px; height: 32px; border-radius: 8px;
-  background: #2563eb; color: #fff; font-family: 'Kanit', sans-serif;
-  font-weight: 600; font-size: 16px; display: flex; align-items: center; justify-content: center;
-  box-shadow: 0 2px 5px rgba(37,99,235,0.3);
-}
-.brand-title { font-family: 'Kanit', sans-serif; font-weight: 600; font-size: 16px; line-height: 1.2; }
+      <div id="prefetch-badge">ตอนถัดไปพร้อม</div>
+      <button class="btn" onclick="openBookshelfModal()">ชั้นหนังสือ</button>
+      <button class="btn btn-primary" onclick="openModal('import-modal')">+ วางลิงก์</button>
+      <button class="btn" onclick="openGlossaryModal()">คลังศัพท์</button>
+      <button class="btn" onclick="openModal('settings-modal')">ตั้งค่า</button>
+    </div>
+  </header>
 
-.header-actions { display: flex; align-items: center; gap: 5px; }
-.btn {
-  padding: 6px 11px; font-size: 12px; font-weight: 500;
-  border-radius: 6px; border: 1px solid rgba(0,0,0,0.12);
-  background: transparent; color: inherit; cursor: pointer;
-  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
-  font-family: inherit;
-}
-body.theme-dark .btn { border-color: rgba(255,255,255,0.15); }
-.btn:hover { background-color: rgba(0,0,0,0.05); }
-body.theme-dark .btn:hover { background-color: rgba(255,255,255,0.08); }
-.btn-primary { background: #2563eb !important; color: #fff !important; border: none !important; }
-.btn-primary:hover { background: #1d4ed8 !important; }
-.btn-secondary { background: rgba(0,0,0,0.06); }
-body.theme-dark .btn-secondary { background: rgba(255,255,255,0.1); }
-.btn-danger { background: #dc2626 !important; color: #fff !important; border: none !important; }
+  <!-- TOP-RIGHT FLOATING BUTTONS -->
+  <button id="retranslate-chap-btn" class="top-floating-btn" onclick="retranslateCurrentActiveChapter()" title="แปลบทปัจจุบันนี้ใหม่ตามคลังศัพท์ล่าสุด">
+    🔄
+  </button>
+  <button id="scan-terms-btn" class="top-floating-btn" onclick="scanTermsInCurrentChapter()" title="สแกนหาคำศัพท์เฉพาะในบทนี้ที่ยังไม่มีในคลัง">
+    🔍+
+  </button>
+  <button id="fullscreen-btn" class="top-floating-btn" onclick="toggleFullscreenMode()" title="โหมดอ่านเต็มจอ">
+    <span id="fullscreen-icon">⛶</span>
+  </button>
 
-.desktop-controls { display: none; align-items: center; gap: 4px; }
-@media (min-width: 768px) { .desktop-controls { display: flex; } }
+  <!-- INLINE TERM QUICK POPOVER -->
+  <div id="term-popover">
+    <span id="popover-text">จีน ➔ ไทย</span>
+    <button class="btn" style="padding: 2px 7px; font-size: 10px; background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); color:#fff;" id="popover-research-btn" title="ให้ AI ค้นหาคำแปลไทยตามหลัก 3-Tier ใหม่">🔄 ค้นหาใหม่</button>
+    <button class="btn btn-primary" style="padding: 2px 7px; font-size: 10px;" id="popover-edit-btn">✎ แก้ไข</button>
+  </div>
 
-#prefetch-badge {
-  display: none; font-size: 10px; padding: 2px 7px; border-radius: 999px;
-  background: #dcfce7; color: #166534; font-weight: 600; border: 1px solid #86efac;
-}
+  <!-- BOTTOM FLOATING ACTION BAR FOR SELECTED WORD -->
+  <div id="selection-bar">
+    <div class="sel-info">
+      <span class="sel-tag" id="sel-tag-label">คำที่เลือก</span>
+      <span class="sel-text" id="sel-preview-text">...</span>
+    </div>
+    <div style="display: flex; gap: 6px;">
+      <button class="btn" style="color:#fff; border-color:rgba(255,255,255,0.2); padding: 4px 6px; font-size: 11px;" onclick="dismissSelectionBar()">ปิด</button>
+      <button class="btn" id="reverse-pair-btn" style="color:#38bdf8; border-color:#38bdf8; padding: 4px 8px; font-size: 11px;" onclick="findChineseForSelection()" title="ให้ AI ค้นหาและไฮไลต์อักษรจีนต้นฉบับในย่อหน้า">🔍 หาคำจีน</button>
+      <button class="btn btn-primary" style="padding: 4px 8px; font-size: 11px;" onclick="addFromSelectionBar()">+ ใส่คลัง</button>
+    </div>
+  </div>
 
-/* FLOATING ACTION STATUS TOAST */
-#global-action-toast {
-  display: none; position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
-  z-index: 80; background: #1e293b; color: #fff; padding: 10px 18px; border-radius: 30px;
-  font-size: 13px; font-weight: 500; box-shadow: 0 10px 30px rgba(0,0,0,0.4);
-  align-items: center; gap: 8px; border: 1px solid rgba(255,255,255,0.15);
-  animation: fadeInDown 0.2s ease-out;
-}
-@keyframes fadeInDown { from { opacity: 0; transform: translate(-50%, -10px); } to { opacity: 1; transform: translate(-50%, 0); } }
+  <!-- MAIN READING CANVAS -->
+  <main>
+    <div class="chapter-toolbar">
+      <div style="flex: 1; padding-right: 12px;">
+        <div class="editable-title-wrap" onclick="promptEditBookTitle()" title="คลิกเพื่อแก้ไขชื่อเรื่อง (จะล็อกชื่อถาวร)">
+          <span class="book-heading" id="display-book-title">ชื่อนิยาย</span>
+          <span class="edit-badge-btn">✎ แก้ไขชื่อเรื่อง</span>
+        </div>
+        <div>
+          <div class="editable-title-wrap" onclick="promptEditChapterTitle()" title="คลิกเพื่อแก้ไขชื่อตอน">
+            <h1 class="chap-heading" id="display-chap-title">ยินดีต้อนรับ</h1>
+            <span class="edit-badge-btn">✎ แก้ไขชื่อตอน</span>
+          </div>
+        </div>
+      </div>
+      <button class="btn" onclick="exportTxt()" style="font-size: 11px; shrink: 0;">.TXT</button>
+    </div>
 
-/* TOP-RIGHT FLOATING BUTTONS */
-.top-floating-btn {
-  position: fixed; top: 62px; z-index: 35; width: 32px; height: 32px; border-radius: 50%;
-  background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.12);
-  backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center;
-  cursor: pointer; color: inherit; opacity: 0.65;
-  transition: opacity 0.2s, background-color 0.2s, transform 0.2s, top 0.2s;
-}
-body.theme-dark .top-floating-btn { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.15); }
-.top-floating-btn:hover { opacity: 1; transform: scale(1.05); background-color: rgba(0,0,0,0.1); }
-body.theme-dark .top-floating-btn:hover { background-color: rgba(255,255,255,0.15); }
+    <div id="reading-content"></div>
 
-#fullscreen-btn { right: 16px; }
-#scan-terms-btn { right: 54px; font-size: 13px; }
-#retranslate-chap-btn { right: 92px; font-size: 13px; }
+    <div id="infinite-status-banner"></div>
 
-body.is-fullscreen header { transform: translateY(-100%); opacity: 0; pointer-events: none; }
-body.is-fullscreen .mobile-dock { transform: translateY(100%); opacity: 0; pointer-events: none; }
-body.is-fullscreen .top-floating-btn { top: 14px; opacity: 0.4; }
-body.is-fullscreen .top-floating-btn:hover { opacity: 0.9; }
-body.is-fullscreen main { padding-top: 14px; }
+    <!-- Chapter Navigation -->
+    <div class="chap-nav" id="manual-chap-nav">
+      <button class="btn" onclick="prevChapter()">← ตอนก่อนหน้า</button>
+      
+      <div style="display: flex; gap: 6px;">
+        <button class="btn btn-danger" id="cancel-retry-btn" style="display: none;" onclick="abortCurrentRetry()">
+          หยุดลองใหม่
+        </button>
+        <button class="btn btn-primary" id="next-chap-btn" onclick="handleNextChapterClick()">
+          <span id="next-btn-text">ตอนถัดไป →</span>
+        </button>
+      </div>
+    </div>
+  </main>
 
-/* MAIN CANVAS */
-main {
-  flex: 1; width: 100%; max-width: 740px; margin: 0 auto;
-  padding: 20px 16px 120px 16px; transition: padding 0.2s ease;
-}
-@media (min-width: 768px) { main { padding-bottom: 50px; } }
+  <!-- MOBILE BOTTOM DOCK -->
+  <nav class="mobile-dock">
+    <button class="btn" onclick="openBookshelfModal()">ชั้นหนังสือ</button>
+    <button class="btn" onclick="adjustFontSize(-1)">A-</button>
+    <button class="btn" id="mobile-theme-btn" onclick="cycleTheme()">ถนอมสายตา</button>
+    <button class="btn" onclick="adjustFontSize(1)">A+</button>
+    <button class="btn" onclick="openGlossaryModal()">คลังศัพท์</button>
+  </nav>
 
-.chapter-toolbar {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  border-bottom: 1px solid rgba(0,0,0,0.08); padding-bottom: 12px; margin-bottom: 20px;
-}
-body.theme-dark .chapter-toolbar { border-bottom-color: rgba(255,255,255,0.1); }
+  <!-- MODAL: BOOKSHELF -->
+  <div class="modal-overlay" id="bookshelf-modal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title">ชั้นหนังสือของฉัน (ในเครื่อง)</div>
+        <button class="modal-close" onclick="closeModal('bookshelf-modal')">✕</button>
+      </div>
 
-.editable-title-wrap {
-  display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
-  border-radius: 6px; padding: 3px 6px; margin-left: -6px;
-  transition: background-color 0.15s ease;
-}
-.editable-title-wrap:hover { background-color: rgba(0,0,0,0.05); }
-body.theme-dark .editable-title-wrap:hover { background-color: rgba(255,255,255,0.08); }
+      <div class="progress-box" id="batch-progress-box">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <b id="batch-progress-title">กำลังแปลล่วงหน้า...</b>
+          <button class="btn btn-danger" id="batch-action-btn" style="padding: 2px 8px; font-size: 10px;" onclick="handleBatchActionClick()">หยุดแปล</button>
+        </div>
+        <div id="batch-progress-desc">เตรียมคิว...</div>
+      </div>
 
-.edit-badge-btn {
-  font-size: 10px; padding: 2px 6px; border-radius: 4px;
-  background: rgba(37,99,235,0.1); color: #2563eb; font-weight: 600;
-  border: 1px solid rgba(37,99,235,0.2); transition: all 0.15s ease;
-}
-body.theme-dark .edit-badge-btn { background: rgba(96,165,250,0.15); color: #93c5fd; border-color: rgba(96,165,250,0.3); }
-.editable-title-wrap:hover .edit-badge-btn { background: #2563eb; color: #fff; }
+      <div id="bookshelf-list" class="modal-scrollable-body" style="max-height: 400px; margin-bottom: 12px;"></div>
+      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*กด 🔄 บนมุมขวาของหน้าอ่านเพื่อแปลบทปัจจุบันใหม่ตามคลังศัพท์ล่าสุดได้ทันที</p>
+    </div>
+  </div>
 
-.book-heading { font-size: 13px; opacity: 0.8; font-weight: 600; text-transform: uppercase; }
-.chap-heading { font-family: 'Kanit', sans-serif; font-size: 21px; font-weight: 600; line-height: 1.3; }
+  <!-- MODAL: CHANGE BOOK GENRE PICKER -->
+  <div class="modal-overlay" id="genre-picker-modal" style="z-index: 65;">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-head">
+        <div class="modal-title">เลือกแนวเรื่อง / สไตล์สำนวน</div>
+        <button class="modal-close" onclick="closeModal('genre-picker-modal')">✕</button>
+      </div>
+      <div style="font-size: 12px; margin-bottom: 8px;">
+        นิยาย: <b id="genre-picker-book-title" style="color: #2563eb;">...</b>
+      </div>
+      <div class="form-group">
+        <label class="form-label">เลือกแนวเรื่องสำหรับเรื่องนี้:</label>
+        <select id="genre-picker-select" class="form-input">
+          <option value="xianxia">เซียนเซีย / เทพเซียนบำเพ็ญเพียรเต๋า</option>
+          <option value="wuxia">กำลังภายใน / ยุทธภพดั้งเดิม</option>
+          <option value="western_fantasy">แฟนตาซีตะวันตก / ดาบและเวทมนตร์</option>
+          <option value="system_game">ระบบ / ดันเจี้ยน / เลเวลอัป</option>
+          <option value="scifi">ไซไฟ / มหากาพย์จักรวาล</option>
+          <option value="horror">สยองขวัญ / ระทึกขวัญเอาชีวิตรอด</option>
+          <option value="historical">ย้อนยุค / ชิงบัลลังก์ / ราชสำนัก</option>
+          <option value="urban_life">สังคมเมือง / ธุรกิจ / แพทย์ / รวยเงียบ</option>
+          <option value="modern_romance">โรแมนติก / ดราม่า / ชีวิตประจำวัน</option>
+          <option value="fanfic">แฟนฟิค / อนิเมะ / ข้ามโลกมัลติเวิร์ส</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
+        <button class="btn" onclick="closeModal('genre-picker-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveChosenBookGenre()">บันทึก</button>
+      </div>
+    </div>
+  </div>
 
-/* CHAPTER RENDERING */
-.chapter-block { margin-bottom: 50px; position: relative; }
-.chapter-block-divider {
-  display: flex; align-items: center; justify-content: center;
-  margin: 45px 0 25px 0; border-top: 1px dashed rgba(0,0,0,0.15); position: relative;
-}
-body.theme-dark .chapter-block-divider { border-top-color: rgba(255,255,255,0.15); }
-.chapter-divider-pill {
-  position: absolute; top: -11px; background: inherit; padding: 0 14px;
-  font-size: 12px; font-weight: 600; opacity: 0.6;
-}
+  <!-- MODAL: EDIT GLOSSARY TERM -->
+  <div class="modal-overlay" id="edit-term-modal" style="z-index: 65;">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-head">
+        <div class="modal-title">แก้ไขคำศัพท์ในคลัง</div>
+        <button class="modal-close" onclick="closeModal('edit-term-modal')">✕</button>
+      </div>
+      <div style="font-size: 13px; margin-bottom: 10px;">
+        คำจีนต้นฉบับ: <b id="edit-term-src-label" style="color: #2563eb; font-size: 14px;">...</b>
+      </div>
+      <div class="form-group">
+        <label class="form-label">คำแปลภาษาไทย:</label>
+        <input type="text" id="edit-term-tgt-input" class="form-input" placeholder="ใส่คำแปลไทย...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">หมวดหมู่คำศัพท์:</label>
+        <select id="edit-term-cat-select" class="form-input">
+          <option value="character">👤 บุคคล/สิ่งมีชีวิต</option>
+          <option value="title">🎖️ ตำแหน่ง/ฐานะ</option>
+          <option value="location">🏔 สถานที่/องค์กร</option>
+          <option value="skill">📜 ทักษะ/วิชา</option>
+          <option value="equipment">🗡️ อุปกรณ์/เทคโน</option>
+          <option value="resource">💊 ทรัพยากร/โอสถ</option>
+          <option value="realm">🧬 ลำดับขั้น/สเตตัส</option>
+        </select>
+      </div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
+        <button class="btn" onclick="closeModal('edit-term-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveEditedGlossaryTerm()">บันทึกการแก้ไข</button>
+      </div>
+    </div>
+  </div>
 
-#reading-content { line-height: 1.9; user-select: text; }
-.para-item { padding: 6px 8px; margin-bottom: 14px; border-radius: 6px; transition: background-color 0.15s ease; }
-.para-th { font-size: inherit; cursor: pointer; text-indent: 1.5em; }
-.para-th:hover { background-color: rgba(0,0,0,0.02); }
-body.theme-dark .para-th:hover { background-color: rgba(255,255,255,0.02); }
+  <!-- MODAL 1: IMPORT & TRANSLATE -->
+  <div class="modal-overlay" id="import-modal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title" id="import-modal-title">วาง URL หน้านิยาย</div>
+        <button class="modal-close" onclick="closeModal('import-modal')">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">URL หน้านิยาย (เช่น 69shuba, biquge ฯลฯ)</label>
+        <input type="url" id="import-url" class="form-input" placeholder="https://www.69shuba.com/txt/88724/40717272">
+      </div>
+      <div class="form-group">
+        <label class="form-label">แนวเรื่อง / สไตล์สำนวนของเรื่องนี้ (Genre)</label>
+        <select id="import-novel-genre" class="form-input">
+          <option value="xianxia" selected>เซียนเซีย / เทพเซียนบำเพ็ญเพียรเต๋า</option>
+          <option value="wuxia">กำลังภายใน / ยุทธภพดั้งเดิม</option>
+          <option value="western_fantasy">แฟนตาซีตะวันตก / ดาบและเวทมนตร์</option>
+          <option value="system_game">ระบบ / ดันเจี้ยน / เลเวลอัป</option>
+          <option value="scifi">ไซไฟ / มหากาพย์จักรวาล</option>
+          <option value="horror">สยองขวัญ / ระทึกขวัญเอาชีวิตรอด</option>
+          <option value="historical">ย้อนยุค / ชิงบัลลังก์ / ราชสำนัก</option>
+          <option value="urban_life">สังคมเมือง / ธุรกิจ / แพทย์ / รวยเงียบ</option>
+          <option value="modern_romance">โรแมนติก / ดราม่า / ชีวิตประจำวัน</option>
+          <option value="fanfic">แฟนฟิค / อนิเมะ / ข้ามโลกมัลติเวิร์ส</option>
+        </select>
+        <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">*ระบบจะจำแนวเรื่องนี้ไว้ใช้กับเรื่องนี้ตลอดไป และสามารถเปลี่ยนได้ที่ชั้นหนังสือ</div>
+      </div>
+      <div class="status-msg" id="import-status"></div>
+      <div style="display: flex; gap: 8px; margin-top: 14px;">
+        <button class="btn" style="flex: 1;" onclick="handleImportCancel()">ยกเลิก</button>
+        <button class="btn btn-primary" style="flex: 2;" id="start-btn" onclick="startTranslateFirst()">
+          <span id="start-btn-text">เริ่มแปลตอนนี้</span>
+        </button>
+      </div>
+    </div>
+  </div>
 
-.para-src {
-  display: none; margin-top: 8px; padding: 10px 14px; border-radius: 6px; font-size: 14px;
-  opacity: 0.95; background: rgba(0,0,0,0.04); border-left: 3px solid #f59e0b;
-  font-family: monospace; line-height: 1.7; user-select: text;
-}
-body.theme-dark .para-src { background: rgba(255,255,255,0.05); }
+  <!-- MODAL 2: UNIVERSAL CATEGORIZED GLOSSARY -->
+  <div class="modal-overlay" id="glossary-modal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">คลังคำศัพท์สากล (Smart Glossary Engine)</div>
+          <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;" id="glossary-book-context">เรื่องปัจจุบัน: ...</div>
+        </div>
+        <button class="modal-close" onclick="closeModal('glossary-modal')">✕</button>
+      </div>
 
-.ai-src-candidate-mark {
-  background-color: #fef08a !important;
-  color: #854d0e !important;
-  padding: 1px 3px;
-  border-radius: 3px;
-  font-weight: 600;
-  border: 1px dashed #ca8a04;
-  cursor: pointer;
-}
-body.theme-dark .ai-src-candidate-mark {
-  background-color: #854d0e !important;
-  color: #fef08a !important;
-  border-color: #eab308;
-}
+      <div class="glossary-filter-bar">
+        <select id="gloss-scope-filter" class="form-input" style="width: auto; max-width: 210px; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
+        </select>
 
-.inline-term-highlight {
-  border-bottom: 1.5px dotted rgba(37,99,235,0.7);
-  cursor: pointer; border-radius: 2px;
-  transition: background-color 0.15s, border-color 0.15s;
-  position: relative; z-index: 10;
-}
-.inline-term-highlight:hover {
-  background-color: rgba(37,99,235,0.18);
-  border-bottom-color: #2563eb;
-}
-body.theme-dark .inline-term-highlight { border-bottom-color: rgba(96,165,250,0.7); }
-body.theme-dark .inline-term-highlight:hover { background-color: rgba(96,165,250,0.25); }
+        <select id="gloss-sort-select" class="form-input" style="width: auto; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
+          <option value="count_desc">ความถี่มากสุด ↓</option>
+          <option value="time_desc">เพิ่มล่าสุด ↓</option>
+          <option value="time_asc">เก่าสุด ↑</option>
+          <option value="th_asc">ชื่อไทย ก-ฮ ↓</option>
+          <option value="th_desc">ชื่อไทย ฮ-ก ↑</option>
+          <option value="len_desc">อักษรจีนยาวสุด ↓</option>
+        </select>
 
-/* INLINE TERM QUICK POPOVER */
-#term-popover {
-  display: none; position: fixed; z-index: 100;
-  background: #1e293b; color: #fff; padding: 7px 12px; border-radius: 8px;
-  font-size: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.35);
-  animation: fadeIn 0.15s ease-out; gap: 6px; align-items: center; pointer-events: auto;
-}
-@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="autoOrganizeGlossaryWithAI()" title="ให้ AI วิเคราะห์คำที่ยังไม่แยกหมวด แล้วย้ายเข้า 7 หมวดให้อัตโนมัติ">
+          ✨ AI จัดหมวดหมู่
+        </button>
+        <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-left: auto;" onclick="toggleSelectAllGlossary()">
+          เลือกทั้งหมด
+        </button>
+      </div>
 
-#infinite-status-banner {
-  display: none; margin: 30px 0 50px 0; padding: 16px 20px; border-radius: 12px;
-  background: rgba(37,99,235,0.06); border: 1px dashed rgba(37,99,235,0.3);
-  text-align: center; transition: all 0.2s ease;
-}
-body.theme-dark #infinite-status-banner { background: rgba(37,99,235,0.12); border-color: rgba(96,165,250,0.3); }
-.spinner-icon {
-  display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor;
-  border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite;
-  margin-right: 6px; vertical-align: middle;
-}
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+      <div class="gloss-batch-toolbar" id="gloss-batch-toolbar">
+        <span id="gloss-batch-count" style="font-weight: 600;">เลือกไว้ 0 คำ</span>
+        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
+          <button class="btn btn-primary" style="padding: 2px 7px; font-size: 10px;" onclick="batchResearchSelectedTerms()">🔄 รีเสิร์ชที่เลือก</button>
+          <button class="btn" style="padding: 2px 7px; font-size: 10px;" onclick="batchSetScopeGlobal(true)">🌐 ตั้งเป็นสากล</button>
+          <button class="btn" style="padding: 2px 7px; font-size: 10px;" onclick="openBatchBookAssignModal()">🏷️ กำหนดเรื่องที่เลือก</button>
+          <button class="btn btn-danger" style="padding: 2px 7px; font-size: 10px;" onclick="batchDeleteSelectedTerms()">🗑️ ลบที่เลือก</button>
+        </div>
+      </div>
 
-.chap-nav {
-  margin-top: 30px; padding-top: 18px; border-top: 1px solid rgba(0,0,0,0.08);
-  display: flex; justify-content: space-between; align-items: center; gap: 8px;
-}
-body.theme-dark .chap-nav { border-top-color: rgba(255,255,255,0.1); }
+      <div style="margin-bottom: 8px;">
+        <input type="text" id="gloss-search-input" class="form-input" placeholder="🔍 ค้นหาคำศัพท์ (พิมพ์ได้ทั้งภาษาไทยและจีน)..." oninput="renderGlossaryUI()">
+      </div>
 
-.mobile-dock {
-  display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
-  background: inherit; border-top: 1px solid rgba(0,0,0,0.08); padding: 8px 12px;
-  justify-content: space-around; align-items: center; backdrop-filter: blur(12px);
-  transition: transform 0.2s ease, opacity 0.2s ease;
-}
-body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
-@media (min-width: 768px) { .mobile-dock { display: none; } }
+      <div class="gloss-category-tabs">
+        <button class="cat-tab-btn active" onclick="switchGlossaryCategory('all', event)">ทั้งหมด</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('character', event)">👤 บุคคล/สิ่งมีชีวิต</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('title', event)">🎖 ตำแหน่ง/ฐานะ</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('location', event)">🏔️ สถานที่/องค์กร</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('skill', event)">📜 ทักษะ/วิชา</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('equipment', event)">🗡️ อุปกรณ์/เทคโน</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('resource', event)">💊 ทรัพยากร/โอสถ</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('realm', event)">🧬 ลำดับขั้น/สเตตัส</button>
+      </div>
 
-#selection-bar {
-  display: none; position: fixed; bottom: 60px; left: 50%; transform: translateX(-50%);
-  z-index: 45; width: calc(100% - 24px); max-width: 520px;
-  background: #1e293b; color: #fff; padding: 10px 14px; border-radius: 10px;
-  box-shadow: 0 10px 25px rgba(0,0,0,0.35); align-items: center; justify-content: space-between;
-  animation: slideUp 0.15s ease-out;
-}
-@media (min-width: 768px) { #selection-bar { bottom: 20px; } }
-@keyframes slideUp { from { transform: translate(-50%, 20px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+      <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; align-items: center;">
+        <input type="text" id="gloss-src" class="form-input" placeholder="คำจีน (เช่น 光海)" style="flex: 1; min-width: 90px;">
+        <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปลไทย (เช่น ทะเลแสง)" style="flex: 1; min-width: 90px;">
+        <select id="gloss-cat" class="form-input" style="width: 120px;">
+          <option value="character" selected>บุคคล/สิ่งมีชีวิต</option>
+          <option value="title">ตำแหน่ง/ฐานะ</option>
+          <option value="location">สถานที่/องค์กร</option>
+          <option value="skill">ทักษะ/วิชา</option>
+          <option value="equipment">อุปกรณ์/เทคโน</option>
+          <option value="resource">ทรัพยากร/โอสถ</option>
+          <option value="realm">ลำดับขั้น/สเตตัส</option>
+        </select>
+        <button class="btn btn-secondary" id="lookup-manual-term-btn" onclick="lookupManualTermTranslation()" title="พิมพ์คำจีนแล้วกดปุ่มนี้เพื่อให้ AI ค้นหาคำแปลไทยมาตรฐาน 3-Tier ให้อัตโนมัติ" style="white-space: nowrap;">
+          🔍 ค้นหาคำแปล
+        </button>
+        <button class="btn btn-primary" onclick="addGlossary()">+ เพิ่ม</button>
+      </div>
 
-.sel-info { display: flex; flex-direction: column; overflow: hidden; max-width: 48%; }
-.sel-tag { font-size: 10px; opacity: 0.6; text-transform: uppercase; font-weight: 600; }
-.sel-text { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #38bdf8; }
+      <div id="glossary-list" class="modal-scrollable-body" style="max-height: 250px;"></div>
+    </div>
+  </div>
 
-/* MODALS */
-.modal-overlay {
-  display: none; position: fixed; inset: 0; z-index: 50;
-  background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
-  align-items: center; justify-content: center; padding: 16px;
-  overscroll-behavior: contain;
-}
-.modal-overlay.active { display: flex !important; }
-.modal-box {
-  width: 100%; max-width: 660px; max-height: 90vh; border-radius: 12px;
-  padding: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.2);
-  background-color: #fff; color: #1e293b;
-  display: flex; flex-direction: column; overflow: hidden;
-  overscroll-behavior: contain;
-}
-body.theme-sepia .modal-box { background-color: #fbf7ee; color: #2b2114; border: 1px solid #e9dac1; }
-body.theme-dark .modal-box  { background-color: #161b22; color: #e6edf3; border: 1px solid #30363d; }
+  <!-- MODAL: QUICK BOOK ASSIGNMENT -->
+  <div class="modal-overlay" id="book-assign-modal" style="z-index: 60;">
+    <div class="modal-box" style="max-width: 420px;">
+      <div class="modal-head">
+        <div class="modal-title">กำหนดเรื่องสำหรับคำศัพท์</div>
+        <button class="modal-close" onclick="closeModal('book-assign-modal')">✕</button>
+      </div>
+      <div style="font-size: 12px; margin-bottom: 8px;">
+        คำศัพท์: <b id="assign-term-title" style="color: #2563eb;">...</b>
+      </div>
+      <div id="assign-books-list" class="modal-scrollable-body" style="max-height: 200px; margin-bottom: 12px; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 6px;"></div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end;">
+        <button class="btn" onclick="closeModal('book-assign-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveBookAssignment()">บันทึก</button>
+      </div>
+    </div>
+  </div>
 
-.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; shrink: 0; }
-.modal-title { font-family: 'Kanit', sans-serif; font-size: 16px; font-weight: 600; }
-.modal-close { background: transparent; border: none; font-size: 18px; cursor: pointer; color: inherit; opacity: 0.6; }
+  <!-- MODAL 3: SETTINGS -->
+  <div class="modal-overlay" id="settings-modal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title">ตั้งค่าระบบและการแปล</div>
+        <button class="modal-close" onclick="closeModal('settings-modal')">✕</button>
+      </div>
 
-.modal-scrollable-body {
-  overflow-y: auto; overscroll-behavior: contain; padding-right: 4px;
-}
+      <div class="modal-scrollable-body">
+        <div class="form-group">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label class="form-label" style="margin: 0;">Google Gemini API Keys (คลังคีย์หมุนเวียน)</label>
+            <button class="btn btn-secondary" id="fetch-models-btn" onclick="fetchLiveModels()" style="padding: 2px 8px; font-size: 11px;">
+              ตรวจเช็กโมเดล
+            </button>
+          </div>
+          <textarea id="gemini-keys-area" class="form-input" rows="3" style="resize: vertical; font-family: monospace; font-size: 12px;" placeholder="วาง API Key (1 คีย์ต่อ 1 บรรทัด)&#10;AIzaSy...&#10;AIzaSy..."></textarea>
+          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
+            * สามารถใส่ได้หลายคีย์ (คั่นด้วยบรรทัดใหม่) เมื่อคีย์ตัวแรกโควต้าเต็ม (ติด Rate Limit 429) ระบบจะสลับไปใช้คีย์ถัดไปให้อัตโนมัติทันที
+          </div>
+          <div id="fetch-status-text" style="font-size: 11px; margin-top: 4px; display: none;"></div>
+        </div>
 
-.form-group { margin-bottom: 12px; }
-.form-label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 4px; opacity: 0.8; }
-.form-input {
-  width: 100%; padding: 8px 10px; font-size: 13px; border-radius: 6px;
-  border: 1px solid rgba(0,0,0,0.15); outline: none; background: #fff; color: #000;
-  font-family: inherit;
-}
-body.theme-dark .form-input { background: #0d1117; color: #fff; border-color: rgba(255,255,255,0.2); }
-.status-msg {
-  display: none; padding: 8px 10px; border-radius: 6px; font-size: 12px;
-  margin-top: 8px; line-height: 1.4;
-}
+        <div class="form-group">
+          <label class="form-label">โมเดล AI ตัวหลัก (Primary Model)</label>
+          <select id="gemini-primary-model" class="form-input">
+            <option value="gemini-3.5-flash-lite" selected>Gemini 3.5 Flash-Lite (แนะนำ / สปีดเร็ว)</option>
+            <option value="gemini-3.8-flash">Gemini 3.8 Flash (เรือธง / สำนวนสละสลวย)</option>
+            <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+          </select>
+        </div>
 
-/* GLOSSARY STYLES */
-.gloss-category-tabs {
-  display: flex; gap: 4px; margin-bottom: 10px; overflow-x: auto; padding-bottom: 4px;
-}
-.cat-tab-btn {
-  padding: 4px 9px; font-size: 11px; border-radius: 6px; border: 1px solid rgba(0,0,0,0.1);
-  background: transparent; color: inherit; cursor: pointer; white-space: nowrap;
-}
-body.theme-dark .cat-tab-btn { border-color: rgba(255,255,255,0.15); }
-.cat-tab-btn.active {
-  background: #2563eb !important; color: #fff !important; border-color: #2563eb !important; font-weight: 600;
-}
+        <div class="form-group">
+          <label class="form-label">ลิมิตส่งซ้ำเมื่อเซิร์ฟเวอร์หนาแน่น (รอบ)</label>
+          <input type="number" id="retry-limit" class="form-input" min="1" max="50" value="10" placeholder="10">
+        </div>
 
-.glossary-filter-bar {
-  display: flex; gap: 6px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;
-}
+        <!-- TOGGLES -->
+        <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
+            <input type="checkbox" id="enable-deep-ner-scan" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
+            <div>
+              <span>🔍 สแกนคำศัพท์เชิงลึก (Deep Dual-Pass NER)</span>
+              <div style="font-size: 11px; font-weight: normal; opacity: 0.65; margin-top: 2px;">
+                กวาดจับทั้งชื่อเฉพาะ, ระดับพลังทุกขั้น (ขอบเขต/หลอม/ปราณ), ฉายา และวิชา ป้องกันคำเฉพาะหลุดรอด
+              </div>
+            </div>
+          </label>
+        </div>
 
-.gloss-item-row {
-  display: flex; align-items: center; justify-content: space-between; padding: 8px 6px;
-  border-bottom: 1px solid rgba(0,0,0,0.06); gap: 6px; font-size: 12px;
-}
-body.theme-dark .gloss-item-row { border-bottom-color: rgba(255,255,255,0.06); }
+        <div class="form-group" style="margin-top: 10px;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
+            <input type="checkbox" id="enable-bilingual-verify" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
+            <div>
+              <span>🛡️ ตรวจสอบความถูกต้องเทียบต้นฉบับ 2 ภาษา (Bilingual Cross-Verification Pass)</span>
+              <div style="font-size: 11px; font-weight: normal; opacity: 0.65; margin-top: 2px;">
+                เทียบประโยคไทยกับจีนต้นฉบับ 1:1 ป้องกันใจความสลับ, ล็อกสรรพนามไม่ให้เปลี่ยน, ล็อกคำศัพท์คลังขึ้นเส้นประ 100%, แก้คำสะกดผิด และป้องกันคำในกรอบ 【 】 หาย
+              </div>
+            </div>
+          </label>
+        </div>
 
-.gloss-badge {
-  font-size: 9px; padding: 1px 5px; border-radius: 4px; font-weight: 600;
-  background: rgba(37,99,235,0.1); color: #2563eb;
-}
-body.theme-dark .gloss-badge { background: rgba(96,165,250,0.15); color: #93c5fd; }
+        <div class="form-group" style="margin-top: 10px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
+            <input type="checkbox" id="enable-infinite-scroll" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
+            <span>เปิดใช้งานโหมดอ่านต่อเนื่องไร้รอยต่อ (Infinite Scroll)</span>
+          </label>
+        </div>
 
-.gloss-scope-tag {
-  font-size: 9px; padding: 2px 6px; border-radius: 4px; font-weight: 600; cursor: pointer;
-  display: inline-flex; align-items: center; gap: 2px;
-}
-.gloss-scope-global { background: #dcfce7; color: #166534; }
-.gloss-scope-local { background: #fef3c7; color: #92400e; }
+        <div class="form-group" style="margin-top: 8px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
+            <input type="checkbox" id="enable-live-prefetch" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
+            <span>แปลบทถัดไปล่วงหน้า 1 ตอนในเบื้องหลังขณะอ่านสด</span>
+          </label>
+        </div>
 
-.gloss-batch-toolbar {
-  display: none; align-items: center; justify-content: space-between;
-  padding: 8px 12px; margin-bottom: 8px; border-radius: 6px;
-  background: rgba(37,99,235,0.08); border: 1px solid rgba(37,99,235,0.2); font-size: 11px;
-}
-body.theme-dark .gloss-batch-toolbar { background: rgba(37,99,235,0.18); border-color: rgba(96,165,250,0.3); }
+        <div class="form-group" style="margin-top: 8px;">
+          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
+            <input type="checkbox" id="enable-auto-glossary" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
+            <span>เปิดใช้งานระบบ Auto-Glossary (สกัดชื่อเฉพาะอัตโนมัติ)</span>
+          </label>
+        </div>
+      </div>
 
-/* BOOKSHELF */
-.book-item-container {
-  border: 1px solid rgba(0,0,0,0.08); border-radius: 8px; margin-bottom: 12px;
-  overflow: hidden; background: rgba(0,0,0,0.01);
-}
-body.theme-dark .book-item-container { border-color: rgba(255,255,255,0.1); background: rgba(255,255,255,0.02); }
-.book-card-header { display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; cursor: pointer; }
-.book-card-header:hover { background-color: rgba(0,0,0,0.03); }
-body.theme-dark .book-card-header:hover { background-color: rgba(255,255,255,0.04); }
-.book-info { flex: 1; overflow: hidden; padding-right: 8px; }
-.book-title { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #2563eb; }
-body.theme-dark .book-title { color: #60a5fa; }
-.book-meta { font-size: 11px; opacity: 0.65; margin-top: 2px; }
+      <div style="margin-top: 14px; shrink: 0;">
+        <button class="btn btn-primary" style="width: 100%;" onclick="saveSettings()">บันทึกการตั้งค่า</button>
+      </div>
+    </div>
+  </div>
 
-.batch-bar {
-  display: flex; align-items: center; gap: 6px; padding: 8px 14px;
-  background: rgba(0,0,0,0.02); border-top: 1px dashed rgba(0,0,0,0.08); font-size: 12px; flex-wrap: wrap;
-}
-body.theme-dark .batch-bar { background: rgba(255,255,255,0.03); border-top-color: rgba(255,255,255,0.08); }
-.shelf-sub-toolbar {
-  display: flex; justify-content: space-between; align-items: center; padding: 6px 14px;
-  background: rgba(0,0,0,0.03); font-size: 11px; border-top: 1px solid rgba(0,0,0,0.06);
-}
-body.theme-dark .shelf-sub-toolbar { background: rgba(255,255,255,0.04); border-top-color: rgba(255,255,255,0.08); }
-.book-chapters-list {
-  display: none; border-top: 1px solid rgba(0,0,0,0.06); max-height: 220px;
-  overflow-y: auto; overscroll-behavior: contain; background: rgba(0,0,0,0.02); padding: 4px 0;
-}
-body.theme-dark .book-chapters-list { border-top-color: rgba(255,255,255,0.08); background: rgba(0,0,0,0.2); }
-.chap-subitem {
-  padding: 6px 14px; font-size: 12px; display: flex; justify-content: space-between;
-  align-items: center; transition: background 0.1s ease; gap: 8px;
-}
-.chap-subitem:hover { background-color: rgba(37,99,235,0.08); }
-.chap-subitem.active { font-weight: 600; color: #2563eb; background-color: rgba(37,99,235,0.08); }
-.chap-chk { cursor: pointer; accent-color: #2563eb; }
-.chap-name-btn { flex: 1; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chap-action-btn { padding: 2px 6px; font-size: 10px; border-radius: 4px; border: none; cursor: pointer; }
-
-.progress-box {
-  display: none; margin: 10px 0; padding: 10px 12px; border-radius: 8px;
-  background: #eff6ff; color: #1e40af; font-size: 12px; transition: all 0.2s ease; border: 1px solid #bfdbfe;
-}
-body.theme-dark .progress-box { background: rgba(37,99,235,0.15); color: #93c5fd; border-color: rgba(37,99,235,0.3); }
-.progress-box.success { background: #f0fdf4 !important; color: #166534 !important; border-color: #bbf7d0 !important; }
-body.theme-dark .progress-box.success { background: rgba(34,197,94,0.15) !important; color: #86efac !important; border-color: rgba(34,197,94,0.3) !important; }
+  <!-- SCRIPTS ORDERED DEPENDENCIES -->
+  <script src="js/db.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/glossary.js"></script>
+  <script src="js/shelf.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
