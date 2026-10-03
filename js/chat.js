@@ -1,6 +1,14 @@
-// ==================== AI READING COMPANION (ENHANCED RAG & RECURSIVE RECAP) ====================
-let chatHistory = [];
+// ==================== AI READING COMPANION (PRODUCTION UNIVERSAL RAG) ====================
+let chatSessionsByBook = {}; // แยกประวัติแชตตาม ID เรื่อง (ป้องกัน Context Contamination)
 let isChatResponding = false;
+
+function getCurrentBookChatHistory() {
+  const bId = currentBookId || 'default';
+  if (!chatSessionsByBook[bId]) {
+    chatSessionsByBook[bId] = [];
+  }
+  return chatSessionsByBook[bId];
+}
 
 function toggleChatDrawer() {
   const drawer = document.getElementById('chat-drawer');
@@ -16,7 +24,30 @@ function toggleChatDrawer() {
     if (bubble) bubble.style.display = 'none';
     const input = document.getElementById('chat-user-input');
     if (input) setTimeout(() => input.focus(), 200);
+    renderCurrentBookChatSession();
     scrollChatToBottom();
+  }
+}
+
+function renderCurrentBookChatSession() {
+  const body = document.getElementById('chat-messages-body');
+  if (!body) return;
+
+  const history = getCurrentBookChatHistory();
+  if (history.length === 0) {
+    body.innerHTML = `
+      <div class="chat-msg chat-msg-bot">
+        สวัสดีครับ! ผมคือผู้ช่วยอ่านนิยายเรื่อง <b>${escapeHtml(currentBookTitle || 'เล่มนี้')}</b> ถามสเตตัส สรุปเนื้อหา ทบทวนเหตุการณ์ หรือชวนคุยเปรียบเทียบสเกลพลังกับเรื่องอื่นได้เต็มที่เลยครับ 📖
+      </div>
+    `;
+  } else {
+    body.innerHTML = '';
+    history.forEach(msg => {
+      const msgDiv = document.createElement('div');
+      msgDiv.className = `chat-msg chat-msg-${msg.role === 'user' ? 'user' : 'bot'}`;
+      msgDiv.innerHTML = msg.role === 'user' ? escapeHtml(msg.text) : formatChatReply(msg.text);
+      body.appendChild(msgDiv);
+    });
   }
 }
 
@@ -30,29 +61,22 @@ function scrollChatToBottom() {
 }
 
 function clearChatHistory() {
-  chatHistory = [];
-  const body = document.getElementById('chat-messages-body');
-  if (body) {
-    body.innerHTML = `
-      <div class="chat-msg chat-msg-bot">
-        สวัสดีครับ! ผมคือผู้ช่วยอ่านนิยายเรื่อง <b>${currentBookTitle}</b> ถามเจาะลึกประวัติของวิเศษ ทบทวนเนื้อหาย้อนหลัง หรือกดปุ่ม <b>"📜 สรุปภาพรวมตั้งแต่ตอนที่ 1"</b> ได้เลยครับ 📖
-      </div>
-    `;
-  }
+  const bId = currentBookId || 'default';
+  chatSessionsByBook[bId] = [];
+  renderCurrentBookChatSession();
 }
 
-// ---------------- LOCAL INVERTED INDEX & DOSSIER RECONSTRUCTOR ----------------
+// ---------------- LOCAL INVERTED INDEX & MULTI-BOOK DOSSIER SCANNER ----------------
 
-async function findBilingualStateTimeline(userQuery) {
+async function findBilingualStateTimeline(userQuery, maxAllowedOrder) {
   const query = userQuery.trim().toLowerCase();
   const bookChaps = await dbGetChaptersByBook(currentBookId);
   bookChaps.sort((a, b) => a.order - b.order);
 
-  const curChap = chapters[currentChapterIndex] || {};
-  const maxOrder = curChap.order || bookChaps.length;
+  // 1. HARD CHAPTER FENCE: กักข้อมูลไว้แค่ตอนที่กำลังเปิดอ่าน ป้องกันการสปอยล์จากตอนที่พรีเฟตช์ไว้
+  const availableChaps = bookChaps.filter(c => (c.order || 0) <= maxAllowedOrder);
 
-  const availableChaps = bookChaps.filter(c => (c.order || 0) <= maxOrder);
-
+  // 2. ดึงคลังศัพท์เพื่อแมปคำจีน - ไทย
   const activeTerms = await getActiveGlossaryForCurrentBook();
   const matchedTerms = [];
 
@@ -65,12 +89,16 @@ async function findBilingualStateTimeline(userQuery) {
 
   const matchedTransitions = [];
   const matchedEvents = [];
+  const matchedQuotes = [];
+
+  // ตรวจจับว่าผู้ใช้ถามหาบทสนทนาหรือคำพูดเด็ดหรือไม่
+  const isAskingForQuotes = /พูดว่า|คำพูด|ประโยค|สั่งเสีย|ตะโกน|กล่าวว่า|อุทาน/.test(query);
 
   availableChaps.forEach(ch => {
     const d = ch.dossier;
-    if (!d) return;
 
-    if (Array.isArray(d.state_transitions)) {
+    // ตรวจจับ State Transitions
+    if (d && Array.isArray(d.state_transitions)) {
       d.state_transitions.forEach(st => {
         let isHit = false;
         if (query.includes(st.src.toLowerCase()) || query.includes((st.th || "").toLowerCase())) isHit = true;
@@ -86,7 +114,8 @@ async function findBilingualStateTimeline(userQuery) {
       });
     }
 
-    if (Array.isArray(d.key_events)) {
+    // ตรวจจับ Key Events
+    if (d && Array.isArray(d.key_events)) {
       d.key_events.forEach(ev => {
         let isHit = query.split(/\s+/).some(w => w.length >= 2 && ev.toLowerCase().includes(w));
         if (matchedTerms.some(t => ev.includes(t.th) || ev.includes(t.src))) isHit = true;
@@ -95,21 +124,34 @@ async function findBilingualStateTimeline(userQuery) {
         }
       });
     }
+
+    // ดึง Quote จริงจากย่อหน้าที่มีบทสนทนาหากผู้ใช้ถามหา
+    if (isAskingForQuotes && Array.isArray(ch.paragraphs)) {
+      ch.paragraphs.forEach(p => {
+        if (!p.th) return;
+        if ((p.th.includes('“') || p.th.includes('"') || p.th.includes('「')) && 
+            (matchedTerms.some(t => p.th.includes(t.th)) || query.split(/\s+/).some(w => w.length >= 2 && p.th.includes(w)))) {
+          matchedQuotes.push(`[ตอนที่ ${ch.order}] ${p.th.trim()}`);
+        }
+      });
+    }
   });
 
   return {
     matchedTerms,
     matchedTransitions,
-    matchedEvents: matchedEvents.slice(-8)
+    matchedEvents: matchedEvents.slice(-8),
+    matchedQuotes: matchedQuotes.slice(-5)
   };
 }
 
-function consolidateCurrentInventory(bookChaps, maxOrder) {
+// รวมยอด Snapshot สถานะสุทธิของตัวเอก
+function consolidateCurrentInventory(bookChaps, maxAllowedOrder) {
   const inventory = new Map();
   let latestRealm = "ไม่ระบุ";
   let latestInjuries = "ปกติ";
 
-  bookChaps.filter(c => (c.order || 0) <= maxOrder).forEach(ch => {
+  bookChaps.filter(c => (c.order || 0) <= maxAllowedOrder).forEach(ch => {
     const d = ch.dossier;
     if (!d) return;
 
@@ -139,20 +181,49 @@ function consolidateCurrentInventory(bookChaps, maxOrder) {
   };
 }
 
-// ---------------- HIERARCHICAL PYRAMID RECAP BUILDER ----------------
+// ตรวจสอบว่าในชั้นหนังสือมีนิยายเรื่องอื่นที่ผู้ใช้กำลังเอ่ยถึงเพื่อเปรียบเทียบหรือไม่ (Cross-Book Shelf Search)
+async function findCrossBookContextIfAny(userQuery) {
+  const query = userQuery.toLowerCase();
+  const allBooks = await dbGetAllBooks();
+  const otherBooks = allBooks.filter(b => b.id !== currentBookId);
+
+  const matchedOtherBooks = [];
+  for (const b of otherBooks) {
+    const bTitle = (b.title || "").toLowerCase();
+    if (bTitle.length >= 2 && query.includes(bTitle)) {
+      const bChaps = await dbGetChaptersByBook(b.id);
+      bChaps.sort((a, b) => a.order - b.order);
+      const lastChap = bChaps[bChaps.length - 1];
+      const otherNet = consolidateCurrentInventory(bChaps, lastChap ? lastChap.order : 9999);
+      
+      matchedOtherBooks.push({
+        title: b.title,
+        genre: b.genre || "ไม่ระบุ",
+        totalChapters: bChaps.length,
+        realm: otherNet.latestRealm,
+        topItems: otherNet.currentHoldings.slice(0, 5).map(h => h.th).join(', ')
+      });
+    }
+  }
+
+  return matchedOtherBooks;
+}
+
+// ---------------- HIERARCHICAL CONTEXT BUILDER ----------------
 
 async function buildHierarchicalStoryContext(userQuery, isFullRecapMode = false) {
   const curChap = chapters[currentChapterIndex] || {};
   const bookChaps = await dbGetChaptersByBook(currentBookId);
   bookChaps.sort((a, b) => a.order - b.order);
 
-  const maxOrder = curChap.order || bookChaps.length;
-  const availableChaps = bookChaps.filter(c => (c.order || 0) <= maxOrder);
+  // คำนวณเพดานตอนปัจจุบัน (Hard Fence)
+  const maxAllowedOrder = curChap.order || (currentChapterIndex + 1);
+  const availableChaps = bookChaps.filter(c => (c.order || 0) <= maxAllowedOrder);
 
-  const searchEvidence = await findBilingualStateTimeline(userQuery);
-  const netStatus = consolidateCurrentInventory(bookChaps, maxOrder);
+  const searchEvidence = await findBilingualStateTimeline(userQuery, maxAllowedOrder);
+  const netStatus = consolidateCurrentInventory(bookChaps, maxAllowedOrder);
+  const crossBooks = await findCrossBookContextIfAny(userQuery);
 
-  // ดึงเหตุการณ์สะสมเพื่อสร้าง Pyramid Summary
   const timelineMilestones = [];
   availableChaps.forEach(ch => {
     if (ch.dossier && Array.isArray(ch.dossier.key_events) && ch.dossier.key_events.length > 0) {
@@ -162,7 +233,6 @@ async function buildHierarchicalStoryContext(userQuery, isFullRecapMode = false)
     }
   });
 
-  // กรองตัวอย่างกรณีตอนเยอะเกิน 25 ตอน (Sampling Down เพื่อคุม Context)
   let sampledTimeline = timelineMilestones;
   if (timelineMilestones.length > 25 && !isFullRecapMode) {
     const step = Math.ceil(timelineMilestones.length / 20);
@@ -184,17 +254,16 @@ async function buildHierarchicalStoryContext(userQuery, isFullRecapMode = false)
     genre: currentBookGenre,
     author: currentAuthor,
     currentChapTitle: curChap.title || "บทปัจจุบัน",
-    currentChapOrder: maxOrder,
-    totalChaptersRead: availableChaps.length,
+    currentChapOrder: maxAllowedOrder,
     evidence: searchEvidence,
     netStatus: netStatus,
+    crossBooks: crossBooks,
     sampledTimeline: sampledTimeline.join("\n"),
     recentSummaries: recentSummaries.join("\n"),
-    currentChapterText: currentChapterText.substring(0, 4500)
+    currentChapterText: currentChapterText.substring(0, 4000)
   };
 }
 
-// ฟังก์ชันสำหรับปุ่ม Quick Chip "สรุปภาพรวมตั้งแต่ตอนที่ 1"
 async function requestFullStoryRecap() {
   const curChap = chapters[currentChapterIndex] || {};
   const maxOrder = curChap.order || (currentChapterIndex + 1);
@@ -228,14 +297,14 @@ async function sendChatMessage(customPrompt = null, forceRecapMode = false) {
   const loadingBubble = document.createElement('div');
   loadingBubble.className = "chat-msg chat-msg-bot";
   loadingBubble.id = loadingBubbleId;
-  loadingBubble.innerHTML = `<span class="spinner-icon" style="margin-right: 6px;"></span> ${forceRecapMode ? 'กำลังประมวลผลสรุปเนื้อเรื่อง 4 มิติ...' : 'กำลังสืบค้นข้อมูลในคลังบันทึก...'}`;
+  loadingBubble.innerHTML = `<span class="spinner-icon" style="margin-right: 6px;"></span> ${forceRecapMode ? 'กำลังประมวลผลสรุป 4 มิติ...' : 'กำลังสืบค้นข้อมูลในคลังบันทึก...'}`;
   chatBody.appendChild(loadingBubble);
   scrollChatToBottom();
 
   isChatResponding = true;
 
   try {
-    const isRecap = forceRecapMode || userText.includes("สรุปเรื่อง") || userText.includes("สรุปตั้งแต่ตอนที่ 1") || userText.includes("ภาพรวมทั้งหมด");
+    const isRecap = forceRecapMode || /สรุปเรื่อง|สรุปตั้งแต่ตอนที่ 1|ภาพรวมทั้งหมด|สรุปมหากาพย์/.test(userText);
     const ctx = await buildHierarchicalStoryContext(userText, isRecap);
 
     let evidenceSection = "ไม่มีหลักฐานเจาะจงเฉพาะคำ";
@@ -250,69 +319,56 @@ async function sendChatMessage(customPrompt = null, forceRecapMode = false) {
       ? ctx.netStatus.currentHoldings.map(h => `- ${h.th} (${h.src}) [${h.category}] ได้รับในตอนที่ ${h.lastUpdatedChapter}`).join("\n")
       : "ไม่มีรายการของวิเศษคงเหลือที่บันทึกไว้";
 
-    let systemPrompt = "";
+    let crossBooksSection = "";
+    if (ctx.crossBooks.length > 0) {
+      crossBooksSection = `[ข้อมูลนิยายเรื่องอื่นในชั้นหนังสือที่ถูกกล่าวถึง เพื่อใช้เปรียบเทียบ]:\n` +
+        ctx.crossBooks.map(cb => `- เรื่อง "${cb.title}" (แนว ${cb.genre}): อ่านถึงตอนที่ ${cb.totalChapters}, ระดับพลังล่าสุด: ${cb.realm}, สมบัติเด่น: ${cb.topItems || 'ไม่ระบุ'}`).join('\n');
+    }
 
-    if (isRecap) {
-      // โหมดสรุปภาพรวม 4 มิติ (Multi-Track Storyline Breakdown)
-      systemPrompt = `คุณคือ "เพื่อนร่วมอ่านนิยายและผู้เชี่ยวชาญการวิเคราะห์วรรณกรรม" แนว ${ctx.genre}
-งานของคุณคือสรุปภาพรวมเนื้อเรื่องของ "${ctx.bookTitle}" ตั้งแต่ตอนที่ 1 จนถึงตอนที่ ${ctx.currentChapOrder} ("${ctx.currentChapTitle}")
+    let quotesSection = "";
+    if (ctx.evidence.matchedQuotes.length > 0) {
+      quotesSection = `[บทสนทนา/คำพูดจริงที่คัดลอกมาจากเนื้อหาในตอน]:\n` + ctx.evidence.matchedQuotes.join('\n');
+    }
 
-[ฐานข้อมูลเหตุการณ์สำคัญตั้งแต่เริ่มต้นจนถึงปัจจุบัน (Historical Milestones)]:
-${ctx.sampledTimeline || "(ไม่มีบันทึกเหตุการณ์)"}
+    const systemPrompt = `คุณคือ "เพื่อนสนิทร่วมอ่านนิยาย" (Reading Companion) ผู้เชี่ยวชาญวรรณกรรมนิยายจีน กำลังภายใน และแฟนตาซีทุกแขนง
+นักอ่านกำลังเปิดอ่านเรื่อง: "${ctx.bookTitle}" (ผู้แต่ง: ${ctx.author || 'ไม่ระบุ'}, แนว: ${ctx.genre})
+สายตานักอ่านอยู่ที่: ตอนที่ ${ctx.currentChapOrder} ("${ctx.currentChapTitle}")
 
-[สถานะสุทธิของตัวเอก ณ ปัจจุบัน]:
-- ขอบเขตพลัง: ${ctx.netStatus.latestRealm}
-- สภาพร่างกาย/บาดแผล: ${ctx.netStatus.latestInjuries}
-- ไอเทม/วิชาที่ครอบครองอยู่จริง:
-${holdingsSection}
+[กฎเหล็กเรื่องกำแพงความรู้ (Strict Knowledge Boundary)]:
+1. คุณมีความรู้ในเรื่อง "${ctx.bookTitle}" สิ้นสุดที่ตอนที่ ${ctx.currentChapOrder} เท่านั้น ห้ามเดาหรือสปอยล์เหตุการณ์ในตอนอนาคตเด็ดขาด
+2. สำหรับข้อเท็จจริงในเรื่อง (ใครได้อะไร, เลเวลไหน, ของพังตอนไหน) ให้ยึดตาม [หลักฐานและสถานะสุทธิ] ที่ให้มาอย่างเคร่งครัด
 
-จงวิเคราะห์และเขียนสรุปภาพรวมให้นักอ่านเห็นภาพชัดเจน โดยจัดแบ่งเป็น 4 แกนสำคัญ:
-1. 🗺️ **เส้นเรื่องหลักและหมุดหมายสำคัญ:** เล่าลำดับการเดินทาง เหตุการณ์พลิกผันใหญ่ๆ ตั้งแต่เริ่มเรื่องจนถึงจุดที่กำลังเผชิญอยู่ในปัจจุบัน
-2. ⚔️ **สถานะขั้วอำนาจและศัตรู:** ฝ่ายใดเป็นมิตร ฝ่ายใดเป็นศัตรู มีความแค้นหรือข้อพิพาทกับใครอยู่
-3. 🧬 **พัฒนาการของตัวเอก:** การเติบโตของระดับพลัง วิชาประจำตัว และการเปลี่ยนแปลงสถานะในยุทธภพ
-4. 🚩 **เป้าหมายเร่งด่วนในปัจจุบัน:** สิ่งที่ตัวเอกกำลังมุ่งหน้าไปทำหรือแก้วิกฤตในตอนปัจจุบัน
-
-ข้อบังคับ:
-- เขียนให้อ่านสนุก กระชับ ลื่นไหล เป็นกันเองเหมือนเล่าให้เพื่อนฟัง
-- ห้ามแต่งเรื่องขึ้นมาเอง ยึดตามไทม์ไลน์ที่ให้ และห้ามสปอยล์เกินตอนที่ ${ctx.currentChapOrder}`;
-    } else {
-      // โหมดตอบคำถามเจาะจงตามปกติ
-      systemPrompt = `คุณคือ "เพื่อนร่วมอ่านนิยายและผู้คุมฐานข้อมูลนิยาย" ผู้เชี่ยวชาญนิยายแนว ${ctx.genre}
-งานของคุณคือตอบคำถาม ทบทวนเหตุการณ์ และวิเคราะห์สถานะของตัวละครให้นักอ่านฟังอย่างแม่นยำ 100%
-
-บริบทเรื่อง: "${ctx.bookTitle}" (ผู้แต่ง: ${ctx.author || 'ไม่ระบุ'})
-อ่านถึง: ตอนที่ ${ctx.currentChapOrder} ("${ctx.currentChapTitle}")
-
-[หลักฐานประวัติความเคลื่อนไหวที่ระบบค้นพบในเครื่อง (Ground Truth Evidence)]:
+[หลักฐานประวัติความเคลื่อนไหว (Ground Truth Evidence)]:
 ${evidenceSection}
 
 [เหตุการณ์สำคัญที่เกี่ยวข้อง]:
 ${ctx.evidence.matchedEvents.join("\n") || "- ไม่มี"}
 
+${quotesSection ? quotesSection + "\n" : ""}
 [สถานะสุทธิล่าสุดของตัวเอก ณ ตอนที่ ${ctx.currentChapOrder}]:
 - ระดับพลัง: ${ctx.netStatus.latestRealm}
 - อาการบาดเจ็บ: ${ctx.netStatus.latestInjuries}
-- รายการของวิเศษ/วิชาที่ถือครองอยู่จริงในปัจจุบัน (Active Inventory):
+- ไอเทม/วิชาที่ถือครองอยู่จริงในปัจจุบัน (Active Inventory):
 ${holdingsSection}
 
+${crossBooksSection ? crossBooksSection + "\n" : ""}
 [สรุปเนื้อหาตอนล่าสุด]:
 ${ctx.recentSummaries || "- ไม่มีสรุป"}
 
-[เนื้อหาในตอนปัจจุบัน]:
-${ctx.currentChapterText || "- ไม่มีเนื้อหา"}
-
-กฎการตอบคำถาม:
-1. ตอบระบุเลขตอนเสมอ (เช่น "ได้มาในตอนที่ 12 และเสียไปในตอนที่ 45 ครับ")
-2. หากสิ่งของเคยมีประวัติ lost/consumed ในตอนหลัง ให้ระบุชัดเจนว่าปัจจุบันไม่ได้ถือครองแล้ว
-3. คุยเป็นกันเอง สนุกสนาน ห้ามสปอยล์เกินกว่าตอนที่ ${ctx.currentChapOrder}`;
-    }
+[แนวทางการคุยและเปรียบเทียบข้ามจักรวาล (Cross-Universe & Discussion Guide)]:
+- หากผู้ใช้ถามเปรียบเทียบพลัง ตัวละคร หรือวิชากับนิยายเรื่องอื่น (เช่น ตัวละครจากนิยายดังเรื่องอื่น หรือเรื่องในชั้นหนังสือ):
+  * ให้ใช้ความรู้สากลของคุณเกี่ยวกับวรรณกรรมเรื่องนั้นๆ มาร่วมวิเคราะห์อย่างออกรส
+  * ใช้เกณฑ์เทียบสเกลพลังจากผลงานการทำลายล้างจริง (Feats / Universal Tiers: ระดับมนุษย์/ทำลายหิน -> ระดับทำลายภูเขา/เมือง -> ระดับทำลายทวีป/ดวงดาว -> ระดับจักรวาล/มหาเต๋า)
+  * ออกความเห็น วิเคราะห์จุดเด่นจุดด้อย และพูดคุยสนุกสนานเหมือนเพื่อนนั่งเมาท์นิยายข้างๆ กัน
+- ตอบเป็นภาษาไทย สำนวนเป็นกันเอง สนุกสนาน คมชัด ตรงประเด็น`;
 
     const contents = [
       { role: 'user', parts: [{ text: systemPrompt }] },
-      { role: 'model', parts: [{ text: "เข้าใจโครงสร้างข้อมูลและพร้อมตอบคำถามอย่างแม่นยำครับ!" }] }
+      { role: 'model', parts: [{ text: "เข้าใจบริบทและพร้อมเป็นคู่หูคุยนิยายอย่างแม่นยำและสนุกสนานแล้วครับ!" }] }
     ];
 
-    chatHistory.slice(-4).forEach(h => {
+    const currentHistory = getCurrentBookChatHistory();
+    currentHistory.slice(-4).forEach(h => {
       contents.push({ role: h.role, parts: [{ text: h.text }] });
     });
 
@@ -324,7 +380,7 @@ ${ctx.currentChapterText || "- ไม่มีเนื้อหา"}
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         contents: contents,
-        generationConfig: { temperature: 0.5, maxOutputTokens: 1500 }
+        generationConfig: { temperature: 0.6, maxOutputTokens: 1500 }
       })
     });
 
@@ -339,12 +395,12 @@ ${ctx.currentChapterText || "- ไม่มีเนื้อหา"}
     const targetBubble = document.getElementById(loadingBubbleId);
     if (targetBubble) targetBubble.innerHTML = formatChatReply(replyText);
 
-    chatHistory.push({ role: 'user', text: userText });
-    chatHistory.push({ role: 'model', text: replyText });
+    currentHistory.push({ role: 'user', text: userText });
+    currentHistory.push({ role: 'model', text: replyText });
   } catch (err) {
     const targetBubble = document.getElementById(loadingBubbleId);
     if (targetBubble) {
-      targetBubble.innerHTML = `<span style="color:#ef4444;">เกิดข้อผิดพลาดในการสืบค้น: ${err.message}</span>`;
+      targetBubble.innerHTML = `<span style="color:#ef4444;">เกิดข้อผิดพลาดในการสืบค้น: ${escapeHtml(err.message)}</span>`;
     }
   } finally {
     isChatResponding = false;
@@ -370,7 +426,8 @@ function formatChatReply(text) {
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  if (!str) return '';
+  return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function askBotAboutSelection() {
