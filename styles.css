@@ -246,7 +246,7 @@ body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
 body.theme-sepia .modal-box { background-color: #fbf7ee; color: #2b2114; border: 1px solid #e9dac1; }
 body.theme-dark .modal-box  { background-color: #161b22; color: #e6edf3; border: 1px solid #30363d; }
 
-.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; shrink: 0; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-shrink: 0; }
 .modal-title { font-family: 'Kanit', sans-serif; font-size: 16px; font-weight: 600; }
 .modal-close { background: transparent; border: none; font-size: 18px; cursor: pointer; color: inherit; opacity: 0.6; }
 

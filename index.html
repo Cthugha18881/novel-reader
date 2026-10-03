@@ -23,7 +23,7 @@
       <div class="brand-icon">N</div>
       <div class="brand-title">NovelTranslate AI</div>
     </div>
-    
+
     <div class="header-actions">
       <div class="desktop-controls">
         <button class="btn" onclick="adjustFontSize(-1)" title="ลดขนาดตัวอักษร">A-</button>
@@ -85,7 +85,7 @@
           </div>
         </div>
       </div>
-      <button class="btn" onclick="exportTxt()" style="font-size: 11px; shrink: 0;">.TXT</button>
+      <button class="btn" onclick="exportTxt()" style="font-size: 11px; flex-shrink: 0;">.TXT</button>
     </div>
 
     <div id="reading-content"></div>
@@ -95,7 +95,7 @@
     <!-- Chapter Navigation -->
     <div class="chap-nav" id="manual-chap-nav">
       <button class="btn" onclick="prevChapter()">← ตอนก่อนหน้า</button>
-      
+
       <div style="display: flex; gap: 6px;">
         <button class="btn btn-danger" id="cancel-retry-btn" style="display: none;" onclick="abortCurrentRetry()">
           หยุดลองใหม่
@@ -420,7 +420,7 @@
         </div>
       </div>
 
-      <div style="margin-top: 14px; shrink: 0;">
+      <div style="margin-top: 14px; flex-shrink: 0;">
         <button class="btn btn-primary" style="width: 100%;" onclick="saveSettings()">บันทึกการตั้งค่า</button>
       </div>
     </div>

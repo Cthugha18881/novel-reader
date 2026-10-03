@@ -41,7 +41,7 @@ async function startBatchTranslateForBook(bookId) {
 
   const input = document.getElementById(`batch-input-${bookId}`);
   const count = parseInt(input.value || "5", 10);
-  if (isNaN(count) || count < 1) return alert("กรุณาระบุจำนวนบทที่ถูกต้อง (อย่างน้อย 1 บท)");
+  if (isNaN(count) || count < 1 || count > 50) return alert("กรุณาระบุจำนวนบทระหว่าง 1 ถึง 50");
 
   let bookChaps = await dbGetChaptersByBook(bookId);
   bookChaps.sort((a, b) => a.order - b.order);
@@ -58,9 +58,24 @@ async function startBatchTranslateForBook(bookId) {
     await dbSaveChapter(lastChap);
   }
 
+  const previousContext = {
+    bookId: currentBookId, title: currentBookTitle, author: currentAuthor,
+    genre: currentBookGenre, customTitle: isUserCustomTitle
+  };
+  const knownBooks = await dbGetAllBooks();
+  const targetBookContext = knownBooks.find(b => b.bookId === bookId);
+  let batchAuthor = targetBookContext?.author || '';
+  const batchGenre = targetBookContext?.genre || 'xianxia';
+  currentBookId = bookId;
+  currentBookTitle = targetBookContext?.title || currentBookTitle;
+  currentAuthor = batchAuthor;
+  currentBookGenre = batchGenre;
+  isUserCustomTitle = targetBookContext?.isUserCustomTitle || false;
+
   isBatchRunning = true;
   batchCancelRequested = false;
   isBatchComplete = false;
+  retryAbortRequested = false;
 
   const progressBox = document.getElementById('batch-progress-box');
   const progressTitle = document.getElementById('batch-progress-title');
@@ -81,18 +96,27 @@ async function startBatchTranslateForBook(bookId) {
       break;
     }
 
+    if (!targetUrl) {
+      progressDesc.innerText = `แปลครบ ${successCount} ตอนแล้ว แต่ยังไม่มี URL ของตอนถัดไป กรุณากด “แก้ URL ถัดไป”`;
+      break;
+    }
     const urlSegment = targetUrl.substring(targetUrl.lastIndexOf('/'));
     progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${urlSegment})`;
 
     try {
-      const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl);
-      if (author) currentAuthor = author;
-      
+      activeAbortController = new AbortController();
+      const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, activeAbortController.signal);
+      activeAbortController = null;
+      if (batchCancelRequested) break;
+      if (author) batchAuthor = author;
+      if (currentBookId === bookId) currentAuthor = batchAuthor;
+
       const prevSummary = lastChap?.summary || "";
 
       const result = await translateTextWithPingPong(text, (msg) => {
         progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 32)}...`;
       }, rawChapTitle, rawBookTitle, prevSummary);
+      if (batchCancelRequested) break;
 
       const currentAll = await dbGetChaptersByBook(bookId);
       const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
@@ -116,7 +140,7 @@ async function startBatchTranslateForBook(bookId) {
 
       const books = await dbGetAllBooks();
       const targetBook = books.find(b => b.bookId === bookId);
-      
+
       let finalBookTitle = currentBookTitle;
       let customFlag = false;
       if (targetBook) {
@@ -127,8 +151,8 @@ async function startBatchTranslateForBook(bookId) {
       await dbSaveBook({
         bookId: bookId,
         title: finalBookTitle,
-        author: currentAuthor,
-        genre: targetBook?.genre || currentBookGenre,
+        author: batchAuthor,
+        genre: targetBook?.genre || batchGenre,
         isUserCustomTitle: customFlag,
         lastChapterId: targetBook?.lastChapterId || (currentBookId === bookId ? chapters[currentChapterIndex]?.id : bookChaps[0]?.id),
         lastChapterIndex: (targetBook && targetBook.lastChapterIndex !== undefined) ? targetBook.lastChapterIndex : 0,
@@ -166,6 +190,13 @@ async function startBatchTranslateForBook(bookId) {
 
   openBookshelfModal();
   checkAndRefreshBottomStatus();
+  if (previousContext.bookId !== bookId && currentBookId === bookId) {
+    currentBookId = previousContext.bookId;
+    currentBookTitle = previousContext.title;
+    currentAuthor = previousContext.author;
+    currentBookGenre = previousContext.genre;
+    isUserCustomTitle = previousContext.customTitle;
+  }
 }
 
 function renderChaptersHtml(bookId, bookChaps, readingChapId) {
@@ -186,13 +217,13 @@ function renderChaptersHtml(bookId, bookChaps, readingChapId) {
 
     chapsHtml += `
       <div class="chap-subitem ${activeClass}">
-        <input type="checkbox" class="chap-chk chk-book-${bookId}" value="${ch.id}" onchange="updateSelectedDeleteBtn('${bookId}')">
-        <div class="chap-name-btn" onclick="jumpToChapterById('${bookId}', '${ch.id}')">
-          📖 ${ch.title}
+          <input type="checkbox" class="chap-chk" data-book-id="${escapeHtml(bookId)}" value="${escapeHtml(ch.id)}" onchange="updateSelectedDeleteBtn(${jsArg(bookId)})">
+        <div class="chap-name-btn" onclick="jumpToChapterById(${jsArg(bookId)}, ${jsArg(ch.id)})">
+          📖 ${escapeHtml(ch.title)}
         </div>
         <div style="display:flex; gap:6px; align-items:center;">
-          <button class="chap-action-btn" style="background:rgba(37,99,235,0.1); color:#2563eb;" onclick="jumpToChapterById('${bookId}', '${ch.id}')">อ่าน</button>
-          <button class="chap-action-btn" style="background:rgba(16,185,129,0.1); color:#059669;" onclick="retranslateSpecificChapter(event, '${bookId}', '${ch.id}')" title="แปลบทนี้ใหม่ตามคลังคำศัพท์ล่าสุด">🔄 แปลใหม่</button>
+          <button class="chap-action-btn" style="background:rgba(37,99,235,0.1); color:#2563eb;" onclick="jumpToChapterById(${jsArg(bookId)}, ${jsArg(ch.id)})">อ่าน</button>
+          <button class="chap-action-btn" style="background:rgba(16,185,129,0.1); color:#059669;" onclick="retranslateSpecificChapter(event, ${jsArg(bookId)}, ${jsArg(ch.id)})" title="แปลบทนี้ใหม่ตามคลังคำศัพท์ล่าสุด">🔄 แปลใหม่</button>
         </div>
       </div>
     `;
@@ -230,47 +261,47 @@ async function openBookshelfModal() {
 
     itemBox.innerHTML = `
       <div class="book-card-header">
-        <div class="book-info" onclick="toggleBookAccordion('${b.bookId}')">
+        <div class="book-info" onclick="toggleBookAccordion(${jsArg(b.bookId)})">
           <div class="book-title">
-            📚 ${b.title || 'นิยายเรื่องใหม่'} 
-            <span class="btn" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; background: rgba(37,99,235,0.1); color: #2563eb;" onclick="openGenrePickerModal(event, '${b.bookId}')" title="คลิกเพื่อเลือกแนวเรื่องจากรายการ">
-              🏷️ ${genreBadge} ✎
+          📚 ${escapeHtml(b.title || 'นิยายเรื่องใหม่')}
+            <span class="btn" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; background: rgba(37,99,235,0.1); color: #2563eb;" onclick="openGenrePickerModal(event, ${jsArg(b.bookId)})" title="คลิกเพื่อเลือกแนวเรื่องจากรายการ">
+            🏷️ ${escapeHtml(genreBadge)} ✎
             </span>
             <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนย่อย)</span>
           </div>
-          <div class="book-meta" id="shelf-meta-${b.bookId}">อ่านค้างไว้: <b>${b.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${bookChaps.length} ตอนที่บันทึกไว้</div>
+          <div class="book-meta" id="shelf-meta-${escapeHtml(b.bookId)}">อ่านค้างไว้: <b>${escapeHtml(b.lastChapterTitle || 'ตอนที่ 1')}</b> | รวม ${bookChaps.length} ตอนที่บันทึกไว้</div>
         </div>
-        <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, '${b.bookId}')">ลบทั้งเรื่อง</button>
+        <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, ${jsArg(b.bookId)})">ลบทั้งเรื่อง</button>
       </div>
       <div class="batch-bar">
         <span>แปลล่วงหน้า</span>
-        <input type="number" id="batch-input-${b.bookId}" class="form-input" style="width: 50px; padding: 3px 6px; font-size: 12px;" min="1" max="50" value="5">
+        <input type="number" id="batch-input-${escapeHtml(b.bookId)}" class="form-input" style="width: 50px; padding: 3px 6px; font-size: 12px;" min="1" max="50" value="5">
         <span>บท</span>
-        <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="startBatchTranslateForBook('${b.bookId}')">
+        <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="startBatchTranslateForBook(${jsArg(b.bookId)})">
           ⚡ เริ่มแปลล่วงหน้า
         </button>
-        <button class="btn" style="padding: 3px 6px; font-size: 10px; margin-left: auto;" onclick="fixBookNextUrl('${b.bookId}')" title="แก้ไข URL สำหรับบทถัดไป">
+        <button class="btn" style="padding: 3px 6px; font-size: 10px; margin-left: auto;" onclick="fixBookNextUrl(${jsArg(b.bookId)})" title="แก้ไข URL สำหรับบทถัดไป">
           🔗 แก้ URL ถัดไป
         </button>
       </div>
-      
+
       <div class="shelf-sub-toolbar" id="shelf-sub-bar-${b.bookId}" style="display: none;">
         <div style="display: flex; gap: 4px; align-items: center;">
           <span>เรียง:</span>
-          <button class="btn" id="sort-time-btn-${b.bookId}" style="padding: 2px 7px; font-size: 10px;" onclick="toggleSortMode(event, '${b.bookId}', 'time')">
+          <button class="btn" id="sort-time-btn-${escapeHtml(b.bookId)}" style="padding: 2px 7px; font-size: 10px;" onclick="toggleSortMode(event, ${jsArg(b.bookId)}, 'time')">
             ${timeBtnLabel}
           </button>
-          <button class="btn" id="sort-title-btn-${b.bookId}" style="padding: 2px 7px; font-size: 10px;" onclick="toggleSortMode(event, '${b.bookId}', 'title')">
+          <button class="btn" id="sort-title-btn-${escapeHtml(b.bookId)}" style="padding: 2px 7px; font-size: 10px;" onclick="toggleSortMode(event, ${jsArg(b.bookId)}, 'title')">
             ${titleBtnLabel}
           </button>
         </div>
         <div style="display: flex; gap: 6px; align-items: center;">
-          <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="toggleSelectAllChaps('${b.bookId}')">เลือกทั้งหมด</button>
-          <button class="btn btn-danger" id="del-selected-btn-${b.bookId}" style="padding: 2px 6px; font-size: 10px; display: none;" onclick="deleteSelectedChapters('${b.bookId}')">ลบที่เลือก</button>
+          <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="toggleSelectAllChaps(${jsArg(b.bookId)})">เลือกทั้งหมด</button>
+          <button class="btn btn-danger" id="del-selected-btn-${escapeHtml(b.bookId)}" style="padding: 2px 6px; font-size: 10px; display: none;" onclick="deleteSelectedChapters(${jsArg(b.bookId)})">ลบที่เลือก</button>
         </div>
       </div>
 
-      <div class="book-chapters-list" id="shelf-chaps-${b.bookId}">
+      <div class="book-chapters-list" id="shelf-chaps-${escapeHtml(b.bookId)}">
         ${renderChaptersHtml(b.bookId, bookChaps, b.lastChapterId)}
       </div>
     `;
@@ -321,7 +352,7 @@ function toggleBookAccordion(bookId) {
 }
 
 function updateSelectedDeleteBtn(bookId) {
-  const chks = document.querySelectorAll(`.chk-book-${bookId}:checked`);
+  const chks = Array.from(document.querySelectorAll('.chap-chk:checked')).filter(c => c.dataset.bookId === bookId);
   const delBtn = document.getElementById(`del-selected-btn-${bookId}`);
   if (delBtn) {
     if (chks.length > 0) {
@@ -334,7 +365,7 @@ function updateSelectedDeleteBtn(bookId) {
 }
 
 function toggleSelectAllChaps(bookId) {
-  const chks = document.querySelectorAll(`.chk-book-${bookId}`);
+  const chks = Array.from(document.querySelectorAll('.chap-chk')).filter(c => c.dataset.bookId === bookId);
   if (chks.length === 0) return;
   const allChecked = Array.from(chks).every(c => c.checked);
   chks.forEach(c => c.checked = !allChecked);
@@ -388,7 +419,7 @@ async function refreshShelfViewOnly(bookId) {
 
   if (listEl) listEl.innerHTML = renderChaptersHtml(bookId, liveChaps, targetBook?.lastChapterId);
   if (metaEl && targetBook) {
-    metaEl.innerHTML = `อ่านค้างไว้: <b>${targetBook.lastChapterTitle || 'ตอนที่ 1'}</b> | รวม ${liveChaps.length} ตอนที่บันทึกไว้`;
+    metaEl.innerHTML = `อ่านค้างไว้: <b>${escapeHtml(targetBook.lastChapterTitle || 'ตอนที่ 1')}</b> | รวม ${liveChaps.length} ตอนที่บันทึกไว้`;
   }
   updateSelectedDeleteBtn(bookId);
 }
