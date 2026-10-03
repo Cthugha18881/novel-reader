@@ -324,45 +324,68 @@ async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTit
   const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
   const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
 
-  const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลเนื้อหาภาษาจีนต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย เป็นธรรมชาติ โดยคงความหมายและรูปประโยคให้ใกล้เคียงต้นฉบับที่สุด
+  const prompt = `คุณคือนักแปลนิยายมืออาชีพและผู้บันทึกฐานข้อมูลวรรณกรรม (Lore & State Tracker)
+แปลเนื้อหาภาษาจีนต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย เป็นธรรมชาติ โดยคงความหมายและรูปประโยคให้ใกล้เคียงต้นฉบับที่สุด
 
 สไตล์และบรรยากาศหลักของแนวเรื่อง:
 ${genreRule}
-
-กฎการปรับแต่งโทนอารมณ์ตามฉาก (Scene-Adaptive Translation) และถอดรหัสสำนวน:
-1. **ฉากต่อสู้/ระทึกขวัญ:** ใช้ประโยคสั้น กระชับ ใช้คำกริยาแสดงความรวดเร็วและหนักหน่วง ตัดคำเชื่อมเยิ่นเย้อเพื่อสร้างจังหวะที่ดุเดือด
-2. **ฉากบทสนทนา/อุบาย:** ถ่ายทอดคารมให้เฉียบคม รักษาบุคลิกและระดับความสัมพันธ์ของตัวละครให้คงที่
-3. **ฉากฝึกตน/บรรยายปรัชญา:** ใช้ศัพท์แสงวรรณกรรมที่ลึกซึ้ง ให้ความรู้สึกขลังและสง่างาม
-4. **สำนวนจีน 4 ตัวอักษร (成语):** ห้ามแปลตรงตัวแบบคำต่อคำจนขัดหู ให้ถอดความหมายเป็นสำนวนไทยหรือภาษาเขียนที่สละสลวยและเข้าใจง่ายทันที แต่ **คำใน [Glossary] ต้องคงเดิม 100% เหนือกฎสำนวน**
 
 ข้อมูลบริบท:
 - ${bookCtx} ${authorCtx}
 ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน้า: "${prevSummary}"` : ''}
 
-กฎการเทียบเคียงและล็อกคำศัพท์ (3-Tier Priority):
-1. Tier 1 (ตรงเรื่อง): หากเป็นชื่อตัวละครหรือสถานที่ในนิยายเรื่อง "${currentBookTitle}" ให้ใช้คำแปล/ทับศัพท์ที่ตรงกับฉบับแปลไทย
-2. Tier 2 (ผู้แต่ง/จักรวาลเดียวกัน): หากไม่พบในเรื่องนี้ ให้เทียบเคียงกับศัพท์ที่ใช้ในผลงานอื่นของ ${authorCtx} ในจักรวาลเดียวกัน
-3. Tier 3 (มาตรฐานแนวเรื่อง): หากเป็นคำใหม่ ให้ใช้คำแปลที่สละสลวยตามมาตรฐานวรรณกรรมนิยายแนว "${genre}"
+กฎเหล็กเรื่องการจัดย่อหน้า สรรพนาม และโครงสร้าง:
+1. ล็อกสรรพนามให้คงที่ 100% ตลอดทั้งบท ห้ามสลับข้า/เจ้า กับ ผม/คุณ เด็ดขาด
+2. คำเฉพาะใน [Glossary] ต้องคงรูปเดิม 100%: [${termList}]
+3. ข้อความในวงเล็บทึบ 【 】 หรือ [ ] ต้องแปลเป็นภาษาไทยเสมอ ห้ามส่งวงเล็บว่างเปล่า
+4. ห้ามรวบย่อหน้า แปล 1 ต่อ 1 กับต้นฉบับจีน
 
-กฎเหล็กเรื่องการจัดย่อหน้า สรรพนาม และโครงสร้าง (สำคัญสูงสุด):
-1. **ล็อกสรรพนามให้คงที่ 100%:** สรรพนามตัวละครต้องสอดคล้องกันตลอดทั้งบท (เช่น หากใช้ 'ข้า-เจ้า' ต้องคงไว้ตามนั้น ห้ามสลับเป็น 'ผม/ฉัน/คุณ' เด็ดขาด)
-2. แปลชื่อตอนและชื่อเรื่องภาษาจีนให้สละสลวยตรงความหมาย
-   - ชื่อตอนต้นฉบับ: "${rawChapTitle}"
-   - ชื่อเรื่องต้นฉบับ: "${rawBookTitle}"
-3. ห้ามรวบย่อหน้ารวมกันเป็นก้อนเดียวเด็ดขาด แยกย่อหน้าแปลให้ตรงกับต้นฉบับแบบ 1 ต่อ 1
-4. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
-5. **ข้อความในวงเล็บทึบ 【 】 หรือ [ ] ต้องแปลเป็นภาษาไทยเสมอ ห้ามส่งวงเล็บว่างเปล่า 【 】 เด็ดขาด เช่น 【大海水】 -> 【น้ำมหาสมุทร】, 【石榴木】 -> 【ไม้ทับทิม】, 【城头土】 -> 【ดินหัวเมือง】**
-6. ในบทสนทนา ให้ใช้เครื่องหมายอัญประกาศ ' หรือ “ ” ห้ามใช้เครื่องหมาย " ซ้ำซ้อน และ **ห้ามใส่ขีด —— นำหน้าบทสนทนา**
-7. สรุปเหตุการณ์สำคัญของบทนี้ในฟิลด์ "chapter_summary" ความยาว 1-2 ประโยค เพื่อใช้ต่อบริบทในบทถัดไป
-8. สกัด "used_entities" (ชื่อเฉพาะสำคัญและระดับพลังที่ปรากฏในบทนี้) แนบกลับมาด้วยเพื่อบันทึกลงคลังศัพท์
+ระบบบันทึกฐานข้อมูลและสถานะประจำตอน (Structured Chapter Dossier):
+จงวิเคราะห์เหตุการณ์ในบทนี้และสกัดข้อมูล 3 ส่วนลงในฟิลด์ "dossier":
+1. "key_events": เหตุการณ์สำคัญที่เกิดขึ้นจริง 2-4 ข้อ
+2. "state_transitions": ติดตามความเคลื่อนไหวของสิ่งของ, วิชา, มรรคผล, และระดับพลัง:
+   - "src": ชื่อจีนต้นฉบับ (ห้ามตกหล่น เพื่อใช้เป็น Anchor ค้นหาถาวร)
+   - "th": คำแปลภาษาไทย
+   - "category": character|title|location|skill|equipment|resource|realm
+   - "owner": ใครเป็นผู้ถือครองหรือใช้งาน (ระบุชื่อตัวละคร หรือระบุว่า "ศัตรู/บุคคลอื่น")
+   - "is_protagonist": true หากเป็นของที่ตัวเอกครอบครองหรือได้รับ, false หากเป็นของคนอื่น
+   - "action": กำหนดประเภทสถานะอย่างแม่นยำ:
+     * "acquired" = ได้รับมาใหม่, ซื้อมา, ชิงมาได้, สำเร็จวิชา
+     * "lost" = สูญเสีย, ถูกทำลาย, พังทลาย, โดนแย่งชิงไป
+     * "consumed" = ใช้หมดไป (กินยาโอสถ, ใช้ยันต์, สละพลัง)
+     * "transferred" = มอบให้ผู้อื่น, ส่งมอบให้สำนัก
+     * "modified" = เลื่อนขั้น, อัปเกรด, หลอมรวมใหม่
+     * "retcon" = ความจริงเฉลย (เช่น ของที่คิดว่าพัง/หายไป แท้จริงเป็นของปลอม)
+   - "details": อธิบายสั้นๆ ว่าเกิดขึ้นอย่างไร
+3. "current_status_snapshot":
+   - "protagonist_realm": ระดับพลังปัจจุบันของตัวเอก (หากมีการเปลี่ยนแปลงหรือกล่าวถึง)
+   - "injuries": อาการบาดเจ็บหรือคำสาป (ถ้ามี)
 
 ผลลัพธ์ต้องส่งกลับเป็น JSON Object ตามโครงสร้างนี้เท่านั้น:
 {
   "translatedBookTitle": "คำแปลชื่อเรื่องภาษาไทย",
   "translatedChapterTitle": "คำแปลชื่อตอนภาษาไทย",
-  "chapter_summary": "สรุปสั้นๆ 1-2 ประโยคว่าในบทนี้เกิดอะไรขึ้นบ้างเพื่อส่งต่อบริบท",
+  "chapter_summary": "สรุปสั้นๆ 1-2 ประโยค",
+  "dossier": {
+    "key_events": ["เหตุการณ์ที่ 1", "เหตุการณ์ที่ 2"],
+    "state_transitions": [
+      {
+        "src": "คำจีน",
+        "th": "คำไทย",
+        "category": "equipment|skill|resource|realm",
+        "owner": "ชื่อเจ้าของ",
+        "is_protagonist": true,
+        "action": "acquired|lost|consumed|transferred|modified|retcon",
+        "details": "รายละเอียดเหตุการณ์"
+      }
+    ],
+    "current_status_snapshot": {
+      "protagonist_realm": "ระดับพลังปัจจุบัน",
+      "injuries": "ไม่มี หรือ บาดเจ็บจุดใด"
+    }
+  },
   "paragraphs": [
-    {"th": "คำแปลไทยของย่อหน้านั้น (มีคำแปลในวงเล็บครบถ้วน)", "src": "ข้อความจีนของย่อหน้านั้น"}
+    {"th": "คำแปลไทยของย่อหน้านั้น", "src": "ข้อความจีนของย่อหน้านั้น"}
   ],
   "used_entities": [
     {"src": "คำจีน", "tgt": "คำแปลไทย", "category": "character|title|location|skill|equipment|resource|realm"}
@@ -394,12 +417,14 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
   let translatedChapTitle = parsedResult.translatedChapterTitle || rawChapTitle;
   let translatedBookTitle = parsedResult.translatedBookTitle || rawBookTitle;
   let chapterSummary = parsedResult.chapter_summary || "";
+  let chapterDossier = parsedResult.dossier || { key_events: [], state_transitions: [], current_status_snapshot: {} };
 
   paragraphs = paragraphs.map(p => ({
     th: rescueEmptyBrackets(p.th, p.src),
     src: p.src
   }));
 
+  // Auto-sync used entities เข้าคลังศัพท์
   if (Array.isArray(parsedResult.used_entities) && parsedResult.used_entities.length > 0) {
     for (const ent of parsedResult.used_entities) {
       if (ent.src && ent.tgt) {
@@ -417,11 +442,6 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
             overrides: {},
             updatedAt: Date.now()
           });
-        } else {
-          if (!existing.books.includes(currentBookId)) existing.books.push(currentBookId);
-          existing.count = (existing.count || 1) + 1;
-          existing.updatedAt = Date.now();
-          await dbSaveGlossaryItem(existing);
         }
       }
     }
@@ -432,27 +452,12 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
     paragraphs = await bilingualCrossVerificationPass(paragraphs, modelToUse, signal, onStatusUpdate);
   }
 
-  const formattedParas = [];
-  paragraphs.forEach(item => {
-    let cleanTh = item.th || "";
-    cleanTh = rescueEmptyBrackets(cleanTh, item.src);
-    cleanTh = cleanTh.replace(/^——\s*/g, '').replace(/(\n)——\s*/g, '$1');
-
-    if (cleanTh.length > 350 && (cleanTh.includes('”') || cleanTh.includes('"'))) {
-      const subParas = cleanTh.split(/(?<=[”」\n])\s*/);
-      subParas.forEach(sub => {
-        if (sub.trim()) formattedParas.push({ th: sub.trim(), src: item.src || "" });
-      });
-    } else {
-      formattedParas.push({ th: cleanTh, src: item.src || "" });
-    }
-  });
-
   return {
     bookTitle: translatedBookTitle,
     chapterTitle: translatedChapTitle,
     summary: chapterSummary,
-    paragraphs: formattedParas
+    dossier: chapterDossier,
+    paragraphs: paragraphs
   };
 }
 
