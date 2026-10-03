@@ -30,8 +30,7 @@ async function getActiveGlossaryForCurrentBook() {
       map[item.src] = {
         resolvedTgt: resolvedTgt,
         category: item.category || 'character',
-        scope: item.scope,
-        aliases: item.aliases || []
+        scope: item.scope
       };
     }
   });
@@ -128,16 +127,6 @@ function toggleSelectTerm(src, checked) {
   updateBatchToolbarUI();
 }
 
-function toggleSelectAllGlossary() {
-  const items = window.inMemoryGlossaryCache || [];
-  if (selectedGlossarySrcs.size >= items.length) {
-    selectedGlossarySrcs.clear();
-  } else {
-    items.forEach(it => selectedGlossarySrcs.add(it.src));
-  }
-  renderGlossaryUI();
-}
-
 function updateBatchToolbarUI() {
   const bar = document.getElementById('gloss-batch-toolbar');
   const countLabel = document.getElementById('gloss-batch-count');
@@ -190,6 +179,19 @@ async function deleteGlossaryItem(src) {
     await dbDeleteGlossaryItem(src);
   }
   selectedGlossarySrcs.delete(src);
+  await loadGlossaryFromDb();
+  renderGlossaryUI();
+  if (typeof renderCurrentChapter === 'function') renderCurrentChapter();
+}
+
+async function deleteSelectedGlossaryTerms() {
+  if (selectedGlossarySrcs.size === 0) return;
+  if (!confirm(`ต้องการลบคำศัพท์ที่เลือกทั้งหมด ${selectedGlossarySrcs.size} คำหรือไม่?`)) return;
+
+  for (const src of selectedGlossarySrcs) {
+    await dbDeleteGlossaryItem(src);
+  }
+  selectedGlossarySrcs.clear();
   await loadGlossaryFromDb();
   renderGlossaryUI();
   if (typeof renderCurrentChapter === 'function') renderCurrentChapter();
