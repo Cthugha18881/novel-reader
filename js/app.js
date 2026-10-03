@@ -1,5 +1,5 @@
 // ============================================================================
-// NOVELTRANSLATE AI - MAIN APPLICATION CONTROLLER (app.js)
+// NOVELTRANSLATE AI - MAIN CONTROLLER (app.js)
 // ============================================================================
 
 let currentBookId = localStorage.getItem('nov_current_book_id') || null;
@@ -73,16 +73,7 @@ function updateChapterHeaderUI(chap) {
   const chapTitleEl = document.getElementById('display-chap-title');
 
   if (bookTitleEl) bookTitleEl.textContent = currentBookTitle;
-
-  if (chapTitleEl) {
-    let badge = "";
-    if (chap.chapterType === "announcement") {
-      badge = `<span style="font-size: 11px; background: #ef4444; color: #fff; padding: 2px 7px; border-radius: 4px; margin-right: 6px; vertical-align: middle;">📢 ประกาศคนเขียน</span>`;
-    } else if (chap.chapterType === "side_story") {
-      badge = `<span style="font-size: 11px; background: #8b5cf6; color: #fff; padding: 2px 7px; border-radius: 4px; margin-right: 6px; vertical-align: middle;">✨ ตอนพิเศษ</span>`;
-    }
-    chapTitleEl.innerHTML = `${badge}${escapeHtml(chap.title || ("ตอนที่ " + chap.order))}`;
-  }
+  if (chapTitleEl) chapTitleEl.textContent = chap.title || ("ตอนที่ " + chap.order);
 }
 
 function renderCurrentChapter() {
@@ -297,7 +288,12 @@ async function appendNextChapterSeamlessly() {
 
 // ---------------- IMPORT & TRANSLATE HANDLERS ----------------
 
-async function startTranslateFirst() {
+async function startTranslateFirst(event) {
+  if (event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
   const urlInput = document.getElementById('import-url');
   const genreInput = document.getElementById('import-novel-genre');
   const statusEl = document.getElementById('import-status');
@@ -308,7 +304,7 @@ async function startTranslateFirst() {
   const genre = genreInput ? genreInput.value : "xianxia";
 
   if (!url) {
-    if (statusEl) statusEl.textContent = "กรุณากรอก URL หน้านิยาย";
+    alert("กรุณากรอก URL หน้านิยาย");
     return;
   }
 
@@ -320,16 +316,21 @@ async function startTranslateFirst() {
   }
 
   if (startBtn) startBtn.disabled = true;
-  if (startBtnText) startBtnText.textContent = "กำลังดึงเนื้อหาและแปล...";
-  if (statusEl) statusEl.textContent = "กำลังดึงเนื้อหาภาษาจีนจากเว็บต้นทาง...";
+  if (startBtnText) startBtnText.textContent = "กำลังดึงเนื้อหา...";
+  if (statusEl) {
+    statusEl.style.display = "block";
+    statusEl.style.color = "#38bdf8";
+    statusEl.textContent = "กำลังดึงเนื้อหาภาษาจีนจากเว็บต้นทาง...";
+  }
 
   try {
     const scraped = await fetchNovelChapterContent(url);
-    if (!scraped || !scraped.content) {
-      throw new Error("ไม่สามารถดึงเนื้อหาจาก URL นี้ได้ กรุณาตรวจสอบลิงก์");
+    if (!scraped || !scraped.content || scraped.content.length < 50) {
+      throw new Error("ไม่สามารถดึงเนื้อหานิยายได้ (เว็บอาจติดบล็อก Anti-Bot หรือ URL ไม่ถูกต้อง)");
     }
 
-    if (statusEl) statusEl.textContent = "กำลังแปลเนื้อหาและสกัด Dossier ด้วย AI...";
+    if (startBtnText) startBtnText.textContent = "กำลังแปลด้วย AI...";
+    if (statusEl) statusEl.textContent = `พบเนื้อหา "${scraped.chapterTitle}" กำลังแปล...`;
 
     let book = null;
     if (typeof dbFindBookByTitle === 'function') {
@@ -355,7 +356,7 @@ async function startTranslateFirst() {
     currentAuthor = book.author;
     localStorage.setItem('nov_current_book_id', currentBookId);
 
-    const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
+    const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-2.5-flash").trim();
     const transResult = await executeApiCall(
       scraped.content,
       primaryModel,
@@ -376,9 +377,6 @@ async function startTranslateFirst() {
       bookId: currentBookId,
       order: nextOrder,
       title: transResult.chapterTitle || scraped.chapterTitle || `ตอนที่ ${nextOrder}`,
-      chapterType: transResult.chapterType || "regular",
-      summary: transResult.summary || "",
-      dossier: transResult.dossier || null,
       paragraphs: transResult.paragraphs || [],
       sourceUrl: url,
       createdAt: Date.now()
@@ -394,8 +392,13 @@ async function startTranslateFirst() {
 
     await refreshLocalData();
   } catch (err) {
-    if (statusEl) statusEl.textContent = `เกิดข้อผิดพลาด: ${err.message}`;
-    console.error(err);
+    console.error("Translation Error:", err);
+    if (statusEl) {
+      statusEl.style.display = "block";
+      statusEl.style.color = "#ef4444";
+      statusEl.textContent = `❌ ${err.message}`;
+    }
+    alert(`การแปลล้มเหลว: ${err.message}`);
   } finally {
     if (startBtn) startBtn.disabled = false;
     if (startBtnText) startBtnText.textContent = "เริ่มแปลตอนนี้";
@@ -413,29 +416,21 @@ function handleImportCancel() {
 function initSettingsUI() {
   const area = document.getElementById('gemini-keys-area');
   const modelSelect = document.getElementById('gemini-primary-model');
-  const retryInput = document.getElementById('retry-limit');
   const infiniteChk = document.getElementById('enable-infinite-scroll');
-  const bilingualChk = document.getElementById('enable-bilingual-verify');
 
   if (area) area.value = localStorage.getItem('nov_gemini_keys') || '';
-  if (modelSelect) modelSelect.value = localStorage.getItem('nov_primary_model') || 'gemini-3.5-flash-lite';
-  if (retryInput) retryInput.value = localStorage.getItem('nov_retry_limit') || '10';
+  if (modelSelect) modelSelect.value = localStorage.getItem('nov_primary_model') || 'gemini-2.5-flash';
   if (infiniteChk) infiniteChk.checked = localStorage.getItem('nov_enable_infinite_scroll') !== 'false';
-  if (bilingualChk) bilingualChk.checked = localStorage.getItem('nov_enable_bilingual_verify') !== 'false';
 }
 
 function saveSettings() {
   const area = document.getElementById('gemini-keys-area');
   const modelSelect = document.getElementById('gemini-primary-model');
-  const retryInput = document.getElementById('retry-limit');
   const infiniteChk = document.getElementById('enable-infinite-scroll');
-  const bilingualChk = document.getElementById('enable-bilingual-verify');
 
   if (area) localStorage.setItem('nov_gemini_keys', area.value.trim());
   if (modelSelect) localStorage.setItem('nov_primary_model', modelSelect.value);
-  if (retryInput) localStorage.setItem('nov_retry_limit', retryInput.value);
   if (infiniteChk) localStorage.setItem('nov_enable_infinite_scroll', infiniteChk.checked);
-  if (bilingualChk) localStorage.setItem('nov_enable_bilingual_verify', bilingualChk.checked);
 
   currentApiKeyIndex = 0;
   closeModal('settings-modal');
@@ -463,24 +458,14 @@ function applyTheme(themeClass) {
   if (body) body.className = themeClass;
 
   const deskBtn = document.getElementById('desktop-theme-btn');
-  const mobBtn = document.getElementById('mobile-theme-btn');
   const label = themeClass === 'theme-sepia' ? 'ถนอมสายตา' : (themeClass === 'theme-dark' ? 'โหมดมืด' : 'โหมดสว่าง');
   if (deskBtn) deskBtn.textContent = label;
-  if (mobBtn) mobBtn.textContent = label;
 }
 
 function cycleTheme() {
   if (currentTheme === 'theme-sepia') applyTheme('theme-dark');
   else if (currentTheme === 'theme-dark') applyTheme('theme-light');
   else applyTheme('theme-sepia');
-}
-
-function toggleFullscreenMode() {
-  if (!document.fullscreenElement) {
-    document.documentElement.requestFullscreen().catch(err => alert(`Fullscreen error: ${err.message}`));
-  } else {
-    document.exitFullscreen();
-  }
 }
 
 function showActionToast(msg) {
