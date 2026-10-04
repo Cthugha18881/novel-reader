@@ -33,6 +33,7 @@
   <script src="../js/bible.js"></script>
   <script src="../js/shelf.js"></script>
   <script src="../js/updates.js"></script>
+  <script src="../js/assistant.js"></script>
   <script src="../js/export.js"></script>
   <script>
     const results = [];
@@ -666,6 +667,63 @@
       const r = buildPlaceholderResult(['预览'], '第1章', '书', 'locked', { kind: 'paid', price: 3, site: 's' });
       const rec = buildChapterRecord({ bookId: 'b', order: 1, title: 't', result: r, sourceUrl: 'u', nextUrl: null });
       return r.chapterType === 'placeholder' && eq(rec.lockInfo, { kind: 'paid', price: 3, site: 's' }) && rec.placeholderReason === 'locked';
+    });
+    // ---------- AI assistant ----------
+    function mockAssistantData() {
+      const mk = (n, paras, extra = {}) => ({ id: 'c' + n, order: n, title: 'บทที่ ' + n, summary: 'สรุป ' + n, paragraphs: paras.map(([src, th]) => ({ src, th })), ...extra });
+      const all = [
+        mk(1, [['林动醒来', 'หลินต้งตื่นขึ้นมา'], ['天空很蓝', 'ท้องฟ้าสีคราม']]),
+        mk(2, [['他遇到了萧炎', 'เขาพบกับเซียวเหยียน'], ['两人成为朋友', 'ทั้งสองกลายเป็นเพื่อนกัน']]),
+        mk(3, [['林动突破到元丹境', 'หลินต้งทะลวงสู่ขั้นแก่นปราณ'], ['他拿到一把剑', 'เขาได้ดาบมาหนึ่งเล่ม']]),
+        mk(4, [['萧炎离开', 'เซียวเหยียนจากไป']])
+      ];
+      return {
+        book: { bookId: 'b', title: 'ทดสอบ' }, all, allowed: all.slice(0, 3), numberOf: new Map(all.map((c, i) => [c.id, i + 1])), limitOrder: 3,
+        activeTerms: { '林动': { src: '林动', resolvedTgt: 'หลินต้ง', category: 'character' }, '元丹境': { src: '元丹境', resolvedTgt: 'ขั้นแก่นปราณ', category: 'realm' } },
+        extras: { bible: { characters: [{ src: '萧炎', aliases: ['小炎'], gender: 'male', role: 'เพื่อนพระเอก' }] } }
+      };
+    }
+    test('detectAssistantIntents: แยกคำถามเรื่องแอพ / สรุป / ตอนนี้ / เรื่องอื่น', () => {
+      const a = detectAssistantIntents('ตั้งค่า API key ยังไง'), b = detectAssistantIntents('สรุปเรื่องตั้งแต่ตอนแรก'), c = detectAssistantIntents('ตอนนี้หลินต้งอยู่ระดับไหน'), d = detectAssistantIntents('ตัวเอกเรื่องนี้กับเรื่องก่อนใครเก่งกว่า');
+      return a.help && !a.summary && b.summary && c.recency && c.currentChapter && d.otherBook && !d.help;
+    });
+    test('extractQuestionKeywords: ตัดคำทั่วไปออก เก็บคำสำคัญ', () => {
+      const kw = extractQuestionKeywords('ดาบเล่มนั้นได้มาจากไหน ครับ');
+      return kw.includes('ดาบ') && !kw.includes('ครับ') && !kw.includes('ไหน');
+    });
+    test('findQuestionEntities: จับชื่อไทย ชื่อต้นฉบับ และชื่อเรียกอื่นในคู่มือเรื่อง', () => {
+      const d = mockAssistantData();
+      const a = findQuestionEntities('หลินต้งเก่งแค่ไหน', d).map(e => e.label);
+      const b = findQuestionEntities('小炎 คือใคร', d).map(e => e.src);
+      return eq(a, ['หลินต้ง']) && eq(b, ['萧炎']);
+    });
+    test('computeEntityFacts: โผล่ครั้งแรก/ล่าสุด นับเฉพาะตอนที่อ่านมา (ไม่สปอยล์ตอน 4)', () => {
+      const d = mockAssistantData();
+      const [xiao] = findQuestionEntities('萧炎', d);
+      const f = computeEntityFacts(xiao, d);
+      const none = computeEntityFacts({ label: 'ไม่มี', names: ['ไม่มีอยู่จริง'] }, d);
+      return f.includes('โผล่ครั้งแรก #2') && f.includes('ล่าสุด #2') && f.includes('พบใน 1 ตอน') && f.includes('เพื่อนพระเอก') && none.includes('ไม่พบ');
+    });
+    test('retrievePassages: เลือกย่อหน้าที่เกี่ยวข้อง เรียงตามเรื่อง และไม่เกินตอนที่อ่าน', () => {
+      const d = mockAssistantData();
+      const ents = findQuestionEntities('หลินต้ง', d);
+      const p = retrievePassages(d, ents, ['ดาบ'], { recency: true });
+      return p.length >= 2 && p.every((x, i) => i === 0 || p[i - 1].ci <= x.ci) && p.some(x => x.text.includes('ดาบ')) && !p.some(x => x.chap.id === 'c4');
+    });
+    test('retrievePassages: ไม่มีคำค้นเลย คืนว่าง', () => eq(retrievePassages(mockAssistantData(), [], []), []));
+    test('findInvalidCitations: จับการอ้างอิงตอนที่ไม่ได้ส่งให้ AI', () => eq(findInvalidCitations('ตามที่เห็นใน [#2] และ [#9] และ [#3]', { validNumbers: new Set([1, 2, 3]) }), [9]));
+    test('pickOtherBooks: ชื่อเรื่องในคำถาม / "เรื่องก่อน" = เรื่องที่อ่านล่าสุดรองลงมา / ขอบเขตที่เลือก', () => {
+      const books = [{ bookId: 'cur', title: 'เรื่องนี้', updatedAt: 9 }, { bookId: 'a', title: 'มหาเทพสงคราม', updatedAt: 5 }, { bookId: 'b', title: 'ราชันย์ดาบ', updatedAt: 7 }];
+      const named = pickOtherBooks('พระเอกมหาเทพสงครามเก่งไหม', books, 'cur', 'current');
+      const prev = pickOtherBooks('เทียบกับเรื่องก่อน', books, 'cur', 'current');
+      const none = pickOtherBooks('หลินต้งเก่งไหม', books, 'cur', 'current');
+      const picked = pickOtherBooks('x', books, 'cur', 'a');
+      return eq(named.books.map(b => b.bookId), ['a']) && eq([prev.books[0].bookId, prev.assumed], ['b', true]) && none.books.length === 0 && eq(picked.books.map(b => b.bookId), ['a']);
+    });
+    test('formatAssistantAnswer: กัน HTML แปลกปลอม และทำลิงก์อ้างอิงตอน', () => {
+      const html = formatAssistantAnswer('**ตัวหนา** <img src=x onerror=alert(1)> ดู [#3]', 'b1');
+      return html.includes('<b>ตัวหนา</b>') && !html.includes('<img') && html.includes('&lt;img') && html.includes('assistant-cite') && html.includes('jumpToAssistantCitation(&quot;b1&quot;, 3)') &&
+        !formatAssistantAnswer('[#9]', 'b1', [9]).includes('jumpToAssistantCitation');
     });
     const passed = results.filter(r => r.ok).length;
     const summary = document.getElementById('summary');

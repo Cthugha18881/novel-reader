@@ -27,12 +27,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v3.2.1",
+    title: "คู่มือเริ่มต้น v3.3.0",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.2.1", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.3.0", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.2.1"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.3.0"
   }];
 }
 

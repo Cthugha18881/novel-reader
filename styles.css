@@ -473,3 +473,53 @@ body.theme-dark .usage-card { border-color: rgba(255, 255, 255, 0.15); }
 .new-chap-badge { font-size: 11px; font-weight: 600; color: #b45309; background: rgba(234, 179, 8, 0.15); border-radius: 10px; padding: 1px 8px; }
 
 .preview-only-banner { font-size: 12px; line-height: 1.6; margin-bottom: 14px; padding: 8px 12px; border-radius: 8px; background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(202, 138, 4, 0.35); }
+
+/* ---------- AI assistant ---------- */
+.assistant-fab {
+  /* อยู่ใต้แถบคำที่เลือก (z-index 45) เพื่อไม่บังปุ่ม "+ ใส่คลัง" */
+  position: fixed; right: 16px; bottom: 20px; z-index: 44; width: 36px; height: 36px; border-radius: 50%;
+  border: 1px solid rgba(37, 99, 235, 0.35); background: #2563eb; color: #fff; font-size: 16px; cursor: pointer;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.35); display: flex; align-items: center; justify-content: center;
+  transition: transform 0.15s, opacity 0.2s;
+}
+.assistant-fab:hover { transform: scale(1.06); }
+.assistant-fab.active { background: #1e40af; }
+@media (max-width: 767px) { .assistant-fab { bottom: 64px; } }
+body.is-fullscreen .assistant-fab { bottom: 16px; opacity: 0.55; }
+body.modal-open .assistant-fab { display: none; }
+
+.assistant-panel {
+  position: fixed; right: 16px; bottom: 70px; z-index: 47; width: 380px; max-width: calc(100vw - 32px);
+  height: 560px; max-height: calc(100vh - 110px); display: none; flex-direction: column;
+  background: #fffdf8; color: #1f2937; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 12px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25); overflow: hidden;
+}
+.assistant-panel.open { display: flex; }
+body.theme-dark .assistant-panel { background: #1e2533; color: #e5e7eb; border-color: rgba(255, 255, 255, 0.12); }
+@media (max-width: 767px) {
+  .assistant-panel { left: 8px; right: 8px; width: auto; max-width: none; bottom: 112px; height: 70vh; max-height: calc(100vh - 130px); }
+}
+.assistant-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(0, 0, 0, 0.08); }
+.assistant-sub { font-size: 11px; opacity: 0.65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.assistant-options { display: flex; gap: 8px; align-items: center; padding: 6px 12px; font-size: 11px; border-bottom: 1px solid rgba(0, 0, 0, 0.06); }
+.assistant-options select { flex: 1; min-width: 0; padding: 3px 6px; font-size: 11px; }
+.assistant-options label { display: flex; gap: 4px; align-items: center; white-space: nowrap; cursor: pointer; }
+.assistant-messages { flex: 1; overflow-y: auto; padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; font-size: 13px; line-height: 1.6; }
+.assistant-msg { padding: 8px 10px; border-radius: 10px; max-width: 92%; word-break: break-word; }
+.assistant-msg.user { align-self: flex-end; background: #2563eb; color: #fff; }
+.assistant-msg.bot { align-self: flex-start; background: rgba(0, 0, 0, 0.05); }
+body.theme-dark .assistant-msg.bot { background: rgba(255, 255, 255, 0.07); }
+.assistant-msg.error { color: #b91c1c; }
+.assistant-li { padding-left: 6px; }
+.assistant-cite { border: none; background: rgba(37, 99, 235, 0.12); color: #2563eb; border-radius: 6px; padding: 0 5px; font-size: 11px; cursor: pointer; }
+.assistant-meta { font-size: 10px; opacity: 0.6; margin-top: 6px; }
+.assistant-warn { font-size: 11px; color: #b45309; margin-top: 6px; }
+.assistant-status { font-size: 11px; padding: 0 12px; min-height: 16px; opacity: 0.75; }
+.assistant-input-row { display: flex; gap: 6px; padding: 8px 12px 12px; align-items: flex-end; }
+.assistant-input-row textarea { flex: 1; resize: none; font-size: 13px; }
+.assistant-empty { text-align: center; opacity: 0.85; margin-top: 20px; }
+.assistant-empty-note { font-size: 11px; opacity: 0.65; margin: 4px 0 12px; }
+.assistant-chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.assistant-chip { border: 1px solid rgba(37, 99, 235, 0.35); background: transparent; color: #2563eb; border-radius: 14px; padding: 4px 10px; font-size: 11px; cursor: pointer; }
+body.theme-dark .assistant-chip { color: #93c5fd; }
+.assistant-cite.invalid { background: rgba(234, 179, 8, 0.18); color: #b45309; cursor: help; }

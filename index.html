@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/csp.js"></script>
-  <title>NovelTranslate AI v3.2.1</title>
+  <title>NovelTranslate AI v3.3.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -61,6 +61,29 @@
     <span id="fullscreen-icon">⛶</span>
   </button>
 
+  <!-- AI ASSISTANT (มุมขวาล่าง) -->
+  <button id="assistant-btn" class="assistant-fab" onclick="toggleAssistantPanel()" title="ผู้ช่วย AI: ถามเรื่องนิยายที่อ่าน หรือวิธีใช้แอพ">💬</button>
+  <div id="assistant-panel" class="assistant-panel" role="dialog" aria-label="ผู้ช่วย AI">
+    <div class="assistant-head">
+      <div style="flex: 1; min-width: 0;">
+        <div style="font-weight: 600;">ผู้ช่วย AI</div>
+        <div id="assistant-book-label" class="assistant-sub"></div>
+      </div>
+      <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="clearAssistantChat()" title="ล้างบทสนทนาของเรื่องนี้">ล้าง</button>
+      <button class="modal-close" onclick="toggleAssistantPanel(false)">✕</button>
+    </div>
+    <div class="assistant-options">
+      <select id="assistant-scope" class="form-input" title="ใช้ข้อมูลของเรื่องไหนบ้าง"></select>
+      <label title="รวมตอนที่แปลล่วงหน้าไว้แต่ยังไม่ได้อ่าน (อาจสปอยล์)"><input type="checkbox" id="assistant-include-unread"> รวมตอนที่ยังไม่อ่าน</label>
+    </div>
+    <div id="assistant-messages" class="assistant-messages"></div>
+    <div id="assistant-status" class="assistant-status"></div>
+    <div class="assistant-input-row">
+      <textarea id="assistant-input" class="form-input" rows="2" placeholder="ถามได้เลย เช่น ตัวละครนี้โผล่มาตอนไหน / สรุปเรื่อง / ใช้คลังศัพท์ยังไง" onkeydown="onAssistantInputKey(event)"></textarea>
+      <button id="assistant-send-btn" class="btn btn-primary" onclick="sendAssistantMessage()">ส่ง</button>
+      <button id="assistant-stop-btn" class="btn btn-danger" style="display: none;" onclick="stopAssistant()">หยุด</button>
+    </div>
+  </div>
   <!-- INLINE TERM QUICK POPOVER -->
   <div id="term-popover">
     <span id="popover-text">จีน ➔ ไทย</span>
@@ -961,6 +984,7 @@
   <script src="js/bible.js"></script>
   <script src="js/shelf.js"></script>
   <script src="js/updates.js"></script>
+  <script src="js/assistant.js"></script>
   <script src="js/export.js"></script>
   <script src="js/app.js"></script>
 </body>

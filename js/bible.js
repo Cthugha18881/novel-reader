@@ -24,6 +24,15 @@ async function getBookExtras(bookId) {
   };
 }
 
+/**
+ * บันทึกเฉพาะส่วนของคู่มือเรื่องจากหน้าต่างแก้ไข ลงบนข้อมูลล่าสุดในฐานข้อมูล
+ * (ข้อมูลอื่นของเรื่อง เช่น สารบัญ ประวัติแชทผู้ช่วย อาจถูกบันทึกระหว่างที่หน้าต่างเปิดอยู่ จึงห้ามเขียนทับด้วยสำเนาเก่า)
+ */
+async function saveBibleDraft() {
+  if (!bibleDraft?.bookId) return;
+  const fresh = await getBookExtras(bibleDraft.bookId);
+  await dbSaveBookData({ ...fresh, bible: bibleDraft.bible, replaceRules: bibleDraft.replaceRules, styleExamples: bibleDraft.styleExamples });
+}
 function isBibleAutoEnabled() {
   return localStorage.getItem('nov_enable_bible_auto') !== 'false';
 }
@@ -364,7 +373,7 @@ async function saveBibleModal() {
   bibleDraft.bible.styleNotes = (bibleDraft.bible.styleNotes || '').trim();
   bibleDraft.replaceRules = bibleDraft.replaceRules.filter(r => r.from);
   localStorage.setItem('nov_enable_bible_auto', document.getElementById('bible-auto-chk').checked ? 'true' : 'false');
-  await dbSaveBookData(bibleDraft);
+  await saveBibleDraft();
   closeModal('bible-modal');
 }
 
@@ -372,7 +381,7 @@ async function saveBibleModal() {
 async function applyReplaceRulesToBook() {
   if (!bibleDraft) return;
   bibleDraft.replaceRules = bibleDraft.replaceRules.filter(r => r.from);
-  await dbSaveBookData(bibleDraft);
+  await saveBibleDraft();
   const rules = normalizeReplaceRules(bibleDraft.replaceRules);
   if (rules.length === 0) return alert('ยังไม่มีกฎที่เปิดใช้งาน');
   if (!confirm(`ใช้กฎแทนคำ ${rules.length} ข้อกับทุกตอนที่แปลแล้วของเรื่องนี้ใช่หรือไม่?`)) return;
@@ -444,7 +453,7 @@ async function generateBibleFromChapters() {
   try {
     const updates = await extractCharacterProfiles(text, ctx, bibleDraft.bible);
     const result = mergeCharacterUpdates(bibleDraft.bible, updates);
-    await dbSaveBookData(bibleDraft);
+    await saveBibleDraft();
     await renderBibleCharacters();
     alert(`วิเคราะห์เสร็จแล้ว: เพิ่มตัวละครใหม่ ${result.added} ตัว, เสนอแก้ไข ${result.proposed} ตัว`);
   } catch (err) {
