@@ -1,13 +1,15 @@
 // Service worker: ทำให้เปิดแอพและอ่านตอนที่บันทึกไว้ได้แม้ออฟไลน์
 // ไฟล์ของแอพใช้ network-first (ออนไลน์ได้เวอร์ชันล่าสุดเสมอ) ส่วนฟอนต์/ไลบรารีจาก CDN ใช้ cache-first
 // คำขอไปยัง AI และ r.jina.ai จะไม่ถูกแตะต้องเลย
-const CACHE_NAME = 'noveltranslate-v2.9.0';
+const CACHE_NAME = 'noveltranslate-v3.0.0';
 const APP_SHELL = [
   './',
   'index.html',
   'styles.css',
   'manifest.webmanifest',
+  'js/csp.js',
   'js/db.js',
+  'js/safety.js',
   'js/llm.js',
   'js/lang.js',
   'js/api.js',
@@ -18,11 +20,12 @@ const APP_SHELL = [
   'js/shelf.js',
   'js/export.js',
   'js/app.js',
+  'vendor/jszip.min.js',
   'icons/icon.svg',
   'icons/icon-192.png',
   'icons/icon-512.png'
 ];
-const CACHEABLE_CDN_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'cdnjs.cloudflare.com'];
+const CACHEABLE_CDN_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));

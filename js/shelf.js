@@ -106,6 +106,10 @@ async function startBatchTranslateForBook(bookId) {
 
   if (count >= 3 && !confirm(formatBatchEstimate(estimateChapterTokens(bookChaps, ctx.sourceLang), count))) return;
 
+  // แปลล่วงหน้าเรื่องเดียวกันได้ทีละแท็บ
+  const releaseBatch = await acquireLock(lockNames.batch(bookId), { ifAvailable: true });
+  if (!releaseBatch) return alert('อีกแท็บกำลังแปลล่วงหน้าเรื่องนี้อยู่ กรุณารอให้เสร็จ หรือกดหยุดในแท็บนั้นก่อน');
+
   const controller = beginTask('batch');
   const signal = controller.signal;
   isBatchRunning = true;
@@ -142,6 +146,8 @@ async function startBatchTranslateForBook(bookId) {
           if (i < count) await sleepAbortable(1500, signal);
         } catch (err) {
           if (isAbortError(err)) break;
+          // อีกแท็บกำลังแปลตอนนี้อยู่: ข้ามไปตอนถัดไป
+          if (err instanceof LockBusyError) continue;
           progressDesc.innerText = `หยุดที่ "${pendingChap.title}": ${err.message}`;
           break;
         }
@@ -153,97 +159,109 @@ async function startBatchTranslateForBook(bookId) {
         break;
       }
 
-      // ข้ามตอนที่มีอยู่แล้ว (เช่น prefetch แปลไปก่อนแล้ว)
-      const existingAll = await dbGetChaptersByBook(bookId);
-      const alreadySaved = existingAll.find(c => sameSourceUrl(c.sourceUrl, targetUrl));
-      if (alreadySaved) {
-        lastChap = alreadySaved;
-        targetUrl = alreadySaved.nextUrl;
-        successCount++;
-        if (i === count) finishedAll = true;
-        continue;
-      }
-
-      const urlSegment = targetUrl.substring(targetUrl.lastIndexOf('/'));
-      progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${urlSegment})`;
-
+      // ล็อกการเพิ่มตอนของเรื่องนี้ระหว่างแท็บ (ตอนถัดไป/prefetch ในแท็บอื่นจะรอ ไม่แปลตอนเดียวกันซ้ำ)
+      let releaseAppend;
       try {
-        const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, signal, { bookId });
-        if (author) ctx.author = author;
-
-        const result = await translateChapter(text, ctx, {
-          signal,
-          rawChapTitle,
-          rawBookTitle,
-          prevChapter: findPrevStoryChapter(existingAll),
-          onStatus: (msg) => { progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 60)}`; }
-        });
-
-        const currentAll = await dbGetChaptersByBook(bookId);
-        const savedMeanwhile = currentAll.find(c => sameSourceUrl(c.sourceUrl, targetUrl));
-        if (savedMeanwhile) {
-          // งานอื่นบันทึกตอนนี้ไปแล้วระหว่างที่เรากำลังแปล
-          lastChap = savedMeanwhile;
-          targetUrl = lastChap.nextUrl;
+        releaseAppend = await acquireLock(lockNames.append(bookId), { signal });
+      } catch (err) {
+        break;
+      }
+      try {
+        // ข้ามตอนที่มีอยู่แล้ว (เช่น prefetch แปลไปก่อนแล้ว)
+        const existingAll = await dbGetChaptersByBook(bookId);
+        const alreadySaved = existingAll.find(c => sameSourceUrl(c.sourceUrl, targetUrl));
+        if (alreadySaved) {
+          lastChap = alreadySaved;
+          targetUrl = alreadySaved.nextUrl;
           successCount++;
           if (i === count) finishedAll = true;
           continue;
         }
-        const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
-        const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
 
-        const newChap = buildChapterRecord({
-          bookId,
-          order: maxOrder + 1,
-          title: chapTitle,
-          result,
-          sourceUrl: targetUrl,
-          nextUrl,
-          idSuffix: `_${i}`
-        });
+        const urlSegment = targetUrl.substring(targetUrl.lastIndexOf('/'));
+        progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${urlSegment})`;
 
-        await dbSaveChapter(newChap);
-        successCount++;
-        lastChap = newChap;
+        try {
+          const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, signal, { bookId });
+          if (author) ctx.author = author;
 
-        // อ่านเรคคอร์ดล่าสุดแล้วแก้เฉพาะฟิลด์ของ batch ตำแหน่งอ่านของผู้ใช้จะไม่ถูกแตะ
-        const targetBook = (await dbGetAllBooks()).find(b => b.bookId === bookId);
-        if (!targetBook) throw new Error('นิยายเรื่องนี้ถูกลบออกจากชั้นหนังสือระหว่างแปล');
-        const finalBookTitle = targetBook.isUserCustomTitle ? targetBook.title : (result.bookTitle || targetBook.title);
-        ctx.title = finalBookTitle;
+          const result = await translateChapter(text, ctx, {
+            signal,
+            rawChapTitle,
+            rawBookTitle,
+            prevChapter: findPrevStoryChapter(existingAll),
+            onStatus: (msg) => { progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 60)}`; }
+          });
 
-        await dbSaveBook({
-          ...targetBook,
-          title: finalBookTitle,
-          author: ctx.author,
-          totalChapters: maxOrder + 1,
-          lastUrl: targetUrl,
-          updatedAt: Date.now()
-        });
+          const currentAll = await dbGetChaptersByBook(bookId);
+          const savedMeanwhile = currentAll.find(c => sameSourceUrl(c.sourceUrl, targetUrl));
+          if (savedMeanwhile) {
+            // งานอื่นบันทึกตอนนี้ไปแล้วระหว่างที่เรากำลังแปล
+            lastChap = savedMeanwhile;
+            targetUrl = lastChap.nextUrl;
+            successCount++;
+            if (i === count) finishedAll = true;
+            continue;
+          }
+          const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
+          const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
 
-        if (currentBookId === bookId) {
-          chapters.push(newChap);
-          nextUrlCalculated = nextUrl;
-          if (!isUserCustomTitle) currentBookTitle = finalBookTitle;
-          currentAuthor = ctx.author;
-          checkAndRefreshBottomStatus();
+          const newChap = buildChapterRecord({
+            bookId,
+            order: maxOrder + 1,
+            title: chapTitle,
+            result,
+            sourceUrl: targetUrl,
+            nextUrl,
+            idSuffix: `_${i}`
+          });
+
+          await dbSaveChapter(newChap);
+          successCount++;
+          lastChap = newChap;
+
+          // อ่านเรคคอร์ดล่าสุดแล้วแก้เฉพาะฟิลด์ของ batch ตำแหน่งอ่านของผู้ใช้จะไม่ถูกแตะ
+          const targetBook = (await dbGetAllBooks()).find(b => b.bookId === bookId);
+          if (!targetBook) throw new Error('นิยายเรื่องนี้ถูกลบออกจากชั้นหนังสือระหว่างแปล');
+          const finalBookTitle = targetBook.isUserCustomTitle ? targetBook.title : (result.bookTitle || targetBook.title);
+          ctx.title = finalBookTitle;
+
+          await dbSaveBook({
+            ...targetBook,
+            title: finalBookTitle,
+            author: ctx.author,
+            totalChapters: maxOrder + 1,
+            lastUrl: targetUrl,
+            updatedAt: Date.now()
+          });
+
+          if (currentBookId === bookId) {
+            chapters.push(newChap);
+            nextUrlCalculated = nextUrl;
+            if (!isUserCustomTitle) currentBookTitle = finalBookTitle;
+            currentAuthor = ctx.author;
+            checkAndRefreshBottomStatus();
+          }
+
+          refreshShelfViewOnly(bookId);
+          targetUrl = nextUrl;
+          if (i === count) finishedAll = true;
+
+          if (i < count) {
+            progressDesc.innerText = `บันทึก "${chapTitle}" สำเร็จ พักระบบ 2.5 วิก่อนเริ่มบทถัดไป...`;
+            await sleepAbortable(2500, signal);
+          }
+        } catch (err) {
+          if (isAbortError(err)) break;
+          progressDesc.innerText = `หยุดที่ตอนที่ ${i}: ${isMissingPageError(err) ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}\n(กรุณากดปุ่ม 'แก้ URL ถัดไป' เพื่อใส่ลิงก์ใหม่)`;
+          break;
         }
-
-        refreshShelfViewOnly(bookId);
-        targetUrl = nextUrl;
-        if (i === count) finishedAll = true;
-
-        if (i < count) {
-          progressDesc.innerText = `บันทึก "${chapTitle}" สำเร็จ พักระบบ 2.5 วิก่อนเริ่มบทถัดไป...`;
-          await sleepAbortable(2500, signal);
-        }
-      } catch (err) {
-        if (isAbortError(err)) break;
-        progressDesc.innerText = `หยุดที่ตอนที่ ${i}: ${isMissingPageError(err) ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}\n(กรุณากดปุ่ม 'แก้ URL ถัดไป' เพื่อใส่ลิงก์ใหม่)`;
-        break;
+      } finally {
+        releaseAppend();
       }
     }
   } finally {
+    releaseBatch();
     endTask('batch', controller);
     isBatchRunning = false;
     isBatchComplete = true;
@@ -262,6 +280,8 @@ async function startBatchTranslateForBook(bookId) {
 
   openBookshelfModal();
   checkAndRefreshBottomStatus();
+  // แปลเสร็จหลายตอน: สำรองลงโฟลเดอร์อัตโนมัติ (ถ้าตั้งไว้และได้รับอนุญาตแล้ว)
+  maybeRunAutoBackup().then(() => { renderSafetyBanner(); renderBookshelfBackupNote(); });
 }
 
 function renderChaptersHtml(bookId, bookChaps, readingChapId) {
@@ -305,6 +325,7 @@ async function openBookshelfModal() {
   if (!listContainer) return;
   listContainer.innerHTML = '<div style="text-align:center; padding:15px; opacity:0.6;">กำลังเปิดคลังหนังสือ...</div>';
   openModal('bookshelf-modal');
+  renderBookshelfBackupNote();
 
   const books = await dbGetAllBooks();
   books.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));

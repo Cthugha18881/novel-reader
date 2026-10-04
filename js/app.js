@@ -27,12 +27,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v2.9.0",
+    title: "คู่มือเริ่มต้น v3.0.0",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.9.0", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.0.0", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.9.0"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.0.0"
   }];
 }
 
@@ -800,6 +800,21 @@ async function applyTranslationToChapter(chapter, result, { updateTitle = false,
  * ใช้ร่วมกันทั้งปุ่ม "แปลตอนนี้" และการแปลล่วงหน้าหลายตอน
  */
 async function translatePendingChapterCore(chapter, ctx, { signal = null, onStatus = null } = {}) {
+  return withLock(lockNames.chapter(chapter.id), async () => {
+    // อีกแท็บอาจแปลตอนนี้เสร็จไปแล้ว: ใช้ผลนั้นแทนการแปลซ้ำ
+    const fresh = (await dbGetChaptersByBook(chapter.bookId)).find(c => c.id === chapter.id);
+    if (fresh && !isPendingChapter(fresh)) {
+      replaceChapterContents(chapter, fresh);
+      const activeCopy = chapters.find(item => item.id === chapter.id);
+      if (activeCopy && activeCopy !== chapter) replaceChapterContents(activeCopy, { ...fresh });
+      if (currentBookId === chapter.bookId) await renderVirtualWindow(currentChapterIndex);
+      return null;
+    }
+    return translatePendingChapterUnlocked(chapter, ctx, { signal, onStatus });
+  }, { ifAvailable: true, busyMessage: 'อีกแท็บกำลังแปลตอนนี้อยู่ เมื่อเสร็จแล้วผลแปลจะแสดงที่นี่เอง' });
+}
+
+async function translatePendingChapterUnlocked(chapter, ctx, { signal = null, onStatus = null } = {}) {
   let rawText = chapter.paragraphs.map(p => p.src || '').filter(Boolean).join('\n\n');
   let rawChapTitle = chapter.title;
   let nextUrl;
@@ -842,7 +857,8 @@ async function translatePendingChapterNow(chapId) {
   try {
     await translatePendingChapterCore(chapter, ctx, { signal: controller.signal, onStatus: showGlobalToast });
   } catch (err) {
-    if (!isAbortError(err)) alert(`แปลไม่สำเร็จ: ${describeScrapeError(err)}`);
+    if (err instanceof LockBusyError) alert(err.message);
+    else if (!isAbortError(err)) alert(`แปลไม่สำเร็จ: ${describeScrapeError(err)}`);
   } finally {
     endTask('retranslate', controller);
     hideGlobalToast();
@@ -1192,8 +1208,15 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
   const ctx = getCurrentBookContext();
   const requestBookId = ctx.bookId;
   checkAndRefreshBottomStatus();
+  let releaseAppend = null;
 
   try {
+    // ถ้าอีกแท็บกำลังเพิ่มตอนถัดไปของเรื่องนี้อยู่ ไม่แปลซ้ำ (ตอนนั้นจะถูกส่งมาต่อท้ายเองเมื่อเสร็จ)
+    releaseAppend = await acquireLock(lockNames.append(requestBookId), { ifAvailable: true });
+    if (!releaseAppend) {
+      if (currentBookId === requestBookId) lastPrefetchError = OTHER_TAB_BUSY_MESSAGE;
+      return;
+    }
     const bookChaps = await dbGetChaptersByBook(requestBookId);
     if (bookChaps.some(c => sameSourceUrl(c.sourceUrl, targetUrl))) {
       document.getElementById('prefetch-badge').style.display = 'inline-block';
@@ -1284,10 +1307,40 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       lastPrefetchError = e.message || 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ';
     }
   } finally {
+    if (releaseAppend) releaseAppend();
     endTask('prefetch', controller);
     if (!isTaskRunning('prefetch')) isPrefetching = false;
     checkAndRefreshBottomStatus();
   }
+}
+
+// ดึงและแปลตอนจาก URL แล้วบันทึกต่อท้ายเรื่อง (ถ้ามีงานอื่นบันทึกตอนนี้ไประหว่างแปล ใช้ของเดิม)
+async function translateAndSaveNextChapter(ctx, chapterUrl, signal, onStatus) {
+  const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(chapterUrl, signal, { bookId: ctx.bookId });
+  if (author) ctx.author = author;
+
+  const result = await translateChapter(text, ctx, {
+    signal,
+    rawChapTitle,
+    rawBookTitle,
+    prevChapter: findPrevStoryChapter(chapters),
+    onStatus
+  });
+
+  const currentAll = await dbGetChaptersByBook(ctx.bookId);
+  const existing = currentAll.find(c => sameSourceUrl(c.sourceUrl, chapterUrl));
+  if (existing) return existing;
+  const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
+  const newChap = buildChapterRecord({
+    bookId: ctx.bookId,
+    order: maxOrder + 1,
+    title: result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`,
+    result,
+    sourceUrl: chapterUrl,
+    nextUrl
+  });
+  await dbSaveChapter(newChap);
+  return newChap;
 }
 
 async function handleNextChapterClick() {
@@ -1316,34 +1369,18 @@ async function handleNextChapterClick() {
   btnText.innerText = "กำลังแปลตอนถัดไป...";
   nextBtn.disabled = true;
   cancelBtn.style.display = 'inline-flex';
+  let releaseAppend = null;
 
   try {
-    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(chapterUrl, signal, { bookId: ctx.bookId });
-    if (author) ctx.author = author;
-
-    const lastChap = chapters[chapters.length - 1];
-    const result = await translateChapter(text, ctx, {
-      signal,
-      rawChapTitle,
-      rawBookTitle,
-      prevChapter: findPrevStoryChapter(chapters),
-      onStatus: (msg) => { btnText.innerText = msg.substring(0, 30) + "..."; }
-    });
-
-    const currentAll = await dbGetChaptersByBook(ctx.bookId);
-    let newChap = currentAll.find(c => sameSourceUrl(c.sourceUrl, chapterUrl));
-    if (!newChap) {
-      const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
-      newChap = buildChapterRecord({
-        bookId: ctx.bookId,
-        order: maxOrder + 1,
-        title: result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`,
-        result,
-        sourceUrl: chapterUrl,
-        nextUrl
-      });
-      await dbSaveChapter(newChap);
+    // รอถ้าอีกแท็บกำลังเพิ่มตอนของเรื่องนี้ แล้วเช็กก่อนว่าอีกแท็บแปลตอนนี้ไปแล้วหรือยัง
+    releaseAppend = await acquireLock(lockNames.append(ctx.bookId), { ifAvailable: true });
+    if (!releaseAppend) {
+      btnText.innerText = "รออีกแท็บแปลตอนนี้...";
+      releaseAppend = await acquireLock(lockNames.append(ctx.bookId), { signal });
     }
+    btnText.innerText = "กำลังแปลตอนถัดไป...";
+    const newChap = (await dbGetChaptersByBook(ctx.bookId)).find(c => sameSourceUrl(c.sourceUrl, chapterUrl)) ||
+      await translateAndSaveNextChapter(ctx, chapterUrl, signal, (msg) => { btnText.innerText = msg.substring(0, 30) + "..."; });
 
     if (currentBookId !== ctx.bookId) return;
     if (!chapters.some(c => c.id === newChap.id)) chapters.push(newChap);
@@ -1361,6 +1398,7 @@ async function handleNextChapterClick() {
       alert(`แปลตอนถัดไปไม่สำเร็จ: ${err.message}`);
     }
   } finally {
+    if (releaseAppend) releaseAppend();
     endTask('next', controller);
     btnText.innerText = "ตอนถัดไป →";
     nextBtn.disabled = false;
@@ -1448,6 +1486,7 @@ async function handleImportFile(input) {
   const status = document.getElementById('import-text-preview');
   status.innerHTML = '<span class="spinner-icon"></span> กำลังอ่านไฟล์...';
   try {
+    checkImportFileSize(file);
     const buffer = await file.arrayBuffer();
     const baseName = file.name.replace(/\.[^.]+$/, '');
     if (/\.epub$/i.test(file.name)) {
@@ -1459,6 +1498,7 @@ async function handleImportFile(input) {
       document.getElementById('import-text-area').value = text;
       importTextParsed = { bookTitle: baseName, chapters: splitTextIntoChapters(text) };
     }
+    checkImportChapterCount(importTextParsed.chapters.length);
     if (!document.getElementById('import-text-title').value.trim()) document.getElementById('import-text-title').value = importTextParsed.bookTitle;
     renderImportTextPreview();
   } catch (err) {
@@ -1472,6 +1512,11 @@ function previewImportText() {
   if (!text.trim()) {
     importTextParsed = null;
     document.getElementById('import-text-preview').innerHTML = '';
+    return;
+  }
+  if (text.length > IMPORT_LIMITS.pasteChars) {
+    importTextParsed = null;
+    document.getElementById('import-text-preview').innerHTML = `<span style="color:#dc2626;">ข้อความยาวเกินไป (${text.length.toLocaleString()} ตัวอักษร) วางได้ไม่เกิน ${IMPORT_LIMITS.pasteChars.toLocaleString()} ตัวอักษร ลองแบ่งเป็นหลายครั้ง</span>`;
     return;
   }
   importTextParsed = { bookTitle: document.getElementById('import-text-title').value.trim(), chapters: splitTextIntoChapters(text) };
@@ -1500,6 +1545,7 @@ async function importTextChapters() {
   if (!importTextParsed) previewImportText();
   const list = importTextParsed?.chapters || [];
   if (!list.length) return alert('กรุณาวางข้อความหรือเลือกไฟล์ก่อน');
+  try { checkImportChapterCount(list.length); } catch (err) { return alert(err.message); }
 
   const books = await dbGetAllBooks();
   const choice = document.getElementById('import-target-book')?.value || 'auto';
@@ -1765,6 +1811,7 @@ function openSettingsModal() {
   document.getElementById('llm-provider-select').value = provider;
   showSettingsForProvider(provider);
   openModal('settings-modal');
+  renderSafetySettings();
 }
 
 async function fetchLiveModels() {
@@ -1775,6 +1822,12 @@ async function fetchLiveModels() {
   const fetchBtn = document.getElementById('fetch-models-btn');
 
   if (!firstKey) return alert("กรุณากรอก API Key ก่อนกดตรวจเช็กโมเดล");
+  if (provider === 'openai' && baseUrl && !isConnectAllowedByCsp(baseUrl)) {
+    statusText.style.display = 'block';
+    statusText.style.color = '#b45309';
+    statusText.innerText = 'Base URL ใหม่นี้ยังไม่ได้รับอนุญาตในหน้านี้ (ระบบความปลอดภัยจำกัดปลายทางที่ส่งข้อมูลได้) กด "บันทึกการตั้งค่า" แล้วรีโหลดหน้าก่อน จึงจะตรวจเช็กได้';
+    return;
+  }
 
   fetchBtn.disabled = true;
   fetchBtn.innerText = "กำลังตรวจเช็ก...";
@@ -1804,9 +1857,12 @@ async function fetchLiveModels() {
 
 function saveSettings() {
   stashSettingsForm();
+  // ต้องเปลี่ยนที่เก็บ key ก่อนบันทึก key ใหม่
+  setSessionOnlySecrets(document.getElementById('secrets-session-only').checked);
+  localStorage.setItem('nov_backup_remind_days', document.getElementById('backup-remind-days').value);
   Object.entries(settingsDrafts).forEach(([provider, draft]) => {
     const parsedKeys = draft.keys.split('\n').map(k => k.trim()).filter(k => k.length > 5);
-    localStorage.setItem(`nov_llm_keys_${provider}`, JSON.stringify(parsedKeys));
+    setSecret(`nov_llm_keys_${provider}`, parsedKeys.length ? JSON.stringify(parsedKeys) : '');
     localStorage.setItem(`nov_llm_model_${provider}`, draft.model);
     localStorage.setItem(`nov_llm_aux_model_${provider}`, draft.auxModel || '');
     if (provider === 'openai') localStorage.setItem(`nov_llm_baseurl_${provider}`, draft.baseUrl);
@@ -1831,9 +1887,15 @@ function saveSettings() {
   closeModal('settings-modal');
   renderVirtualWindow(currentChapterIndex, true);
 
+  renderSafetyBanner();
   const cfg = getActiveLlmConfig();
   const warning = cfg.model ? '' : '\n⚠️ ยังไม่ได้เลือกโมเดล กรุณากด "ตรวจเช็กโมเดล" แล้วเลือกโมเดลก่อนใช้งาน';
+  const openaiBase = getProviderBaseUrl('openai');
+  const needsReload = openaiBase && !isConnectAllowedByCsp(openaiBase);
   alert(`บันทึกการตั้งค่าเรียบร้อยแล้ว\nใช้งาน ${LLM_PROVIDERS[cfg.provider].label} (${cfg.model || 'ยังไม่เลือกโมเดล'}) — คลัง API Key ${cfg.keys.length} ตัว${warning}`);
+  if (needsReload && confirm(`Base URL ใหม่ (${openaiBase}) จะใช้ได้หลังรีโหลดหน้า (ระบบความปลอดภัยอนุญาตปลายทางตอนเปิดหน้าเท่านั้น)\n\nรีโหลดตอนนี้เลยหรือไม่?`)) {
+    location.reload();
+  }
 }
 
 function loadSettings() {
@@ -1842,7 +1904,9 @@ function loadSettings() {
   if (localStorage.getItem('nov_theme')) {
     const storedTheme = localStorage.getItem('nov_theme');
     currentTheme = ['sepia', 'light', 'dark'].includes(storedTheme) ? storedTheme : 'sepia';
-    document.getElementById('app-body').className = 'theme-' + currentTheme;
+    const body = document.getElementById('app-body');
+    ['theme-sepia', 'theme-light', 'theme-dark'].forEach(cls => body.classList.remove(cls));
+    body.classList.add('theme-' + currentTheme);
     const themeText = currentTheme === 'sepia' ? 'ถนอมสายตา' : (currentTheme === 'light' ? 'สว่าง' : 'มืด');
     const mobileBtn = document.getElementById('mobile-theme-btn');
     const desktopBtn = document.getElementById('desktop-theme-btn');
@@ -1886,13 +1950,9 @@ function loadSettings() {
 // ==================== BACKUP ====================
 async function exportBackup() {
   try {
-    const data = await dbExportAll();
-    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `noveltranslate-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    await downloadBackupFile();
+    renderSafetyBanner();
+    renderBookshelfBackupNote();
   } catch (err) {
     alert(`สำรองข้อมูลไม่สำเร็จ: ${err.message}`);
   }
@@ -1902,33 +1962,333 @@ function triggerBackupImport() {
   document.getElementById('backup-file-input').click();
 }
 
+let pendingBackupImport = null;
+
 async function handleBackupFileSelected(input) {
   const file = input.files?.[0];
   input.value = '';
   if (!file) return;
 
-  let data;
+  let raw;
   try {
-    data = JSON.parse(await file.text());
+    raw = JSON.parse(await file.text());
   } catch (e) {
     return alert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูล JSON ที่ถูกต้อง');
   }
-  if (!isValidBackup(data)) return alert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูลของ NovelTranslate');
+  if (!isValidBackup(raw)) return alert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูลของ NovelTranslate หรือมาจากแอพรุ่นที่ใหม่กว่า');
 
-  const msg = `พบข้อมูลในไฟล์สำรอง:\n- นิยาย ${data.books.length} เรื่อง\n- ตอน ${data.chapters.length} ตอน\n- คำศัพท์ ${data.glossaries.length} คำ\n\nข้อมูลที่มีอยู่แล้วและซ้ำกับในไฟล์จะถูกเขียนทับ ต้องการนำเข้าใช่หรือไม่?`;
-  if (!confirm(msg)) return;
+  const data = upgradeBackup(raw);
+  pendingBackupImport = { raw, data, settings: splitImportedSettings(data.settings), fileName: file.name };
+  renderBackupImportModal(await dbCountAll());
+  openModal('backup-import-modal');
+}
 
+function renderBackupImportModal(current) {
+  const { data, settings, fileName } = pendingBackupImport;
+  const dropped = Object.values(data.dropped).reduce((a, b) => a + b, 0);
+  const exportedAt = data.exportedAt && !isNaN(new Date(data.exportedAt)) ? new Date(data.exportedAt).toLocaleString('th-TH') : '';
+  const row = (label, name) => `<tr><td>${label}</td><td>${(current[name] || 0).toLocaleString()}</td><td>${data[name].length.toLocaleString()}</td></tr>`;
+  document.getElementById('backup-import-summary').innerHTML = `
+    <div style="margin-bottom: 6px;">ไฟล์: <b>${escapeHtml(fileName)}</b>${exportedAt ? ` · สำรองเมื่อ ${escapeHtml(exportedAt)}` : ''}</div>
+    <table class="backup-compare-table">
+      <thead><tr><th></th><th>ในเครื่องนี้</th><th>ในไฟล์</th></tr></thead>
+      <tbody>${row('นิยาย (เรื่อง)', 'books')}${row('ตอน', 'chapters')}${row('คำศัพท์', 'glossaries')}${row('คู่มือเรื่อง / สารบัญ', 'bookData')}</tbody>
+    </table>
+    ${dropped ? `<div style="color: #b45309; margin-top: 6px;">⚠️ จะข้ามข้อมูลที่เสียหรือรูปแบบไม่ถูกต้อง ${dropped.toLocaleString()} รายการ</div>` : ''}`;
+
+  const settingsCount = Object.keys(settings.safe).length;
+  document.getElementById('backup-import-settings-row').style.display = settingsCount ? 'flex' : 'none';
+  document.getElementById('backup-import-settings').checked = settingsCount > 0;
+  document.getElementById('backup-import-settings-count').innerText = settingsCount;
+  document.getElementById('backup-import-baseurl-row').style.display = settings.baseUrl ? 'flex' : 'none';
+  document.getElementById('backup-import-baseurl').checked = false;
+  document.getElementById('backup-import-baseurl-value').innerText = settings.baseUrl || '';
+  document.querySelector('input[name="backup-import-mode"][value="merge"]').checked = true;
+  document.getElementById('backup-import-safety').checked = true;
+  onBackupImportModeChange();
+}
+
+function getBackupImportMode() {
+  return document.querySelector('input[name="backup-import-mode"]:checked')?.value === 'replace' ? 'replace' : 'merge';
+}
+
+function onBackupImportModeChange() {
+  document.getElementById('backup-import-replace-box').style.display = getBackupImportMode() === 'replace' ? 'block' : 'none';
+}
+
+async function confirmBackupImport() {
+  if (!pendingBackupImport) return;
+  const mode = getBackupImportMode();
+  if (mode === 'replace' && !confirm('นิยาย ตอน คลังศัพท์ และคู่มือเรื่องทั้งหมดในเครื่องนี้จะถูกลบ แล้วแทนด้วยข้อมูลจากไฟล์\n\nยืนยันหรือไม่?')) return;
+
+  const btn = document.getElementById('backup-import-confirm-btn');
+  btn.disabled = true;
   try {
     abortAllRunningProcesses();
-    await dbImportAll(data);
+    if (mode === 'replace' && document.getElementById('backup-import-safety').checked) {
+      await downloadBackupFile('noveltranslate-before-replace');
+    }
+    const { raw, settings } = pendingBackupImport;
+    await dbImportAll(raw, { mode });
+
+    const applySettings = document.getElementById('backup-import-settings').checked;
+    const applyBaseUrl = !!settings.baseUrl && document.getElementById('backup-import-baseurl').checked;
+    applyImportedSettings(applySettings ? settings.safe : {}, { baseUrl: applyBaseUrl ? settings.baseUrl : null });
+    if (applySettings) loadSettings();
+
     await refreshInMemoryGlossaryCache();
-    const targetBookId = localStorage.getItem('nov_last_book_id') || data.books[0]?.bookId;
+    pendingBackupImport = null;
+    closeModal('backup-import-modal');
+
+    const books = await dbGetAllBooks();
+    const lastId = localStorage.getItem('nov_last_book_id');
+    const targetBookId = books.some(b => b.bookId === lastId) ? lastId : books[0]?.bookId;
     if (targetBookId) await loadBookFromDB(targetBookId);
+    else resetToGuideBook();
     await openBookshelfModal();
-    alert('✓ นำเข้าข้อมูลสำรองเรียบร้อยแล้ว');
+
+    const needsReload = applyBaseUrl && !isConnectAllowedByCsp(settings.baseUrl);
+    alert(`✓ นำเข้าข้อมูลสำรองเรียบร้อยแล้ว (${mode === 'replace' ? 'แทนที่ทั้งหมด' : 'รวมกับของเดิม'})` +
+      (needsReload ? '\n\nBase URL ใหม่จะใช้ได้หลังรีโหลดหน้า' : ''));
   } catch (err) {
-    alert(`นำเข้าข้อมูลไม่สำเร็จ: ${err.message}`);
+    alert(`นำเข้าข้อมูลไม่สำเร็จ (ข้อมูลเดิมไม่ถูกแก้ไข): ${err.message}`);
+  } finally {
+    btn.disabled = false;
   }
+}
+
+function cancelBackupImport() {
+  pendingBackupImport = null;
+  closeModal('backup-import-modal');
+}
+
+// ==================== DATA SAFETY UI ====================
+let dbOutdatedInThisTab = false;
+let remoteReplacedData = false;
+
+function formatAgo(ts) {
+  if (!ts) return 'ยังไม่เคย';
+  const days = Math.floor((Date.now() - ts) / DAY_MS);
+  if (days >= 1) return `${days} วันที่แล้ว`;
+  const hours = Math.floor((Date.now() - ts) / 3600000);
+  return hours >= 1 ? `${hours} ชั่วโมงที่แล้ว` : 'เมื่อสักครู่';
+}
+
+/** แถบแจ้งเตือนด้านบนหน้าอ่าน: ฐานข้อมูลถูกอัปเกรดจากแท็บอื่น > ข้อมูลถูกแทนที่จากแท็บอื่น > เตือนสำรองข้อมูล */
+async function renderSafetyBanner() {
+  const banner = document.getElementById('safety-banner');
+  if (!banner) return;
+  let html = '';
+  if (dbOutdatedInThisTab) {
+    html = `<span>⚠️ มีแท็บอื่นเปิดแอพรุ่นใหม่กว่า แท็บนี้หยุดบันทึกข้อมูลแล้ว</span>
+      <button class="btn btn-primary" onclick="location.reload()">รีโหลดหน้า</button>`;
+  } else if (remoteReplacedData) {
+    html = `<span>⚠️ ข้อมูลทั้งหมดถูกแทนที่จากไฟล์สำรองในอีกแท็บ</span>
+      <button class="btn btn-primary" onclick="location.reload()">รีโหลดหน้า</button>`;
+  } else {
+    const state = getBackupReminderState();
+    if (state.shouldRemind && (await dbGetAllBooks()).length) {
+      const hasFolder = !!(await getAutoBackupDir());
+      const ios = isIosDevice() && !isInstalledApp() ? ' · บน iPhone/iPad ข้อมูลอาจถูกลบถ้าไม่ได้เปิดแอพ 7 วัน แนะนำให้ "เพิ่มลงหน้าจอโฮม"' : '';
+      html = `<span>💾 ${state.lastBackup ? `ไม่ได้สำรองข้อมูลมา ${state.daysSinceBackup} วัน` : 'ยังไม่เคยสำรองข้อมูล'} และมีข้อมูลใหม่ที่ยังไม่ได้สำรอง${ios}</span>
+        <button class="btn btn-primary" onclick="backupNowFromBanner()">${hasFolder ? '💾 สำรองลงโฟลเดอร์' : '⬇️ สำรองตอนนี้'}</button>
+        <button class="btn" onclick="snoozeBackupReminder(1); renderSafetyBanner();">เตือนพรุ่งนี้</button>`;
+    }
+  }
+  banner.innerHTML = html;
+  banner.style.display = html ? 'flex' : 'none';
+}
+
+async function backupNowFromBanner() {
+  try {
+    if (await getAutoBackupDir()) {
+      const result = await runAutoBackup({ interactive: true });
+      if (result !== 'done') await downloadBackupFile();
+    } else {
+      await downloadBackupFile();
+    }
+    showGlobalToast('✓ สำรองข้อมูลแล้ว');
+    setTimeout(hideGlobalToast, 1800);
+  } catch (err) {
+    alert(`สำรองข้อมูลไม่สำเร็จ: ${err.message}`);
+  }
+  renderSafetyBanner();
+  renderBookshelfBackupNote();
+}
+
+function renderBookshelfBackupNote() {
+  const el = document.getElementById('bookshelf-backup-note');
+  if (!el) return;
+  const state = getBackupReminderState();
+  el.innerText = `สำรองครั้งล่าสุด: ${formatAgo(state.lastBackup)}${state.hasUnsaved ? ' · มีข้อมูลใหม่ที่ยังไม่ได้สำรอง' : ''}`;
+  el.style.color = state.shouldRemind ? '#b45309' : '';
+}
+
+/** ส่วน "ข้อมูลและความปลอดภัย" ในหน้าตั้งค่า */
+async function renderSafetySettings() {
+  const st = await getStorageStatus();
+  const statusEl = document.getElementById('storage-status');
+  const persistBtn = document.getElementById('persist-storage-btn');
+  const lines = [];
+  if (st.persisted === true) lines.push('✅ พื้นที่จัดเก็บแบบถาวร (เบราว์เซอร์จะไม่ลบข้อมูลเองเมื่อพื้นที่ใกล้เต็ม)');
+  else if (st.persisted === false) lines.push('⚠️ พื้นที่จัดเก็บยังไม่ถาวร เบราว์เซอร์อาจลบข้อมูลเองเมื่อพื้นที่เครื่องใกล้เต็ม');
+  else lines.push('เบราว์เซอร์นี้ไม่บอกสถานะพื้นที่จัดเก็บ');
+  if (st.usage !== null) lines.push(`ใช้พื้นที่ไป ${formatBytes(st.usage)}${st.quota ? ` จากที่ใช้ได้ประมาณ ${formatBytes(st.quota)}` : ''}`);
+  if (st.iosNotInstalled) lines.push('⚠️ บน iPhone/iPad ถ้าไม่ได้ "เพิ่มลงหน้าจอโฮม" Safari อาจลบข้อมูลเมื่อไม่ได้เปิดแอพ 7 วัน');
+  lines.push(`สำรองครั้งล่าสุด: ${formatAgo(readTimestamp('nov_last_backup_at'))}`);
+  statusEl.innerHTML = lines.map(l => `<div>${escapeHtml(l)}</div>`).join('');
+  persistBtn.style.display = st.persisted === false ? 'inline-flex' : 'none';
+
+  document.getElementById('backup-remind-days').value = String(getBackupRemindDays());
+  document.getElementById('secrets-session-only').checked = isSessionOnlySecrets();
+  await renderAutoBackupSettings();
+}
+
+async function renderAutoBackupSettings() {
+  const statusEl = document.getElementById('auto-backup-status');
+  const actionsEl = document.getElementById('auto-backup-actions');
+  if (!isAutoBackupSupported()) {
+    statusEl.innerText = 'เบราว์เซอร์นี้ไม่รองรับ (ใช้ได้กับ Chrome / Edge บนคอมพิวเตอร์) ใช้ปุ่ม "สำรองข้อมูลทั้งหมด" ที่ชั้นหนังสือแทน และระบบจะเตือนเมื่อถึงเวลาสำรอง';
+    actionsEl.innerHTML = '';
+    return;
+  }
+  const dir = await getAutoBackupDir();
+  if (!dir) {
+    statusEl.innerText = 'ยังไม่ได้เลือกโฟลเดอร์ เมื่อเลือกแล้ว ระบบจะบันทึกไฟล์สำรองลงโฟลเดอร์นั้นเองเมื่อมีข้อมูลใหม่ (เก็บไว้ 5 ไฟล์ล่าสุด)';
+    actionsEl.innerHTML = `<button class="btn btn-secondary" onclick="setupAutoBackupFolder()">📁 เลือกโฟลเดอร์สำรอง</button>`;
+    return;
+  }
+  statusEl.innerText = `โฟลเดอร์: ${dir.name} · สำรองอัตโนมัติครั้งล่าสุด: ${formatAgo(readTimestamp('nov_last_auto_backup_at'))} (เก็บไว้ 5 ไฟล์ล่าสุด หลังเปิดเบราว์เซอร์ใหม่อาจต้องกดอนุญาตอีกครั้ง)`;
+  actionsEl.innerHTML = `
+    <button class="btn btn-secondary" onclick="runAutoBackupFromSettings()">💾 สำรองตอนนี้</button>
+    <button class="btn" onclick="setupAutoBackupFolder()">เปลี่ยนโฟลเดอร์</button>
+    <button class="btn btn-danger" onclick="stopAutoBackup()">เลิกใช้</button>`;
+}
+
+async function setupAutoBackupFolder() {
+  try {
+    await chooseAutoBackupFolder();
+    const result = await runAutoBackup({ interactive: true });
+    if (result === 'done') alert('✓ ตั้งค่าโฟลเดอร์และสำรองข้อมูลครั้งแรกเรียบร้อย');
+  } catch (err) {
+    if (err?.name !== 'AbortError') alert(`ตั้งค่าโฟลเดอร์สำรองไม่สำเร็จ: ${err.message}`);
+  }
+  await renderAutoBackupSettings();
+  renderSafetyBanner();
+}
+
+async function runAutoBackupFromSettings() {
+  try {
+    const result = await runAutoBackup({ interactive: true });
+    if (result === 'needs-permission') alert('ยังไม่ได้รับอนุญาตให้เขียนโฟลเดอร์ กรุณากดอนุญาตเมื่อเบราว์เซอร์ถาม');
+    else if (result === 'done') alert('✓ สำรองข้อมูลลงโฟลเดอร์แล้ว');
+  } catch (err) {
+    alert(`สำรองไม่สำเร็จ: ${err.message}`);
+  }
+  await renderAutoBackupSettings();
+  renderSafetyBanner();
+}
+
+async function stopAutoBackup() {
+  await disableAutoBackup();
+  await renderAutoBackupSettings();
+}
+
+async function requestPersistFromSettings() {
+  const ok = await requestPersistentStorage();
+  if (!ok) alert('เบราว์เซอร์ยังไม่อนุญาตพื้นที่ถาวร (Chrome จะอนุญาตเองเมื่อใช้งานบ่อยหรือติดตั้งเป็นแอพ) แนะนำให้สำรองข้อมูลเป็นระยะ');
+  await renderSafetySettings();
+}
+
+function clearAllApiKeys() {
+  if (!confirm('ลบ API Key ของผู้ให้บริการ AI ทุกเจ้าและ Jina Key ออกจากเบราว์เซอร์นี้?\n(นิยายและการตั้งค่าอื่นยังอยู่ครบ)')) return;
+  clearAllSecrets();
+  settingsDrafts = {};
+  showSettingsForProvider(document.getElementById('llm-provider-select').value);
+  alert('ลบ API Key ทั้งหมดแล้ว');
+}
+
+// ==================== MULTI-TAB ====================
+function onDatabaseVersionChange() {
+  dbOutdatedInThisTab = true;
+  abortAllRunningProcesses();
+  renderSafetyBanner();
+}
+
+/** ข้อมูลถูกแก้จากอีกแท็บ: รีเฟรชคลังศัพท์ ตอนใหม่ของเรื่องที่อ่านอยู่ และชั้นหนังสือ */
+async function handleRemoteDataChanges(changes) {
+  if (dbOutdatedInThisTab) return;
+  if (changes.some(c => c.kind === 'replaced')) {
+    remoteReplacedData = true;
+    abortAllRunningProcesses();
+    renderSafetyBanner();
+    return;
+  }
+  try {
+    if (changes.some(c => c.kind === 'glossary')) await refreshInMemoryGlossaryCache();
+    if (changes.some(c => c.kind === 'chapters' && (!c.bookId || c.bookId === currentBookId))) await syncChaptersFromOtherTab();
+    if (document.getElementById('bookshelf-modal')?.classList.contains('active')) {
+      const bookIds = [...new Set(changes.map(c => c.bookId).filter(Boolean))];
+      if (changes.some(c => c.kind === 'books' && !c.bookId) || !bookIds.length) await openBookshelfModal();
+      else for (const id of bookIds) await refreshShelfViewOnly(id);
+    }
+  } catch (err) {
+    console.warn('Sync from other tab failed:', err);
+  }
+}
+
+// แทนเนื้อหาของ object ตอนเดิมด้วยข้อมูลใหม่ (ลบฟิลด์ที่ไม่มีแล้ว เช่น status: 'pending') โดยคง reference เดิมไว้
+function replaceChapterContents(target, fresh) {
+  Object.keys(target).forEach(k => { if (!(k in fresh)) delete target[k]; });
+  Object.assign(target, fresh);
+  return target;
+}
+
+async function syncChaptersFromOtherTab() {
+  if (!currentBookId || currentBookId === 'default_novel') return;
+  const bookId = currentBookId;
+  const fresh = await dbGetChaptersByBook(bookId);
+  if (currentBookId !== bookId) return;
+  let needsRender = false;
+  const byId = new Map(chapters.map(c => [c.id, c]));
+  fresh.forEach(fc => {
+    const mine = byId.get(fc.id);
+    if (!mine) return;
+    // ตอนที่อีกแท็บแปลเสร็จ (เช่นตอนที่รอแปล) ให้แสดงผลแปลล่าสุด
+    const changed = (mine.status || '') !== (fc.status || '') ||
+      (mine.translationMeta?.translatedAt || 0) !== (fc.translationMeta?.translatedAt || 0);
+    if (changed) {
+      replaceChapterContents(mine, fc);
+      if (renderedWindowIndices.includes(chapters.indexOf(mine))) needsRender = true;
+    }
+  });
+  // ตอนใหม่ที่ต่อท้ายจากอีกแท็บ (ไม่แทรกกลางเรื่อง เพื่อไม่ให้ตำแหน่งอ่านเลื่อน)
+  const lastOrder = chapters.reduce((m, c) => Math.max(m, c.order || 0), 0);
+  const appended = fresh.filter(fc => !byId.has(fc.id) && (fc.order || 0) > lastOrder).sort((a, b) => a.order - b.order);
+  if (appended.length) {
+    chapters.push(...appended);
+    if (lastPrefetchError === OTHER_TAB_BUSY_MESSAGE) lastPrefetchError = '';
+    nextUrlCalculated = chapters[chapters.length - 1].nextUrl || null;
+    if (!needsRender) appendNextChapterToWindow();
+    checkAndRefreshBottomStatus();
+  }
+  if (needsRender) await renderVirtualWindow(currentChapterIndex);
+}
+
+async function initSafetyOnStartup() {
+  onRemoteDataChange(handleRemoteDataChanges);
+  const books = await dbGetAllBooks();
+  if (books.length) {
+    // ผู้ใช้ที่อัปเดตจากรุ่นเก่า: นับข้อมูลที่มีอยู่เป็น "ยังไม่ได้สำรอง" แล้วเริ่มนับวันเตือนจากวันนี้
+    if (!localStorage.getItem('nov_first_change_at') && !localStorage.getItem('nov_last_backup_at')) {
+      const now = String(Date.now());
+      localStorage.setItem('nov_first_change_at', now);
+      localStorage.setItem('nov_data_changed_at', now);
+    }
+    requestPersistentStorage();
+    await maybeRunAutoBackup();
+  }
+  renderSafetyBanner();
 }
 
 function exportTxt() {
@@ -1992,4 +2352,5 @@ window.addEventListener('DOMContentLoaded', async () => {
   } else {
     renderVirtualWindow(0, true);
   }
+  initSafetyOnStartup();
 });

@@ -22,6 +22,7 @@
     var currentBookId = 'book_test', currentBookTitle = 'เรื่องทดสอบ', currentAuthor = '', currentBookGenre = 'xianxia', chapters = [];
   </script>
   <script src="../js/db.js"></script>
+  <script src="../js/safety.js"></script>
   <script src="../js/llm.js"></script>
   <script src="../js/lang.js"></script>
   <script src="../js/api.js"></script>
@@ -201,9 +202,9 @@
     test('getBookSourceLang / getTermLang default zh', () => eq([getBookSourceLang({}), getTermLang({}), getBookSourceLang({ sourceLang: 'ja' })], ['zh', 'zh', 'ja']));
     test('isValidBackup: รับไฟล์ v1 (ไม่มี bookData)', () => isValidBackup({ format: 'NovelTranslateBackup', version: 1, books: [], chapters: [], glossaries: [] }));
     test('isValidBackup: ปฏิเสธไฟล์จากรุ่นที่ใหม่กว่า', () => !isValidBackup({ format: 'NovelTranslateBackup', version: 99, books: [], chapters: [], glossaries: [] }));
-    test('upgradeBackup: v1 -> v2 เติม bookData และ default ของตอน', () => {
-      const up = upgradeBackup({ format: 'NovelTranslateBackup', version: 1, books: [{ bookId: 'b' }, null], chapters: [{ id: 'c', bookId: 'b' }], glossaries: [{ src: 'x' }] });
-      return eq([up.version, up.bookData, up.books.length, up.chapters[0].chapterType], [2, [], 1, 'story']);
+    test('upgradeBackup: v1 -> ปัจจุบัน เติม bookData และ default ของตอน', () => {
+      const up = upgradeBackup({ format: 'NovelTranslateBackup', version: 1, books: [{ bookId: 'b' }, null], chapters: [{ id: 'c', bookId: 'b' }], glossaries: [{ src: 'x', tgt: 'เอ็กซ์' }] });
+      return eq([up.version, up.bookData, up.books.length, up.chapters[0].chapterType, up.glossaries.length], [BACKUP_VERSION, [], 1, 'story', 1]);
     });
     test('buildChapterRecord: มี translationMeta และ chapterType', () => {
       const rec = buildChapterRecord({ bookId: 'b', order: 3, title: 't', result: { paragraphs: [{ th: 'ก', src: '甲' }], summary: 's' }, sourceUrl: 'u', nextUrl: 'n' });
@@ -422,6 +423,108 @@
     });
     test('getActiveLlmConfig: override ผู้ให้บริการ', () => getActiveLlmConfig('main', 'anthropic').provider === 'anthropic' && getActiveLlmConfig('main', 'bogus').provider === getActiveProvider());
 
+    // ---------- Round 2 step 1: data safety ----------
+    function withStorage(names, fn) {
+      const saved = names.map(n => [n, localStorage.getItem(n), sessionStorage.getItem(n)]);
+      try { return fn(); } finally {
+        saved.forEach(([n, l, s]) => {
+          l === null ? localStorage.removeItem(n) : localStorage.setItem(n, l);
+          s === null ? sessionStorage.removeItem(n) : sessionStorage.setItem(n, s);
+        });
+      }
+    }
+    test('isValidBackup: รับ v3 ปฏิเสธ version ที่ไม่ใช่ตัวเลข', () =>
+      isValidBackup({ format: 'NovelTranslateBackup', version: 3, books: [], chapters: [], glossaries: [] }) &&
+      !isValidBackup({ format: 'NovelTranslateBackup', version: '2', books: [], chapters: [], glossaries: [] }) &&
+      !isValidBackup({ format: 'NovelTranslateBackup', version: 4, books: [], chapters: [], glossaries: [] }));
+    test('upgradeBackup: ตัดเรคคอร์ดเสียและนับจำนวนที่ตัด', () => {
+      const up = upgradeBackup({ format: 'NovelTranslateBackup', version: 2,
+        books: [{ bookId: 'b', title: 5, lastUrl: 'javascript:alert(1)', totalChapters: 'x' }, { bookId: '' }, 'junk'],
+        chapters: [{ id: 'c', bookId: 'b', order: -3, paragraphs: [{ src: '甲', th: 1 }, null, 'x'], nextUrl: 'javascript:x', sourceUrl: 'https://a.com/1' }, { bookId: 'b' }],
+        glossaries: [{ src: '甲', tgt: 'ก', books: ['b', 7], overrides: { b: 'ข', c: 3 } }, { src: '乙' }],
+        bookData: [{ bookId: 'b', replaceRules: 'bad', bible: { characters: 'bad' } }] });
+      const b = up.books[0], c = up.chapters[0], g = up.glossaries[0], d = up.bookData[0];
+      return eq([up.dropped, b.title, b.lastUrl, 'totalChapters' in b, c.order, c.paragraphs, c.nextUrl, c.sourceUrl, g.books, g.overrides, 'replaceRules' in d, d.bible.characters],
+        [{ books: 2, chapters: 1, glossaries: 1, bookData: 0 }, '5', '', false, 0, [{ src: '甲', th: '1' }], null, 'https://a.com/1', ['b'], { b: 'ข' }, false, []]);
+    });
+    test('upgradeBackup: ตัด key __proto__ ที่ซ่อนมาในไฟล์', () => {
+      const up = upgradeBackup(JSON.parse('{"format":"NovelTranslateBackup","version":3,"books":[{"bookId":"b","__proto__":{"polluted":1},"extra":{"constructor":{"x":1},"keep":2}}],"chapters":[],"glossaries":[]}'));
+      const b = up.books[0];
+      return !Object.prototype.hasOwnProperty.call(b, '__proto__') && ({}).polluted === undefined && eq(b.extra, { keep: 2 });
+    });
+    test('upgradeBackup: เก็บฟิลด์ที่ไม่รู้จักไว้ (ข้อมูลไม่หายระหว่างสำรอง/นำเข้า)', () => {
+      const up = upgradeBackup({ format: 'NovelTranslateBackup', version: 3, books: [], glossaries: [],
+        chapters: [{ id: 'c', bookId: 'b', order: 2, translationMeta: { model: 'm' }, paragraphs: [{ src: 'a', th: 'b', kind: 'author_note', userEdited: true, thDraft: 'd' }] }] });
+      return eq([up.chapters[0].translationMeta, up.chapters[0].paragraphs[0]], [{ model: 'm' }, { src: 'a', th: 'b', kind: 'author_note', userEdited: true, thDraft: 'd' }]);
+    });
+    test('splitImportedSettings: รับเฉพาะรายชื่อที่อนุญาต แยก Base URL และไม่รับ key', () => {
+      const { safe, baseUrl } = splitImportedSettings({
+        nov_quality_mode: 'best', nov_llm_model_anthropic: 'claude-opus-5-5', nov_llm_keys_gemini: '["AIza..."]', nov_jina_key: 'jina_x',
+        nov_evil: 'x', nov_theme: 3, nov_site_profiles: '{"not":"array"}', nov_llm_baseurl_openai: 'https://evil.example/v1'
+      });
+      return eq([safe, baseUrl], [{ nov_quality_mode: 'best', nov_llm_model_anthropic: 'claude-opus-5-5' }, 'https://evil.example/v1']);
+    });
+    test('splitImportedSettings: Base URL ที่ไม่ใช่ http(s) ถูกข้าม', () => splitImportedSettings({ nov_llm_baseurl_openai: 'javascript:alert(1)' }).baseUrl === null);
+    test('collectBackupSettings: ไม่มี API Key ในไฟล์สำรอง', () => withStorage(['nov_llm_keys_gemini', 'nov_jina_key', 'nov_quality_mode'], () => {
+      localStorage.setItem('nov_llm_keys_gemini', '["AIzaTESTKEY123"]');
+      localStorage.setItem('nov_jina_key', 'jina_test');
+      localStorage.setItem('nov_quality_mode', 'fast');
+      const s = collectBackupSettings();
+      return s.nov_quality_mode === 'fast' && !JSON.stringify(s).includes('AIzaTESTKEY123') && !JSON.stringify(s).includes('jina_test');
+    }));
+    test('secrets: โหมดไม่จำ key ย้าย key ไป sessionStorage และย้ายกลับได้', () => withStorage([SECRETS_SESSION_FLAG, 'nov_llm_keys_openai', 'nov_jina_key'], () => {
+      localStorage.removeItem(SECRETS_SESSION_FLAG);
+      setSecret('nov_llm_keys_openai', '["sk-test-1"]');
+      setSecret('nov_jina_key', 'jina_1');
+      setSessionOnlySecrets(true);
+      const moved = localStorage.getItem('nov_llm_keys_openai') === null && sessionStorage.getItem('nov_llm_keys_openai') === '["sk-test-1"]' &&
+        getSecret('nov_jina_key') === 'jina_1' && getProviderKeys('openai')[0] === 'sk-test-1';
+      setSessionOnlySecrets(false);
+      const back = sessionStorage.getItem('nov_jina_key') === null && localStorage.getItem('nov_jina_key') === 'jina_1';
+      return moved && back;
+    }));
+    test('secrets: ลบ key ทั้งหมดไม่แตะการตั้งค่าอื่น', () => withStorage(['nov_llm_keys_anthropic', 'nov_quality_mode'], () => {
+      setSecret('nov_llm_keys_anthropic', '["sk-ant-x"]');
+      localStorage.setItem('nov_quality_mode', 'best');
+      const others = [];
+      for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (isSecretName(k)) others.push([k, localStorage.getItem(k)]); }
+      clearAllSecrets();
+      const ok = getSecret('nov_llm_keys_anthropic') === null && localStorage.getItem('nov_quality_mode') === 'best';
+      others.forEach(([k, v]) => localStorage.setItem(k, v));
+      return ok;
+    }));
+    test('getBackupReminderState: เตือนเมื่อมีข้อมูลใหม่และเกินกำหนด', () => withStorage(['nov_last_backup_at', 'nov_data_changed_at', 'nov_first_change_at', 'nov_backup_snooze_until', 'nov_backup_remind_days'], () => {
+      const now = 1_000 * DAY_MS;
+      localStorage.setItem('nov_backup_remind_days', '7');
+      localStorage.removeItem('nov_backup_snooze_until');
+      localStorage.setItem('nov_last_backup_at', String(now - 8 * DAY_MS));
+      localStorage.setItem('nov_data_changed_at', String(now - DAY_MS));
+      const a = getBackupReminderState(now).shouldRemind;
+      localStorage.setItem('nov_data_changed_at', String(now - 9 * DAY_MS));
+      const b = getBackupReminderState(now).shouldRemind; // ไม่มีอะไรเปลี่ยนหลังสำรอง
+      localStorage.setItem('nov_data_changed_at', String(now - DAY_MS));
+      localStorage.setItem('nov_last_backup_at', String(now - 2 * DAY_MS));
+      const c = getBackupReminderState(now).shouldRemind; // สำรองไม่นาน
+      localStorage.setItem('nov_last_backup_at', String(now - 8 * DAY_MS));
+      localStorage.setItem('nov_backup_snooze_until', String(now + DAY_MS));
+      const d = getBackupReminderState(now).shouldRemind; // เลื่อนเตือนไว้
+      localStorage.removeItem('nov_backup_snooze_until');
+      localStorage.setItem('nov_backup_remind_days', '0');
+      const e = getBackupReminderState(now).shouldRemind; // ปิดเตือน
+      localStorage.setItem('nov_backup_remind_days', '7');
+      localStorage.removeItem('nov_last_backup_at');
+      localStorage.setItem('nov_first_change_at', String(now - 10 * DAY_MS));
+      const f = getBackupReminderState(now).shouldRemind; // ไม่เคยสำรองเลย
+      return eq([a, b, c, d, e, f], [true, false, false, false, false, true]);
+    }));
+    test('checkImportFileSize / checkImportChapterCount: ปฏิเสธไฟล์ใหญ่และตอนเยอะเกิน', () => {
+      let big = false, many = false;
+      try { checkImportFileSize({ name: 'a.txt', size: IMPORT_LIMITS.txtBytes + 1 }); } catch (e) { big = true; }
+      try { checkImportChapterCount(IMPORT_LIMITS.chapters + 1); } catch (e) { many = true; }
+      checkImportFileSize({ name: 'a.epub', size: IMPORT_LIMITS.txtBytes + 1 });
+      checkImportChapterCount(10);
+      return big && many;
+    });
     const passed = results.filter(r => r.ok).length;
     const summary = document.getElementById('summary');
     summary.textContent = `ผ่าน ${passed}/${results.length}`;

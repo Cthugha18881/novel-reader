@@ -430,3 +430,24 @@ body.theme-dark .book-chapters-list { border-top-color: rgba(255,255,255,0.08); 
 body.theme-dark .progress-box { background: rgba(37,99,235,0.15); color: #93c5fd; border-color: rgba(37,99,235,0.3); }
 .progress-box.success { background: #f0fdf4 !important; color: #166534 !important; border-color: #bbf7d0 !important; }
 body.theme-dark .progress-box.success { background: rgba(34,197,94,0.15) !important; color: #86efac !important; border-color: rgba(34,197,94,0.3) !important; }
+
+/* ---------- Data safety banner / backup import ---------- */
+.safety-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  /* เว้นที่ให้ปุ่มลอย 🔄 🔍 ⛶ มุมขวาบน ไม่ให้ทับปุ่มของแถบเตือน */
+  margin: 22px 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: rgba(234, 179, 8, 0.14);
+  border: 1px solid rgba(202, 138, 4, 0.35);
+}
+.safety-banner span { flex: 1 1 220px; }
+.safety-banner .btn { padding: 3px 10px; font-size: 11px; }
+.backup-compare-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.backup-compare-table th, .backup-compare-table td { padding: 3px 6px; border-bottom: 1px solid rgba(0, 0, 0, 0.08); text-align: right; }
+.backup-compare-table th:first-child, .backup-compare-table td:first-child { text-align: left; }

@@ -40,7 +40,7 @@ function getSiteProfile(url) {
 }
 
 function getJinaHeaders(extra = {}) {
-  const key = (localStorage.getItem('nov_jina_key') || '').trim();
+  const key = (getSecret('nov_jina_key') || '').trim();
   return key ? { ...extra, Authorization: `Bearer ${key}` } : extra;
 }
 
@@ -363,6 +363,11 @@ function decodeTextBuffer(buffer) {
 async function parseEpubFile(buffer) {
   const JSZip = await loadJSZip();
   const zip = await JSZip.loadAsync(buffer);
+  // กันไฟล์ zip ที่ขยายแล้วใหญ่ผิดปกติ (zip bomb) ทำแท็บค้าง: ตรวจจากขนาดที่ประกาศไว้ในไฟล์ก่อนแตก
+  const entries = Object.values(zip.files).filter(f => !f.dir);
+  if (entries.length > IMPORT_LIMITS.epubEntries) throw new Error(`ไฟล์ EPUB มีไฟล์ย่อยมากผิดปกติ (${entries.length.toLocaleString()} ไฟล์)`);
+  const declaredSize = entries.reduce((n, f) => n + (f._data?.uncompressedSize || 0), 0);
+  if (declaredSize > IMPORT_LIMITS.epubUncompressedBytes) throw new Error(`ไฟล์ EPUB ขยายแล้วใหญ่ผิดปกติ (${formatBytes(declaredSize)})`);
   const container = await zip.file('META-INF/container.xml')?.async('string');
   if (!container) throw new Error('ไฟล์ EPUB ไม่ถูกต้อง (ไม่พบ container.xml)');
   const opfPath = new DOMParser().parseFromString(container, 'application/xml').querySelector('rootfile')?.getAttribute('full-path');
@@ -373,7 +378,9 @@ async function parseEpubFile(buffer) {
   const manifest = new Map([...opf.querySelectorAll('manifest > item')].map(it => [it.getAttribute('id'), it.getAttribute('href')]));
   const bookTitle = opf.getElementsByTagNameNS('*', 'title')[0]?.textContent?.trim() || '';
   const out = [];
-  for (const ref of opf.querySelectorAll('spine > itemref')) {
+  const spine = [...opf.querySelectorAll('spine > itemref')];
+  checkImportChapterCount(spine.length);
+  for (const ref of spine) {
     const href = manifest.get(ref.getAttribute('idref'));
     if (!href) continue;
     const path = decodeURIComponent(new URL(href, 'http://x/' + baseDir).pathname.slice(1));
@@ -554,7 +561,7 @@ let siteProfilesDraft = [];
 
 function openSiteProfilesModal() {
   siteProfilesDraft = getSiteProfiles().map(p => ({ ...p }));
-  document.getElementById('jina-key-input').value = localStorage.getItem('nov_jina_key') || '';
+  document.getElementById('jina-key-input').value = getSecret('nov_jina_key') || '';
   document.getElementById('ai-extract-chk').checked = isAiExtractEnabled();
   renderSiteProfiles();
   document.getElementById('site-test-result').innerHTML = '';
@@ -593,7 +600,7 @@ function resetSiteProfiles() {
 function saveSiteProfilesModal() {
   saveSiteProfiles(siteProfilesDraft.filter(p => p.host));
   const key = document.getElementById('jina-key-input').value.trim();
-  if (key) localStorage.setItem('nov_jina_key', key); else localStorage.removeItem('nov_jina_key');
+  setSecret('nov_jina_key', key);
   localStorage.setItem('nov_ai_extract', document.getElementById('ai-extract-chk').checked ? 'true' : 'false');
   htmlNavMisses.clear();
   closeModal('site-profiles-modal');

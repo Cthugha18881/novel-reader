@@ -99,7 +99,9 @@ function migrateLegacyLlmSettings() {
     const legacyPool = JSON.parse(localStorage.getItem('nov_gemini_keys_pool') || 'null');
     const legacySingle = (localStorage.getItem('nov_gemini_key') || '').trim();
     const keys = Array.isArray(legacyPool) && legacyPool.length ? legacyPool : (legacySingle ? [legacySingle] : []);
-    if (keys.length) localStorage.setItem('nov_llm_keys_gemini', JSON.stringify(keys));
+    if (keys.length) setSecret('nov_llm_keys_gemini', JSON.stringify(keys));
+    localStorage.removeItem('nov_gemini_keys_pool');
+    localStorage.removeItem('nov_gemini_key');
   } catch (e) {}
   const legacyModel = localStorage.getItem('nov_primary_model');
   if (legacyModel) localStorage.setItem('nov_llm_model_gemini', legacyModel);
@@ -113,7 +115,7 @@ function getActiveProvider() {
 
 function getProviderKeys(provider) {
   try {
-    const keys = JSON.parse(localStorage.getItem(`nov_llm_keys_${provider}`) || '[]');
+    const keys = JSON.parse(getSecret(`nov_llm_keys_${provider}`) || '[]');
     return Array.isArray(keys) ? keys.filter(k => typeof k === 'string' && k.trim().length > 5).map(k => k.trim()) : [];
   } catch (e) {
     return [];
@@ -199,6 +201,10 @@ function errorFromStatus(status, message) {
 }
 
 async function guardedFetch(url, options) {
+  // CSP (csp.js) อนุญาตเฉพาะปลายทางที่ตั้งไว้ตอนเปิดหน้า ถ้าเพิ่งเปลี่ยน Base URL ต้องรีโหลดก่อน
+  if (typeof isConnectAllowedByCsp === 'function' && !isConnectAllowedByCsp(url)) {
+    throw new LLMError('ปลายทาง API นี้ยังไม่ได้รับอนุญาตในหน้านี้ (เพิ่งเปลี่ยน Base URL) กรุณารีโหลดหน้าแล้วลองใหม่', 'config');
+  }
   try {
     return await fetch(url, options);
   } catch (err) {

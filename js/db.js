@@ -1,8 +1,9 @@
 // ==================== INDEXEDDB ENGINE ====================
 const DB_NAME = 'NovelTranslateDB_v12';
 // v3: เพิ่ม store bookData (คู่มือเรื่อง/กฎแทนคำ/ตัวอย่างสำนวน ใช้ในขั้นถัดไป)
+// v4: เพิ่ม store meta (ข้อมูลภายในของแอพ เช่นโฟลเดอร์สำรองอัตโนมัติ ไม่รวมในไฟล์สำรอง)
 // ฟิลด์ใหม่ใน record เดิมไม่ต้อง migrate เพราะทุกจุดอ่านผ่านค่า default ด้านล่าง
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 let db = null;
 let inMemoryGlossaryCache = [];
 
@@ -71,14 +72,47 @@ function initDB() {
       if (!d.objectStoreNames.contains('bookData')) {
         d.createObjectStore('bookData', { keyPath: 'bookId' });
       }
+      if (!d.objectStoreNames.contains('meta')) {
+        d.createObjectStore('meta', { keyPath: 'key' });
+      }
     };
     req.onsuccess = (e) => {
       db = e.target.result;
-      db.onversionchange = () => db.close();
+      // แท็บที่เปิดแอพรุ่นใหม่กว่าต้องการอัปเกรดฐานข้อมูล: ปิดของแท็บนี้แล้วบอกผู้ใช้ให้รีโหลด
+      db.onversionchange = () => {
+        db.close();
+        if (typeof onDatabaseVersionChange === 'function') onDatabaseVersionChange();
+      };
       resolve(db);
     };
     req.onerror = () => reject(req.error || new Error('เปิดฐานข้อมูลไม่สำเร็จ'));
     req.onblocked = () => reject(new Error('ฐานข้อมูลถูกเปิดค้างในแท็บอื่น กรุณาปิดแท็บเดิมแล้วลองใหม่'));
+  });
+}
+
+// แจ้งว่าข้อมูลเปลี่ยน: ใช้เตือนสำรองข้อมูล และบอกแท็บอื่นให้รีเฟรช (ตัวรับอยู่ใน safety.js)
+// kind: 'books' | 'chapters' | 'glossary' | 'bookData' | 'replaced'
+function markDataChanged(kind, bookId = null) {
+  if (typeof onLocalDataChanged === 'function') onLocalDataChanged(kind, bookId);
+}
+
+function dbGetMeta(key) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    const req = db.transaction('meta', 'readonly').objectStore('meta').get(key);
+    req.onsuccess = () => resolve(req.result ? req.result.value : undefined);
+    req.onerror = () => reject(req.error || new Error('อ่านข้อมูลภายในไม่สำเร็จ'));
+  });
+}
+
+function dbSetMeta(key, value) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    const tx = db.transaction('meta', 'readwrite');
+    if (value === undefined) tx.objectStore('meta').delete(key);
+    else tx.objectStore('meta').put({ key, value });
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('บันทึกข้อมูลภายในไม่สำเร็จ'));
   });
 }
 
@@ -96,6 +130,7 @@ function dbSaveBook(book) {
     tx.objectStore('books').put(book);
     tx.oncomplete = () => {
       if (book?.bookId) bookLangCache.set(book.bookId, getBookSourceLang(book));
+      markDataChanged('books', book?.bookId);
       resolve();
     };
     tx.onerror = () => reject(tx.error || new Error('บันทึกหนังสือไม่สำเร็จ'));
@@ -108,7 +143,7 @@ function dbSaveChapter(chapter) {
     if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
     const tx = db.transaction('chapters', 'readwrite');
     tx.objectStore('chapters').put(chapter);
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => { markDataChanged('chapters', chapter?.bookId); resolve(); };
     tx.onerror = () => reject(tx.error || new Error('บันทึกตอนนิยายไม่สำเร็จ'));
     tx.onabort = () => reject(tx.error || new Error('ยกเลิกการบันทึกตอนนิยาย'));
   });
@@ -122,7 +157,7 @@ function dbSaveChapters(list) {
     const tx = db.transaction('chapters', 'readwrite');
     const store = tx.objectStore('chapters');
     list.forEach(ch => store.put(ch));
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => { markDataChanged('chapters', list[0]?.bookId); resolve(); };
     tx.onerror = () => reject(tx.error || new Error('บันทึกตอนนิยายไม่สำเร็จ'));
     tx.onabort = () => reject(tx.error || new Error('ยกเลิกการบันทึกตอนนิยาย'));
   });
@@ -168,7 +203,7 @@ function dbSaveBookData(data) {
     if (!data?.bookId) return reject(new Error('ไม่พบรหัสนิยาย'));
     const tx = db.transaction('bookData', 'readwrite');
     tx.objectStore('bookData').put(data);
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => { markDataChanged('bookData', data.bookId); resolve(); };
     tx.onerror = () => reject(tx.error || new Error('บันทึกข้อมูลเสริมของนิยายไม่สำเร็จ'));
   });
 }
@@ -205,6 +240,7 @@ function dbDeleteBook(bookId) {
         if (Array.isArray(item.books)) item.books = item.books.filter(b => b !== bookId);
         if (item.overrides) delete item.overrides[bookId];
       });
+      markDataChanged('books', bookId);
       resolve();
     };
     tx.onerror = () => reject(tx.error || new Error('ลบหนังสือไม่สำเร็จ'));
@@ -219,7 +255,7 @@ function dbDeleteMultipleChapters(chapIds) {
     const tx = db.transaction('chapters', 'readwrite');
     const chapStore = tx.objectStore('chapters');
     chapIds.forEach(id => chapStore.delete(id));
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => { markDataChanged('chapters'); resolve(); };
     tx.onerror = () => reject(tx.error || new Error('ลบตอนนิยายไม่สำเร็จ'));
     tx.onabort = () => reject(tx.error || new Error('ยกเลิกการลบตอนนิยาย'));
   });
@@ -283,6 +319,8 @@ function dbMoveChapters(chapIds, fromBookId, toBook) {
 
     tx.oncomplete = async () => {
       await refreshInMemoryGlossaryCache();
+      markDataChanged('chapters', toBookId);
+      markDataChanged('glossary');
       resolve();
     };
     tx.onerror = () => reject(tx.error || new Error('ย้ายตอนไม่สำเร็จ'));
@@ -293,7 +331,8 @@ function dbMoveChapters(chapIds, fromBookId, toBook) {
 // ==================== BACKUP (EXPORT / IMPORT) ====================
 const BACKUP_FORMAT = 'NovelTranslateBackup';
 // v1 (แอพ v2.6): books, chapters, glossaries | v2 (แอพ v2.7+): เพิ่ม bookData
-const BACKUP_VERSION = 2;
+// v3 (แอพ v3.0+): เพิ่ม settings (การตั้งค่าที่ไม่ใช่ API Key, ใส่โดย safety.js)
+const BACKUP_VERSION = 3;
 const BACKUP_REQUIRED_STORES = ['books', 'chapters', 'glossaries'];
 const BACKUP_STORES = ['books', 'chapters', 'glossaries', 'bookData'];
 
@@ -312,39 +351,181 @@ function dbExportAll() {
 }
 
 function isValidBackup(data) {
-  return !!data && data.format === BACKUP_FORMAT &&
-    (!data.version || data.version <= BACKUP_VERSION) &&
+  return !!data && typeof data === 'object' && data.format === BACKUP_FORMAT &&
+    (!data.version || (Number.isFinite(data.version) && data.version <= BACKUP_VERSION)) &&
     BACKUP_REQUIRED_STORES.every(name => Array.isArray(data[name]));
 }
 
-// แปลงไฟล์สำรองรุ่นเก่าให้เป็นรูปแบบปัจจุบัน (ไม่แก้ object ต้นฉบับ)
-function upgradeBackup(data) {
-  return {
-    ...data,
-    version: BACKUP_VERSION,
-    books: data.books.filter(b => b && b.bookId),
-    chapters: data.chapters.filter(c => c && c.id && c.bookId).map(c => normalizeChapter({ ...c })),
-    glossaries: data.glossaries.filter(g => g && g.src),
-    bookData: Array.isArray(data.bookData) ? data.bookData.filter(d => d && d.bookId) : []
-  };
+// ---------- ตรวจไฟล์สำรองก่อนนำเข้า ----------
+// ไฟล์สำรองอาจมาจากคนอื่น: ตรวจชนิดของฟิลด์ที่แอพใช้ ตัดเรคคอร์ดที่ใช้ไม่ได้ และตัด key อันตราย (__proto__ ฯลฯ)
+// ฟิลด์อื่นที่ไม่รู้จักเก็บไว้ตามเดิม เพื่อให้ข้อมูลจากแอพรุ่นใหม่กว่าเล็กน้อยไม่หายระหว่างสำรอง/นำเข้า
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+const MAX_ID_LENGTH = 500;
+
+function isPlainRecord(x) {
+  return !!x && typeof x === 'object' && !Array.isArray(x);
 }
 
-// รวมข้อมูลจากไฟล์เข้าฐานข้อมูลเดิม (key ซ้ำจะถูกเขียนทับ) ใน transaction เดียว ถ้าพังจะไม่มีอะไรถูกเขียน
-function dbImportAll(rawData) {
+function stripDangerousKeys(value, depth = 0) {
+  if (depth > 24) return undefined;
+  if (Array.isArray(value)) return value.map(v => stripDangerousKeys(v, depth + 1)).filter(v => v !== undefined);
+  if (isPlainRecord(value)) {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (DANGEROUS_KEYS.has(k)) continue;
+      const cleaned = stripDangerousKeys(v, depth + 1);
+      if (cleaned !== undefined) out[k] = cleaned;
+    }
+    return out;
+  }
+  if (typeof value === 'function' || typeof value === 'symbol') return undefined;
+  return value;
+}
+
+function isValidId(x) {
+  return typeof x === 'string' && x.length > 0 && x.length <= MAX_ID_LENGTH;
+}
+
+function asText(x) {
+  return typeof x === 'string' ? x : (x == null ? '' : String(x));
+}
+
+function asHttpUrl(x) {
+  return typeof x === 'string' && /^https?:\/\//i.test(x.trim()) ? x.trim() : '';
+}
+
+function sanitizeBookRecord(raw) {
+  const b = stripDangerousKeys(raw);
+  if (!isPlainRecord(b) || !isValidId(b.bookId)) return null;
+  b.title = asText(b.title);
+  if ('author' in b) b.author = asText(b.author);
+  if ('genre' in b) b.genre = asText(b.genre);
+  if ('sourceLang' in b) b.sourceLang = typeof normalizeLang === 'function' ? normalizeLang(b.sourceLang) : asText(b.sourceLang);
+  ['lastChapterIndex', 'lastParaIndex', 'totalChapters', 'updatedAt'].forEach(k => {
+    if (k in b && !Number.isFinite(b[k])) delete b[k];
+  });
+  if ('lastChapterId' in b && !isValidId(b.lastChapterId)) delete b.lastChapterId;
+  if ('lastUrl' in b) b.lastUrl = asHttpUrl(b.lastUrl);
+  return b;
+}
+
+function sanitizeChapterRecord(raw) {
+  const c = stripDangerousKeys(raw);
+  if (!isPlainRecord(c) || !isValidId(c.id) || !isValidId(c.bookId)) return null;
+  // ลำดับต้องเป็นตัวเลข >= 0 ไม่อย่างนั้นตอนจะไม่อยู่ใน index และหายจากหน้าอ่าน
+  c.order = Number.isFinite(c.order) ? Math.max(0, c.order) : 0;
+  c.title = asText(c.title);
+  c.paragraphs = (Array.isArray(c.paragraphs) ? c.paragraphs : [])
+    .filter(isPlainRecord)
+    .map(p => {
+      p.src = asText(p.src);
+      p.th = asText(p.th);
+      if ('thDraft' in p && typeof p.thDraft !== 'string') delete p.thDraft;
+      return p;
+    });
+  if ('summary' in c) c.summary = asText(c.summary);
+  if ('sourceUrl' in c) c.sourceUrl = asHttpUrl(c.sourceUrl);
+  if ('nextUrl' in c) c.nextUrl = asHttpUrl(c.nextUrl) || null;
+  return normalizeChapter(c);
+}
+
+function sanitizeGlossaryRecord(raw) {
+  const g = stripDangerousKeys(raw);
+  if (!isPlainRecord(g)) return null;
+  g.src = cleanTermString(asText(g.src));
+  g.tgt = cleanTermString(asText(g.tgt));
+  if (!g.src || g.src.length > 200 || !g.tgt) return null;
+  if ('books' in g) g.books = Array.isArray(g.books) ? g.books.filter(isValidId) : [];
+  if ('overrides' in g) {
+    const overrides = {};
+    if (isPlainRecord(g.overrides)) {
+      Object.entries(g.overrides).forEach(([bookId, tgt]) => {
+        if (isValidId(bookId) && typeof tgt === 'string' && tgt.trim()) overrides[bookId] = tgt;
+      });
+    }
+    g.overrides = overrides;
+  }
+  if ('category' in g) g.category = asText(g.category);
+  return g;
+}
+
+function sanitizeBookDataRecord(raw) {
+  const d = stripDangerousKeys(raw);
+  if (!isPlainRecord(d) || !isValidId(d.bookId)) return null;
+  ['replaceRules', 'styleExamples'].forEach(k => {
+    if (k in d && !Array.isArray(d[k])) delete d[k];
+  });
+  if ('bible' in d && !isPlainRecord(d.bible)) delete d.bible;
+  if (isPlainRecord(d.bible) && 'characters' in d.bible && !Array.isArray(d.bible.characters)) d.bible.characters = [];
+  if ('toc' in d && !isPlainRecord(d.toc)) delete d.toc;
+  return d;
+}
+
+const BACKUP_SANITIZERS = {
+  books: sanitizeBookRecord,
+  chapters: sanitizeChapterRecord,
+  glossaries: sanitizeGlossaryRecord,
+  bookData: sanitizeBookDataRecord
+};
+
+// แปลงไฟล์สำรองรุ่นเก่าให้เป็นรูปแบบปัจจุบัน และตรวจทุกเรคคอร์ด (ไม่แก้ object ต้นฉบับ)
+// คืน dropped = จำนวนเรคคอร์ดที่ถูกตัดทิ้งเพราะข้อมูลเสีย แยกตาม store
+function upgradeBackup(data) {
+  const out = { format: BACKUP_FORMAT, version: BACKUP_VERSION, exportedAt: asText(data.exportedAt), dropped: {} };
+  BACKUP_STORES.forEach(name => {
+    const list = Array.isArray(data[name]) ? data[name] : [];
+    const clean = [];
+    list.forEach(rec => {
+      const r = BACKUP_SANITIZERS[name](rec);
+      if (r) clean.push(r);
+    });
+    out[name] = clean;
+    out.dropped[name] = list.length - clean.length;
+  });
+  out.settings = isPlainRecord(data.settings) ? stripDangerousKeys(data.settings) : null;
+  return out;
+}
+
+/**
+ * นำเข้าไฟล์สำรองใน transaction เดียว ถ้าพังจะไม่มีอะไรถูกเขียน
+ * mode 'merge' = รวมกับของเดิม (key ซ้ำ ข้อมูลในไฟล์ทับของเดิม)
+ * mode 'replace' = ล้างนิยาย/ตอน/คลังศัพท์/ข้อมูลเสริมเดิมทั้งหมดก่อน แล้วใส่ข้อมูลจากไฟล์
+ */
+function dbImportAll(rawData, { mode = 'merge' } = {}) {
   return new Promise((resolve, reject) => {
     if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
     if (!isValidBackup(rawData)) return reject(new Error('รูปแบบไฟล์สำรองไม่ถูกต้อง หรือมาจากแอพรุ่นที่ใหม่กว่า'));
     const data = upgradeBackup(rawData);
     const tx = db.transaction(BACKUP_STORES, 'readwrite');
     try {
+      if (mode === 'replace') BACKUP_STORES.forEach(name => tx.objectStore(name).clear());
       BACKUP_STORES.forEach(name => data[name].forEach(record => tx.objectStore(name).put(record)));
     } catch (err) {
       tx.abort();
       return reject(err);
     }
-    tx.oncomplete = () => resolve(data);
+    tx.oncomplete = () => {
+      if (mode === 'replace') bookLangCache.clear();
+      data.books.forEach(b => bookLangCache.set(b.bookId, getBookSourceLang(b)));
+      markDataChanged(mode === 'replace' ? 'replaced' : 'books');
+      resolve(data);
+    };
     tx.onerror = () => reject(tx.error || new Error('นำเข้าข้อมูลไม่สำเร็จ'));
     tx.onabort = () => reject(tx.error || new Error('ยกเลิกการนำเข้าข้อมูล'));
+  });
+}
+
+function dbCountAll() {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    const tx = db.transaction(BACKUP_STORES, 'readonly');
+    const result = {};
+    BACKUP_STORES.forEach(name => {
+      const req = tx.objectStore(name).count();
+      req.onsuccess = () => { result[name] = req.result || 0; };
+    });
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error || new Error('นับข้อมูลไม่สำเร็จ'));
   });
 }
 
@@ -375,6 +556,7 @@ async function dbSaveGlossaryItem(item) {
       const idx = inMemoryGlossaryCache.findIndex(x => x.src === item.src);
       if (idx !== -1) inMemoryGlossaryCache[idx] = item;
       else inMemoryGlossaryCache.push(item);
+      markDataChanged('glossary');
       resolve();
     };
     tx.onerror = () => reject(tx.error || new Error('บันทึกคำศัพท์ไม่สำเร็จ'));
@@ -396,6 +578,7 @@ async function dbDeleteGlossaryItem(src) {
     tx.objectStore('glossaries').delete(src);
     tx.oncomplete = () => {
       inMemoryGlossaryCache = inMemoryGlossaryCache.filter(x => x.src !== src);
+      markDataChanged('glossary');
       resolve();
     };
     tx.onerror = () => reject(tx.error || new Error('ลบคำศัพท์ไม่สำเร็จ'));
@@ -413,6 +596,7 @@ async function dbDeleteMultipleGlossaryItems(srcList) {
     srcList.forEach(s => store.delete(s));
     tx.oncomplete = () => {
       inMemoryGlossaryCache = inMemoryGlossaryCache.filter(x => !set.has(x.src));
+      markDataChanged('glossary');
       resolve();
     };
     tx.onerror = () => reject(tx.error || new Error('ลบคำศัพท์ไม่สำเร็จ'));

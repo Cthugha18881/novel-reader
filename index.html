@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.9.0</title>
+  <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
+  <script src="js/csp.js"></script>
+  <title>NovelTranslate AI v3.0.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -81,6 +83,7 @@
 
   <!-- MAIN READING CANVAS -->
   <main>
+    <div id="safety-banner" class="safety-banner" style="display: none;"></div>
     <div class="chapter-toolbar">
       <div style="flex: 1; padding-right: 12px;">
         <div class="editable-title-wrap" onclick="promptEditBookTitle()" title="คลิกเพื่อแก้ไขชื่อเรื่อง (จะล็อกชื่อถาวร)">
@@ -144,10 +147,52 @@
       <div id="bookshelf-list" class="modal-scrollable-body" style="max-height: 400px; margin-bottom: 12px;"></div>
       <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px;">
         <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="exportBackup()" title="ดาวน์โหลดนิยาย ตอน และคลังศัพท์ทั้งหมดเป็นไฟล์ .json (ไม่รวม API Key)">⬇️ สำรองข้อมูลทั้งหมด</button>
-        <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="triggerBackupImport()" title="นำเข้าไฟล์สำรอง .json (ข้อมูลที่ซ้ำจะถูกเขียนทับ)">⬆️ นำเข้าไฟล์สำรอง</button>
+        <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="triggerBackupImport()" title="นำเข้าไฟล์สำรอง .json (เลือกได้ว่าจะรวมกับของเดิมหรือแทนที่ทั้งหมด)">⬆️ นำเข้าไฟล์สำรอง</button>
         <input type="file" id="backup-file-input" accept=".json,application/json" style="display: none;" onchange="handleBackupFileSelected(this)">
       </div>
+      <div id="bookshelf-backup-note" style="font-size: 11px; text-align: center; margin-bottom: 6px; opacity: 0.8;"></div>
       <p style="font-size: 11px; opacity: 0.6; text-align: center;">*กด 🔄 บนมุมขวาของหน้าอ่านเพื่อแปลบทปัจจุบันใหม่ตามคลังศัพท์ล่าสุดได้ทันที<br>*ข้อมูลทั้งหมดเก็บอยู่ในเบราว์เซอร์เครื่องนี้เท่านั้น ควรสำรองข้อมูลเป็นระยะ</p>
+    </div>
+  </div>
+
+  <!-- MODAL: IMPORT BACKUP -->
+  <div class="modal-overlay" id="backup-import-modal" style="z-index: 65;">
+    <div class="modal-box" style="max-width: 480px;">
+      <div class="modal-head">
+        <div class="modal-title">นำเข้าไฟล์สำรอง</div>
+        <button class="modal-close" onclick="cancelBackupImport()">✕</button>
+      </div>
+      <div class="modal-scrollable-body" style="max-height: 65vh; font-size: 12px;">
+        <div id="backup-import-summary" style="margin-bottom: 12px;"></div>
+        <div class="form-label">วิธีนำเข้า</div>
+        <label style="display: flex; gap: 8px; align-items: flex-start; cursor: pointer; margin-bottom: 6px;">
+          <input type="radio" name="backup-import-mode" value="merge" checked onchange="onBackupImportModeChange()" style="margin-top: 2px;">
+          <div><b>รวมกับของเดิม</b><div style="opacity: 0.7;">ข้อมูลในเครื่องที่ไม่มีในไฟล์ยังอยู่ครบ ส่วนที่ซ้ำกัน (เรื่อง/ตอน/คำศัพท์เดียวกัน) ใช้ของในไฟล์</div></div>
+        </label>
+        <label style="display: flex; gap: 8px; align-items: flex-start; cursor: pointer; margin-bottom: 6px;">
+          <input type="radio" name="backup-import-mode" value="replace" onchange="onBackupImportModeChange()" style="margin-top: 2px;">
+          <div><b>แทนที่ทั้งหมด</b><div style="opacity: 0.7;">ลบนิยาย ตอน คลังศัพท์ และคู่มือเรื่องในเครื่องนี้ทั้งหมดก่อน แล้วใช้ข้อมูลจากไฟล์เท่านั้น</div></div>
+        </label>
+        <div id="backup-import-replace-box" style="display: none; margin: 0 0 8px 22px; padding: 8px; border-radius: 6px; background: rgba(220,38,38,0.08); color: #b91c1c;">
+          <label style="display: flex; gap: 6px; align-items: center; cursor: pointer;">
+            <input type="checkbox" id="backup-import-safety" checked> ดาวน์โหลดไฟล์สำรองของข้อมูลปัจจุบันก่อนแทนที่ (แนะนำ)
+          </label>
+        </div>
+        <div class="form-label" style="margin-top: 10px;">การตั้งค่า</div>
+        <label id="backup-import-settings-row" style="display: flex; gap: 8px; align-items: flex-start; cursor: pointer; margin-bottom: 6px;">
+          <input type="checkbox" id="backup-import-settings" style="margin-top: 2px;">
+          <div>นำเข้าการตั้งค่า <span id="backup-import-settings-count">0</span> รายการ<div style="opacity: 0.7;">เช่น โมเดลที่เลือก โหมดคุณภาพ โปรไฟล์เว็บ ธีม (ไฟล์สำรองไม่มี API Key)</div></div>
+        </label>
+        <label id="backup-import-baseurl-row" style="display: none; gap: 8px; align-items: flex-start; cursor: pointer; margin-bottom: 6px;">
+          <input type="checkbox" id="backup-import-baseurl" style="margin-top: 2px;">
+          <div>ใช้ Base URL ของ OpenAI-compatible จากไฟล์: <code id="backup-import-baseurl-value" style="word-break: break-all;"></code>
+            <div style="color: #b45309;">⚠️ API Key ของ OpenAI-compatible จะถูกส่งไปที่ปลายทางนี้ เลือกเฉพาะเมื่อเป็นไฟล์สำรองของคุณเอง</div></div>
+        </label>
+      </div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px; flex-shrink: 0;">
+        <button class="btn" onclick="cancelBackupImport()">ยกเลิก</button>
+        <button class="btn btn-primary" id="backup-import-confirm-btn" onclick="confirmBackupImport()">นำเข้า</button>
+      </div>
     </div>
   </div>
 
@@ -747,6 +792,48 @@
             </div>
           </label>
         </div>
+
+        <!-- DATA & SECURITY -->
+        <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
+          <div class="form-label">💾 ข้อมูลและความปลอดภัย</div>
+          <div id="storage-status" style="font-size: 12px; line-height: 1.6;"></div>
+          <button class="btn btn-secondary" id="persist-storage-btn" style="display: none; margin-top: 6px; padding: 3px 10px; font-size: 11px;" onclick="requestPersistFromSettings()">ขอพื้นที่จัดเก็บแบบถาวร</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="backup-remind-days">เตือนให้สำรองข้อมูล เมื่อไม่ได้สำรองนานเกิน</label>
+          <select id="backup-remind-days" class="form-input">
+            <option value="0">ไม่เตือน</option>
+            <option value="3">3 วัน</option>
+            <option value="7">7 วัน</option>
+            <option value="14">14 วัน</option>
+            <option value="30">30 วัน</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <div class="form-label">สำรองอัตโนมัติลงโฟลเดอร์ในเครื่อง</div>
+          <div id="auto-backup-status" style="font-size: 11px; opacity: 0.75; line-height: 1.5;"></div>
+          <div id="auto-backup-actions" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;"></div>
+        </div>
+        <div class="form-group">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
+            <input type="checkbox" id="secrets-session-only" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
+            <div>
+              <span>ไม่จำ API Key หลังปิดแท็บ</span>
+              <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">ปลอดภัยกว่าบนเครื่องที่ใช้ร่วมกับคนอื่น แต่ต้องใส่ Key ใหม่ทุกครั้งที่เปิดแท็บใหม่ (มีผลกับ Jina Key ด้วย)</div>
+            </div>
+          </label>
+          <button class="btn btn-danger" style="margin-top: 8px; padding: 3px 10px; font-size: 11px;" onclick="clearAllApiKeys()">ลบ API Key ทั้งหมดออกจากเบราว์เซอร์นี้</button>
+        </div>
+        <details style="font-size: 11px; line-height: 1.6; margin-bottom: 6px;">
+          <summary style="cursor: pointer; font-weight: 600;">🔒 ข้อมูลของคุณถูกส่งไปที่ไหนบ้าง</summary>
+          <ul style="padding-left: 18px; margin-top: 4px; opacity: 0.85;">
+            <li>นิยาย ตอน คลังศัพท์ และการตั้งค่า เก็บในเบราว์เซอร์เครื่องนี้เท่านั้น ไม่มีเซิร์ฟเวอร์ของแอพ</li>
+            <li>ลิงก์ที่วางและเนื้อหาหน้าเว็บ ผ่านบริการ r.jina.ai เพื่อแปลงหน้าเว็บเป็นข้อความ</li>
+            <li>ต้นฉบับ คำแปล คลังศัพท์ และคู่มือเรื่องที่เกี่ยวข้อง ถูกส่งไปยังผู้ให้บริการ AI ที่เลือก พร้อม API Key ของคุณ</li>
+            <li>หน้านี้อนุญาตให้ส่งข้อมูลไปได้เฉพาะ Google Gemini, Anthropic, r.jina.ai และ Base URL ที่คุณตั้งไว้</li>
+            <li>แนะนำ: ตั้งวงเงินใช้จ่ายของ API Key ที่หน้าเว็บผู้ให้บริการ และอย่าใช้ Key เดียวกับงานสำคัญอื่น</li>
+          </ul>
+        </details>
       </div>
 
       <div style="margin-top: 14px; flex-shrink: 0;">
@@ -757,6 +844,7 @@
 
   <!-- SCRIPTS ORDERED DEPENDENCIES -->
   <script src="js/db.js"></script>
+  <script src="js/safety.js"></script>
   <script src="js/llm.js"></script>
   <script src="js/lang.js"></script>
   <script src="js/api.js"></script>

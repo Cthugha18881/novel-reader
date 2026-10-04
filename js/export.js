@@ -1,5 +1,7 @@
 // ==================== EXPORT WHOLE BOOK (TXT / EPUB) ====================
-const JSZIP_URL = 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js';
+// JSZip 3.10.1 เก็บไว้ใน repo (ตรง SRI ของ cdnjs) ไม่โหลดจาก CDN: ใช้ได้แม้ออฟไลน์ และไม่ต้องเชื่อใจเซิร์ฟเวอร์ภายนอก
+// อ้างอิงจากตำแหน่งของไฟล์นี้ เพื่อให้ใช้ได้ทั้งจากหน้าแอพและหน้า tests/
+const JSZIP_URL = new URL('../vendor/jszip.min.js', document.currentScript?.src || location.href).href;
 let jszipLoading = null;
 
 function loadJSZip() {
@@ -9,7 +11,7 @@ function loadJSZip() {
       const s = document.createElement('script');
       s.src = JSZIP_URL;
       s.onload = () => window.JSZip ? resolve(window.JSZip) : reject(new Error('โหลด JSZip ไม่สำเร็จ'));
-      s.onerror = () => { jszipLoading = null; reject(new Error('โหลดไลบรารีสร้าง EPUB ไม่สำเร็จ (ต้องต่ออินเทอร์เน็ตครั้งแรก)')); };
+      s.onerror = () => { jszipLoading = null; reject(new Error('โหลดไลบรารีอ่าน/สร้าง EPUB ไม่สำเร็จ ลองรีโหลดหน้าแล้วทำใหม่')); };
       document.head.appendChild(s);
     });
   }
