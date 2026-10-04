@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.7.0</title>
+  <title>NovelTranslate AI v2.7.1</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -492,6 +492,26 @@
           <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
             <input type="checkbox" id="enable-auto-glossary" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
             <span>เปิดใช้งานระบบ Auto-Glossary (สกัดชื่อเฉพาะอัตโนมัติ)</span>
+          </label>
+        </div>
+
+        <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
+            <input type="checkbox" id="show-junk-paras" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
+            <div>
+              <span>แสดงข้อความจากหน้าเว็บที่ระบบซ่อนไว้</span>
+              <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">เช่น "收藏本站", ลิงก์เว็บ, เมนูนำทาง ระบบไม่แปลข้อความเหล่านี้เพื่อประหยัดโควตา</div>
+            </div>
+          </label>
+        </div>
+
+        <div class="form-group" style="margin-top: 8px;">
+          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
+            <input type="checkbox" id="export-include-notes" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
+            <div>
+              <span>รวมประกาศและข้อความผู้เขียนเมื่อส่งออก TXT / EPUB</span>
+              <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">ตอนพิเศษ (番外) จะถูกรวมเสมอ ส่วนตอนกันก๊อปและข้อความจากหน้าเว็บจะไม่ถูกรวม</div>
+            </div>
           </label>
         </div>
       </div>

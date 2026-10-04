@@ -204,6 +204,58 @@
       return eq([rec.bookId, rec.order, rec.chapterType, rec.translationMeta.promptVersion, typeof rec.translationMeta.translatedAt], ['b', 3, 'story', PROMPT_VERSION, 'number']);
     });
 
+    // ---------- Phase 2: content classification ----------
+    test('classify: ตอนกันก๊อป (防盗)', () => eq(classifyChapterByRules('第12章 风起', '本章为防盗章节，稍后替换为正文。' + '废话'.repeat(30)).type, 'placeholder'));
+    test('classify: ตอนยาวที่มีคำ 防盗 ท้ายเรื่องไม่ถือเป็นกันก๊อป', () => eq(classifyChapterByRules('第12章 风起', '正文'.repeat(1700) + '防盗').type, 'story'));
+    test('classify: ประกาศลาหยุด (ไม่มีเลขตอน) = author_note high', () => eq(classifyChapterByRules('请假条', '今天身体不适，请假一天。'), { type: 'author_note', confidence: 'high', reason: 'note-title' }));
+    test('classify: ชื่อมีเลขตอน + คำประกาศ = low (ให้ AI ตัดสิน)', () => eq(classifyChapterByRules('第100章 上架感言', '正文'.repeat(10)).confidence, 'low'));
+    test('classify: 番外 = side_story', () => eq(classifyChapterByRules('番外一 童年', '正文').type, 'side_story'));
+    test('classify: ตอนปกติ = story', () => eq(classifyChapterByRules('第1章 少年', '正文').type, 'story'));
+
+    test('labelParagraphs: ข้อความเว็บสั้น = site_junk, ยาวไม่โดน', () => {
+      const kinds = labelParagraphsByRules(['天才一秒记住本站地址：www.xxx.com', '他看着远方，心里想着笔趣阁里的那本书究竟写了什么样的故事，越想越觉得有趣，越想越觉得不可思议，于是决定明天一早就去书店看看那本书到底在讲什么。', '正文']);
+      return eq(kinds, ['site_junk', 'story', 'story']);
+    });
+    test('isSiteJunkParagraph: คำอ่อนในย่อหน้าสั้นมาก = ขยะ, ในประโยคเนื้อเรื่อง = ไม่ใช่', () =>
+      isSiteJunkParagraph('笔趣阁 最新章节') && isSiteJunkParagraph('上一章 返回目录 下一章') &&
+      !isSiteJunkParagraph('他说下一章的内容会更精彩，让大家拭目以待吧。') && !isSiteJunkParagraph('他在笔趣阁看书看了一整夜，第二天起来眼睛都红了。'));
+    test('labelParagraphs: PS ท้ายตอน -> author_note ไปจนจบ', () => {
+      const paras = Array.from({ length: 10 }, (_, i) => `正文${i}`).concat(['PS：求月票！', '感谢大家支持']);
+      const kinds = labelParagraphsByRules(paras);
+      return eq(kinds.slice(-3), ['story', 'author_note', 'author_note']) && kinds.slice(0, 10).every(k => k === 'story');
+    });
+    test('labelParagraphs: PS ต้นตอนไม่นับ (ไม่อยู่ช่วงท้าย)', () => {
+      const paras = ['PS：开头说明'].concat(Array.from({ length: 20 }, (_, i) => `正文${i}`));
+      return labelParagraphsByRules(paras).every(k => k === 'story');
+    });
+    test('labelParagraphs: วงเล็บขอโหวตกลางตอน', () => eq(labelParagraphsByRules(['正文', '（求月票支持！）', '正文']), ['story', 'author_note', 'story']));
+
+    test('resolveChapterType: กฎ high ชนะ AI', () => eq(resolveChapterType({ type: 'side_story', confidence: 'high' }, 'story', []), 'side_story'));
+    test('resolveChapterType: AI ว่าประกาศ แต่เนื้อเรื่องยาว -> story', () => {
+      const paras = Array.from({ length: 10 }, () => ({ src: '正文'.repeat(200) }));
+      return eq(resolveChapterType({ type: 'story', confidence: 'low' }, 'author_note', paras), 'story');
+    });
+    test('resolveChapterType: AI ว่าประกาศ + ย่อหน้าส่วนใหญ่เป็นข้อความผู้เขียน -> author_note', () => {
+      const paras = [{ src: 'x'.repeat(900), kind: 'author_note' }, { src: 'x'.repeat(900), kind: 'author_note' }, { src: 'x'.repeat(100) }];
+      return eq(resolveChapterType({ type: 'story', confidence: 'low' }, 'author_note', paras), 'author_note');
+    });
+    test('findPrevStoryChapter: ข้ามประกาศ/ตอนพิเศษ/กันก๊อป', () => {
+      const chs = [{ order: 1, summary: 'a' }, { order: 2, chapterType: 'story', summary: 'b' }, { order: 3, chapterType: 'author_note', summary: '' }, { order: 4, chapterType: 'side_story', summary: 'x' }, { order: 5, chapterType: 'placeholder' }];
+      return eq([findPrevStoryChapter(chs)?.summary, findPrevStoryChapter(chs, 2)?.summary], ['b', 'a']);
+    });
+    test('prepareChaptersForExport: ตัดกันก๊อป/ข้อความเว็บ, ประกาศตามตัวเลือก', () => {
+      const chs = [
+        { title: 'a', chapterType: 'story', paragraphs: [{ th: 'ก' }, { th: '', kind: 'site_junk' }, { th: 'ขอโหวต', kind: 'author_note' }] },
+        { title: 'b', chapterType: 'author_note', paragraphs: [{ th: 'ลาหยุด', kind: 'author_note' }] },
+        { title: 'c', chapterType: 'placeholder', paragraphs: [{ th: '' }] },
+        { title: 'd', chapterType: 'side_story', paragraphs: [{ th: 'พิเศษ' }] }
+      ];
+      const without = prepareChaptersForExport(chs, false);
+      const withNotes = prepareChaptersForExport(chs, true);
+      return eq(without.map(c => [c.title, c.paragraphs.length]), [['a', 1], ['d', 1]]) && eq(withNotes.map(c => [c.title, c.paragraphs.length]), [['a', 2], ['b', 1], ['d', 1]]);
+    });
+    test('SCHEMAS.translation มี chapter_type และ kind', () => SCHEMAS.translation.required.includes('chapter_type') && SCHEMAS.translation.properties.paragraphs.items.required.includes('kind'));
+
     const passed = results.filter(r => r.ok).length;
     const summary = document.getElementById('summary');
     summary.textContent = `ผ่าน ${passed}/${results.length}`;

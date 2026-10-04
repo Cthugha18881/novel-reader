@@ -110,7 +110,7 @@ async function startBatchTranslateForBook(bookId) {
           signal,
           rawChapTitle,
           rawBookTitle,
-          prevSummary: lastChap?.summary || "",
+          prevSummary: findPrevStoryChapter(existingAll)?.summary || "",
           onStatus: (msg) => { progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 60)}`; }
         });
 
@@ -214,14 +214,18 @@ function renderChaptersHtml(bookId, bookChaps, readingChapId) {
     }
 
     const activeClass = isActive ? 'active' : '';
+    const chapterType = ch.chapterType || 'story';
+    const typeIcon = (CHAPTER_TYPE_LABELS[chapterType] || CHAPTER_TYPE_LABELS.story).split(' ')[0];
+    const typeOptions = CHAPTER_TYPES.map(t => `<option value="${t}" ${t === chapterType ? 'selected' : ''}>${CHAPTER_TYPE_LABELS[t]}</option>`).join('');
 
     chapsHtml += `
-      <div class="chap-subitem ${activeClass}">
+      <div class="chap-subitem ${activeClass}${chapterType !== 'story' ? ' chap-nonstory' : ''}">
           <input type="checkbox" class="chap-chk" data-book-id="${escapeHtml(bookId)}" value="${escapeHtml(ch.id)}" onchange="updateSelectedDeleteBtn(${jsArg(bookId)})">
-        <div class="chap-name-btn" onclick="jumpToChapterById(${jsArg(bookId)}, ${jsArg(ch.id)})">
-          📖 ${escapeHtml(ch.title)}
+        <div class="chap-name-btn" onclick="jumpToChapterById(${jsArg(bookId)}, ${jsArg(ch.id)})" title="${escapeHtml(CHAPTER_TYPE_LABELS[chapterType] || '')}">
+          ${typeIcon} ${escapeHtml(ch.title)}
         </div>
         <div style="display:flex; gap:6px; align-items:center;">
+          <select class="chap-type-select" onchange="setChapterType(${jsArg(bookId)}, ${jsArg(ch.id)}, this.value)" title="ประเภทตอน (มีผลกับการต่อบริบทและการส่งออก)">${typeOptions}</select>
           <button class="chap-action-btn" style="background:rgba(37,99,235,0.1); color:#2563eb;" onclick="jumpToChapterById(${jsArg(bookId)}, ${jsArg(ch.id)})">อ่าน</button>
           <button class="chap-action-btn" style="background:rgba(16,185,129,0.1); color:#059669;" onclick="retranslateSpecificChapter(event, ${jsArg(bookId)}, ${jsArg(ch.id)})" title="แปลบทนี้ใหม่ตามคลังคำศัพท์ล่าสุด">🔄 แปลใหม่</button>
         </div>

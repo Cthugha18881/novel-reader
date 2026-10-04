@@ -27,12 +27,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v2.7.0",
+    title: "คู่มือเริ่มต้น v2.7.1",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.7.0", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.7.1", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.7.0"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.7.1"
   }];
 }
 
@@ -92,9 +92,8 @@ function cycleTheme() {
   const themes = ['sepia', 'light', 'dark'];
   currentTheme = themes[(themes.indexOf(currentTheme) + 1) % themes.length];
   const body = document.getElementById('app-body');
-  const wasFullscreen = body.classList.contains('is-fullscreen');
-  body.className = 'theme-' + currentTheme;
-  if (wasFullscreen) body.classList.add('is-fullscreen');
+  ['theme-sepia', 'theme-light', 'theme-dark'].forEach(cls => body.classList.remove(cls));
+  body.classList.add('theme-' + currentTheme);
 
   const themeText = currentTheme === 'sepia' ? 'ถนอมสายตา' : (currentTheme === 'light' ? 'สว่าง' : 'มืด');
   const mobileBtn = document.getElementById('mobile-theme-btn');
@@ -128,26 +127,102 @@ function closeModal(id) {
   }
 }
 
+const CHAPTER_TYPE_LABELS = {
+  story: '📖 เนื้อเรื่อง',
+  side_story: '✨ ตอนพิเศษ',
+  author_note: '📢 ประกาศผู้เขียน',
+  placeholder: '🛡️ ตอนกันก๊อป'
+};
+
+function buildPlaceholderNoticeHtml(chap) {
+  const srcHtml = chap.paragraphs.map(p => `<p>${escapeHtml(p.src || '')}</p>`).join('');
+  return `
+    <div class="placeholder-notice">
+      <div style="font-weight: 600; margin-bottom: 4px;">🛡️ ตอนนี้ยังเป็นเนื้อหากันก๊อป (ข้อความหลอก)</div>
+      <div style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">ผู้เขียนมักเปลี่ยนเป็นเนื้อหาจริงภายหลัง ระบบจึงยังไม่แปลเพื่อประหยัดโควตา และไม่ใช้ตอนนี้ต่อบริบทของเรื่อง</div>
+      ${chap.sourceUrl ? `<button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="refetchChapterFromSource(${jsArg(chap.id)})">🔄 ดึงเนื้อหาจริงจากหน้าเว็บใหม่</button>` : ''}
+      <details style="margin-top: 10px; font-size: 12px;"><summary style="cursor: pointer; opacity: 0.7;">ดูข้อความต้นฉบับที่ดึงมา</summary><div class="para-src" style="display: block;">${srcHtml}</div></details>
+    </div>`;
+}
+
 function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
+  const chapterType = chap.chapterType || 'story';
+  const isNoteChapter = chapterType === 'author_note';
   let parasHtml = '';
-  chap.paragraphs.forEach((p, pIdx) => {
-    const highlightedTh = applyInlineTermHighlighting(p.th || "", activeTerms);
-    parasHtml += `
-      <div class="para-item" id="para-box-${chapIdx}-${pIdx}">
+  let junkCount = 0;
+
+  if (chapterType === 'placeholder') {
+    parasHtml = buildPlaceholderNoticeHtml(chap);
+  } else {
+    chap.paragraphs.forEach((p, pIdx) => {
+      const kind = p.kind || 'story';
+      if (kind === 'site_junk') {
+        junkCount++;
+        // ไม่ลบทิ้ง แค่ซ่อนไว้ เลขย่อหน้า (ใช้จำตำแหน่งอ่าน) จึงไม่เลื่อน
+        parasHtml += `
+      <div class="para-item para-junk" id="para-box-${chapIdx}-${pIdx}">
+        <span class="para-kind-label">🌐 ข้อความจากหน้าเว็บ (ไม่ได้แปล)</span>
+        <div class="para-src" style="display: block;">${escapeHtml(p.src || '')}</div>
+      </div>`;
+        return;
+      }
+      const highlightedTh = applyInlineTermHighlighting(p.th || "", activeTerms);
+      const noteLabel = (kind === 'author_note' && !isNoteChapter)
+        ? `<span class="para-kind-label">📝 ข้อความผู้เขียน <button class="para-kind-reset" onclick="markParagraphAsStory(event, ${chapIdx}, ${pIdx})" title="ไม่ใช่ข้อความผู้เขียน เปลี่ยนเป็นเนื้อเรื่อง">ไม่ใช่</button></span>`
+        : '';
+      parasHtml += `
+      <div class="para-item${kind === 'author_note' ? ' para-note' : ''}" id="para-box-${chapIdx}-${pIdx}">
+        ${noteLabel}
         <div class="para-th" onclick="toggleParagraphSrc(event, '${chapIdx}-${pIdx}')" data-unique-key="${chapIdx}-${pIdx}" data-th="${escapeHtml(encodeURIComponent(p.th || ''))}" data-src="${escapeHtml(encodeURIComponent(p.src || ''))}">${highlightedTh}</div>
         <div class="para-src" id="src-${chapIdx}-${pIdx}">${escapeHtml(p.src || "ไม่มีข้อความต้นฉบับ")}</div>
       </div>
     `;
-  });
+    });
+    if (junkCount > 0) {
+      parasHtml += `<div class="junk-toggle-line">ซ่อนข้อความจากหน้าเว็บไว้ ${junkCount} ย่อหน้า · <a href="#" onclick="toggleShowJunk(event)">${document.body.classList.contains('show-junk') ? 'ซ่อน' : 'แสดง'}</a></div>`;
+    }
+  }
 
+  const typeBadge = chapterType !== 'story' ? `<span class="chapter-type-badge type-${chapterType}">${CHAPTER_TYPE_LABELS[chapterType] || chapterType}</span>` : '';
   return `
-      <div class="chapter-block" id="chapter-block-${chapIdx}" data-index="${chapIdx}" data-id="${escapeHtml(chap.id)}">
+      <div class="chapter-block chapter-type-${chapterType}" id="chapter-block-${chapIdx}" data-index="${chapIdx}" data-id="${escapeHtml(chap.id)}">
       <div class="chapter-block-divider">
         <span class="chapter-divider-pill">📖 ${escapeHtml(chap.title)}</span>
       </div>
-      <div class="chapter-body">${parasHtml}</div>
+      ${typeBadge ? `<div style="text-align: center; margin: -10px 0 16px;">${typeBadge}</div>` : ''}
+      <div class="chapter-body${isNoteChapter ? ' note-chapter-body' : ''}">${parasHtml}</div>
     </div>
   `;
+}
+
+function toggleShowJunk(e) {
+  if (e) e.preventDefault();
+  const show = !document.body.classList.contains('show-junk');
+  document.body.classList.toggle('show-junk', show);
+  localStorage.setItem('nov_show_junk', show ? 'true' : 'false');
+  const chk = document.getElementById('show-junk-paras');
+  if (chk) chk.checked = show;
+  renderVirtualWindow(currentChapterIndex);
+}
+
+// AI จัดย่อหน้าเนื้อเรื่องเป็นข้อความผู้เขียนผิด: ให้ผู้ใช้แก้กลับได้ทันที
+async function markParagraphAsStory(e, chapIdx, pIdx) {
+  if (e) e.stopPropagation();
+  const chap = chapters[chapIdx];
+  if (!chap?.paragraphs[pIdx]) return;
+  delete chap.paragraphs[pIdx].kind;
+  await dbSaveChapter(chap);
+  renderVirtualWindow(currentChapterIndex);
+}
+
+async function setChapterType(bookId, chapId, type) {
+  if (!CHAPTER_TYPES.includes(type)) return;
+  const chap = chapters.find(c => c.id === chapId) || (await dbGetChaptersByBook(bookId)).find(c => c.id === chapId);
+  if (!chap) return;
+  chap.chapterType = type;
+  await dbSaveChapter(chap);
+  if (currentBookId === bookId) renderVirtualWindow(currentChapterIndex);
+  refreshShelfViewOnly(bookId);
 }
 
 function updateInfiniteStatusBanner(htmlContent = '', isVisible = true) {
@@ -573,6 +648,8 @@ async function retranslateSpecificChapterDirect(chapId) {
     }
   }
   if (!chapter || !Array.isArray(chapter.paragraphs)) return alert('ไม่พบบทนี้ในฐานข้อมูล');
+  // ตอนกันก๊อป: เนื้อหาจริงอาจถูกเปลี่ยนที่หน้าเว็บแล้ว ต้องดึงใหม่ ไม่ใช่แปลข้อความหลอกเดิม
+  if (chapter.chapterType === 'placeholder' && chapter.sourceUrl) return refetchChapterFromSource(chapId);
   const rawText = chapter.paragraphs.map(p => p.src || '').filter(Boolean).join('\n\n');
   if (!rawText) return alert('บทนี้ไม่มีต้นฉบับภาษาจีน จึงแปลใหม่ไม่ได้');
 
@@ -584,31 +661,77 @@ async function retranslateSpecificChapterDirect(chapId) {
   const controller = beginTask('retranslate');
   showGlobalToast(`กำลังแปล "${chapter.title}" ใหม่...`);
   try {
-    // ใช้ summary ของบทก่อนหน้าเป็นบริบท (ไม่ใช่ summary ของบทตัวเอง)
+    // ใช้ summary ของตอนเนื้อเรื่องก่อนหน้าเป็นบริบท (ไม่ใช่ของบทตัวเอง และข้ามประกาศผู้เขียน)
     const bookChaps = await dbGetChaptersByBook(bookId);
-    const prevChap = bookChaps
-      .filter(c => (c.order || 0) < (chapter.order || 0))
-      .sort((a, b) => b.order - a.order)[0];
     const result = await translateChapter(rawText, ctx, {
       signal: controller.signal,
       onStatus: showGlobalToast,
-      prevSummary: prevChap?.summary || ''
+      rawChapTitle: chapter.title,
+      prevSummary: findPrevStoryChapter(bookChaps, chapter.order ?? 0)?.summary || ''
     });
-    chapter.paragraphs = result.paragraphs;
-    chapter.summary = result.summary || chapter.summary || '';
-    chapter.translationMeta = result.translationMeta;
-    await dbSaveChapter(chapter);
-    const activeCopy = chapters.find(item => item.id === chapId);
-    if (activeCopy) {
-      activeCopy.paragraphs = chapter.paragraphs;
-      activeCopy.summary = chapter.summary;
-      activeCopy.translationMeta = chapter.translationMeta;
-    }
-    if (currentBookId === bookId) await renderVirtualWindow(currentChapterIndex);
-    await refreshShelfViewOnly(bookId);
+    await applyTranslationToChapter(chapter, result, { updateTitle: false });
     alert(`แปล "${chapter.title}" ใหม่และบันทึกแล้ว`);
   } catch (err) {
     if (!isAbortError(err)) alert(`แปลบทใหม่ไม่สำเร็จ: ${err.message}`);
+  } finally {
+    endTask('retranslate', controller);
+    hideGlobalToast();
+  }
+}
+
+// บันทึกผลแปลทับตอนเดิม (คง id/ลำดับ/URL ไว้) แล้วอัปเดตหน้าจอที่เกี่ยวข้อง
+async function applyTranslationToChapter(chapter, result, { updateTitle = false, nextUrl = undefined } = {}) {
+  chapter.paragraphs = result.paragraphs;
+  chapter.summary = result.summary || '';
+  chapter.chapterType = result.chapterType || 'story';
+  chapter.translationMeta = result.translationMeta;
+  if (updateTitle && result.chapterTitle) chapter.title = result.chapterTitle;
+  if (nextUrl) chapter.nextUrl = nextUrl;
+  await dbSaveChapter(chapter);
+
+  const activeCopy = chapters.find(item => item.id === chapter.id);
+  if (activeCopy && activeCopy !== chapter) Object.assign(activeCopy, chapter);
+  if (currentBookId === chapter.bookId) {
+    if (nextUrl && chapters[chapters.length - 1]?.id === chapter.id) nextUrlCalculated = nextUrl;
+    await renderVirtualWindow(currentChapterIndex);
+  }
+  await refreshShelfViewOnly(chapter.bookId);
+}
+
+/** ดึงเนื้อหาจากหน้าเว็บต้นฉบับใหม่แล้วแปล (ใช้กับตอนกันก๊อปที่ผู้เขียนเปลี่ยนเป็นเนื้อหาจริงแล้ว) */
+async function refetchChapterFromSource(chapId) {
+  let chapter = chapters.find(ch => ch.id === chapId);
+  if (!chapter) {
+    for (const book of await dbGetAllBooks()) {
+      chapter = (await dbGetChaptersByBook(book.bookId)).find(ch => ch.id === chapId);
+      if (chapter) break;
+    }
+  }
+  if (!chapter?.sourceUrl) return alert('ตอนนี้ไม่มี URL ต้นฉบับ จึงดึงเนื้อหาใหม่ไม่ได้');
+  if (isTaskRunning('retranslate')) return alert('กำลังแปลบทอื่นใหม่อยู่ กรุณารอให้เสร็จก่อน');
+
+  const books = await dbGetAllBooks();
+  const ctx = makeBookContext(books.find(b => b.bookId === chapter.bookId) || getCurrentBookContext());
+  const controller = beginTask('retranslate');
+  showGlobalToast('กำลังดึงเนื้อหาจากหน้าเว็บต้นฉบับใหม่...');
+  try {
+    const scraped = await scrapePage(chapter.sourceUrl, controller.signal);
+    if (classifyChapterByRules(scraped.rawChapTitle, scraped.text).type === 'placeholder') {
+      alert('หน้าเว็บยังเป็นเนื้อหากันก๊อปอยู่ ผู้เขียนอาจยังไม่ได้อัปเดตเนื้อหาจริง ลองใหม่ภายหลังนะครับ');
+      return;
+    }
+    const bookChaps = await dbGetChaptersByBook(chapter.bookId);
+    const result = await translateChapter(scraped.text, ctx, {
+      signal: controller.signal,
+      onStatus: showGlobalToast,
+      rawChapTitle: scraped.rawChapTitle,
+      rawBookTitle: scraped.rawBookTitle,
+      prevSummary: findPrevStoryChapter(bookChaps, chapter.order ?? 0)?.summary || ''
+    });
+    await applyTranslationToChapter(chapter, result, { updateTitle: true, nextUrl: scraped.nextUrlSource === 'link' ? scraped.nextUrl : undefined });
+    alert(`ดึงและแปล "${chapter.title}" เรียบร้อยแล้ว`);
+  } catch (err) {
+    if (!isAbortError(err)) alert(`ดึงเนื้อหาใหม่ไม่สำเร็จ: ${isMissingPageError(err) ? 'ไม่พบหน้าเว็บ' : err.message}`);
   } finally {
     endTask('retranslate', controller);
     hideGlobalToast();
@@ -922,7 +1045,7 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       signal,
       rawChapTitle,
       rawBookTitle,
-      prevSummary: lastChap?.summary || "",
+      prevSummary: findPrevStoryChapter(chapters)?.summary || "",
       onStatus: (msg) => {
         if (currentBookId !== requestBookId) return;
         updateInfiniteStatusBanner(`
@@ -1026,7 +1149,7 @@ async function handleNextChapterClick() {
       signal,
       rawChapTitle,
       rawBookTitle,
-      prevSummary: lastChap?.summary || "",
+      prevSummary: findPrevStoryChapter(chapters)?.summary || "",
       onStatus: (msg) => { btnText.innerText = msg.substring(0, 30) + "..."; }
     });
 
@@ -1179,7 +1302,7 @@ async function startTranslateFirst() {
 
     status.innerText = `พบ "${rawChapTitle}" กำลังวิเคราะห์ชื่อเฉพาะและแปลผ่าน AI...`;
 
-    const prevChap = existingChaps.reduce((best, c) => (!best || (c.order || 0) > (best.order || 0)) ? c : best, null);
+    const prevChap = findPrevStoryChapter(existingChaps);
     const result = await translateChapter(text, ctx, {
       signal,
       rawChapTitle,
@@ -1368,6 +1491,10 @@ function saveSettings() {
   localStorage.setItem('nov_enable_infinite', document.getElementById('enable-infinite-scroll').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_prefetch', document.getElementById('enable-live-prefetch').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_auto_glossary', document.getElementById('enable-auto-glossary').checked ? 'true' : 'false');
+  const showJunk = document.getElementById('show-junk-paras').checked;
+  localStorage.setItem('nov_show_junk', showJunk ? 'true' : 'false');
+  document.body.classList.toggle('show-junk', showJunk);
+  localStorage.setItem('nov_export_notes', document.getElementById('export-include-notes').checked ? 'true' : 'false');
 
   lastPrefetchError = '';
   closeModal('settings-modal');
@@ -1414,6 +1541,13 @@ function loadSettings() {
 
   const autoGlossChk = document.getElementById('enable-auto-glossary');
   if (autoGlossChk) autoGlossChk.checked = (localStorage.getItem('nov_enable_auto_glossary') !== 'false');
+
+  const showJunk = localStorage.getItem('nov_show_junk') === 'true';
+  document.body.classList.toggle('show-junk', showJunk);
+  const showJunkChk = document.getElementById('show-junk-paras');
+  if (showJunkChk) showJunkChk.checked = showJunk;
+  const exportNotesChk = document.getElementById('export-include-notes');
+  if (exportNotesChk) exportNotesChk.checked = localStorage.getItem('nov_export_notes') === 'true';
 }
 
 // ==================== BACKUP ====================

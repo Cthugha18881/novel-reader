@@ -28,10 +28,30 @@ function downloadBlob(blob, filename) {
   setTimeout(() => URL.revokeObjectURL(a.href), 5000);
 }
 
+/**
+ * เลือกเนื้อหาที่จะส่งออก: ไม่รวมตอนกันก๊อปและข้อความจากหน้าเว็บเสมอ
+ * ประกาศ/ข้อความผู้เขียนรวมเฉพาะเมื่อผู้ใช้เปิดตัวเลือกไว้ ตอนพิเศษรวมเสมอ
+ */
+function prepareChaptersForExport(chaps, includeNotes = false) {
+  return chaps
+    .filter(ch => ch.chapterType !== 'placeholder' && (includeNotes || ch.chapterType !== 'author_note'))
+    .map(ch => ({
+      ...ch,
+      paragraphs: (ch.paragraphs || []).filter(p => {
+        const kind = p.kind || 'story';
+        if (kind === 'site_junk') return false;
+        if (kind === 'author_note' && !includeNotes) return false;
+        return (p.th || '').trim();
+      })
+    }))
+    .filter(ch => ch.paragraphs.length > 0);
+}
+
 async function loadBookForExport(bookId) {
   const book = (await dbGetAllBooks()).find(b => b.bookId === bookId);
   if (!book) throw new Error('ไม่พบนิยายเรื่องนี้');
-  const chaps = (await dbGetChaptersByBook(bookId)).sort((a, b) => a.order - b.order);
+  const all = (await dbGetChaptersByBook(bookId)).sort((a, b) => a.order - b.order);
+  const chaps = prepareChaptersForExport(all, localStorage.getItem('nov_export_notes') === 'true');
   if (chaps.length === 0) throw new Error('นิยายเรื่องนี้ยังไม่มีตอนที่แปลไว้');
   return { book, chaps };
 }
