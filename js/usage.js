@@ -249,6 +249,38 @@ function countChapterCall(signal) {
   }
 }
 
+// ---------- ตรวจ token ส่วนเกินที่ Gemini คิดแต่ไม่ได้รายงาน (ใช้ countTokens ซึ่งไม่เสียเงิน) ----------
+// เทียบคำขอเดียวกันแบบมี/ไม่มี JSON schema และ system prompt เพื่อดูว่าส่วนไหนถูกนับเพิ่ม
+async function geminiCountTokens(model, key, request) {
+  const res = await guardedFetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:countTokens`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
+    body: JSON.stringify({ generateContentRequest: { model: `models/${model}`, ...request } })
+  });
+  const data = await readJsonSafe(res);
+  if (!res.ok) throw errorFromStatus(res.status, data.error?.message || data._raw?.slice(0, 200));
+  return data.totalTokens || 0;
+}
+
+async function measureGeminiOverhead() {
+  const cfg = getActiveLlmConfig('main', 'gemini');
+  if (!cfg.keys.length || !cfg.model) throw new Error('ต้องใส่ API Key และเลือกโมเดลของ Gemini ก่อน');
+  const key = cfg.keys[0];
+  const ctx = { bookId: 'test', title: 'ทดสอบ', genre: 'xianxia', sourceLang: 'zh' };
+  const contents = [{ role: 'user', parts: [{ text: 'ย่อหน้าต้นฉบับที่ต้องแปล: [{"i":0,"src":"林动缓缓睁开双眼。"}]' }] }];
+  const system = { parts: [{ text: buildTranslationSystemPrompt(ctx) }] };
+  const json = (schema) => ({ response_mime_type: 'application/json', ...(schema ? { responseSchema: toGeminiSchema(schema) } : {}) });
+
+  const base = await geminiCountTokens(cfg.model, key, { contents });
+  const withSystem = await geminiCountTokens(cfg.model, key, { contents, systemInstruction: system });
+  const jsonOnly = await geminiCountTokens(cfg.model, key, { contents, generationConfig: json(null) });
+  const schemas = {};
+  for (const name of ['translation', 'preScan', 'verify', 'polish', 'fidelity']) {
+    schemas[name] = (await geminiCountTokens(cfg.model, key, { contents, generationConfig: json(SCHEMAS[name]) })) - base;
+  }
+  return { model: cfg.model, base, systemTokens: withSystem - base, jsonModeTokens: jsonOnly - base, schemas };
+}
+
 // ---------- บันทึกรายคำขอ (ใช้เทียบกับหน้าเว็บผู้ให้บริการ) ----------
 // เก็บยอดดิบที่ผู้ให้บริการตอบกลับมาของ 300 คำขอล่าสุด + คำขอที่ไม่ได้ยอดกลับมา (เช่นถูกยกเลิกกลางทาง)
 const REQUEST_LOG_META_KEY = 'requestLog';
@@ -342,7 +374,8 @@ async function buildDiagnosticReport() {
     userAgent: navigator.userAgent,
     settings,
     log: await getDiagnosticLog(),
-    requests: await getRequestLog()
+    requests: await getRequestLog(),
+    geminiOverheadTest: (() => { try { return JSON.parse(localStorage.getItem('nov_gemini_overhead_test') || 'null'); } catch (e) { return null; } })()
   };
 }
 

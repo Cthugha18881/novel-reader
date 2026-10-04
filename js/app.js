@@ -27,12 +27,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v3.1.1",
+    title: "คู่มือเริ่มต้น v3.1.2",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.1.1", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.1.2", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.1.1"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.1.2"
   }];
 }
 
@@ -2345,6 +2345,8 @@ async function renderUsageDashboard() {
     ? `คำขอล่าสุด ${reqs.length} ครั้ง: ได้ยอด token กลับมา ${reqs.length - noUsage.length} ครั้ง · ไม่ได้ยอดกลับมา ${noUsage.length} ครั้ง (ถูกยกเลิกกลางทาง ${aborted}, เชื่อมต่อหลุด/เซิร์ฟเวอร์ผิดพลาด ${netFail}) — คำขอที่ไม่ได้ยอดกลับมา ผู้ให้บริการอาจยังคิดค่า token ขาเข้าอยู่`
     : 'ยังไม่มีบันทึกคำขอ';
 
+  try { renderGeminiOverheadResult(JSON.parse(localStorage.getItem('nov_gemini_overhead_test') || 'null')); } catch (e) {}
+
   const log = await getDiagnosticLog();
   document.getElementById('diag-log-count').innerText = log.length;
   document.getElementById('diag-log-recent').innerHTML = log.slice(-8).reverse().map(e =>
@@ -2390,6 +2392,32 @@ async function saveModelPricesFromForm() {
   await renderUsageDashboard();
   showGlobalToast('✓ บันทึกราคาแล้ว');
   setTimeout(hideGlobalToast, 1500);
+}
+
+function renderGeminiOverheadResult(r) {
+  const el = document.getElementById('gemini-overhead-result');
+  if (!el || !r) return;
+  if (r.error) {
+    el.innerHTML = `<span style="color: #dc2626;">ตรวจไม่สำเร็จ: ${escapeHtml(r.error)}</span>`;
+    return;
+  }
+  const rows = Object.entries(r.schemas).map(([name, n]) => `${escapeHtml(name)} +${n.toLocaleString()}`).join(' · ');
+  el.innerHTML = `ผลตรวจ (${escapeHtml(r.model)}, ${escapeHtml(new Date(r.at).toLocaleString('th-TH'))}):<br>
+    ข้อความทดสอบ ${r.base.toLocaleString()} token · system prompt +${r.systemTokens.toLocaleString()} · โหมด JSON +${r.jsonModeTokens.toLocaleString()}<br>
+    JSON schema แต่ละแบบเพิ่ม: ${rows}`;
+}
+
+async function runGeminiOverheadTest() {
+  const el = document.getElementById('gemini-overhead-result');
+  el.innerHTML = '<span class="spinner-icon"></span> กำลังตรวจ...';
+  let result;
+  try {
+    result = { ...(await measureGeminiOverhead()), at: new Date().toISOString() };
+  } catch (err) {
+    result = { error: err.message, at: new Date().toISOString() };
+  }
+  localStorage.setItem('nov_gemini_overhead_test', JSON.stringify(result));
+  renderGeminiOverheadResult(result);
 }
 
 async function exportDiagnosticLog() {
