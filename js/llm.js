@@ -278,7 +278,7 @@ async function callGeminiOnce(cfg, key, prompt, opts, signal) {
 
   // Gemini: promptTokenCount รวมส่วนที่อ่านจาก cache แล้ว, token ที่ใช้คิด (thoughts) คิดเงินแบบ output
   const um = data.usageMetadata;
-  if (um && opts.onUsage) opts.onUsage({ input: um.promptTokenCount || 0, output: (um.candidatesTokenCount || 0) + (um.thoughtsTokenCount || 0), cacheRead: um.cachedContentTokenCount || 0 });
+  if (um && opts.onUsage) opts.onUsage({ input: um.promptTokenCount || 0, output: (um.candidatesTokenCount || 0) + (um.thoughtsTokenCount || 0), cacheRead: um.cachedContentTokenCount || 0, raw: um });
 
   const blockReason = data.promptFeedback?.blockReason;
   if (blockReason) throw new LLMError(`คำขอถูกบล็อกโดยระบบความปลอดภัย (${blockReason})`, 'blocked');
@@ -348,7 +348,8 @@ async function callAnthropicOnce(cfg, key, prompt, opts, signal, useFallbacks = 
     output: rawUsage.output_tokens,
     cacheRead: rawUsage.cache_read_input_tokens,
     cacheWrite: rawUsage.cache_creation_input_tokens,
-    model: servedModel
+    model: servedModel,
+    raw: { ...rawUsage }
   });
   const handleEvent = (raw) => {
     const dataLine = raw.split('\n').find(l => l.startsWith('data:'));
@@ -432,7 +433,8 @@ async function callOpenAIOnce(cfg, key, prompt, opts, signal, jsonMode = null) {
     opts.onUsage({
       input: data.usage.prompt_tokens || 0,
       output: data.usage.completion_tokens || 0,
-      cacheRead: data.usage.prompt_tokens_details?.cached_tokens || 0
+      cacheRead: data.usage.prompt_tokens_details?.cached_tokens || 0,
+      raw: data.usage
     });
   }
   const choice = data.choices?.[0];
@@ -478,16 +480,33 @@ async function callLLMWithProvider(prompt, { json = true, schema = null, system 
   if (typeof countChapterCall === 'function') countChapterCall(signal);
 
   const caller = PROVIDER_CALLERS[cfg.provider];
+  let reported = null;
   const onUsage = (u) => {
+    reported = u;
     if (typeof recordUsage === 'function') recordUsage({ ...u, provider: cfg.provider, model: u.model || cfg.model }, signal);
+  };
+  // บันทึกรายคำขอ: ยอดดิบจากผู้ให้บริการ หรือบอกว่าไม่ได้ยอดกลับมา (ใช้หาว่าทำไมยอดในแอพต่างจากหน้าเว็บผู้ให้บริการ)
+  const logAttempt = (attempt, extra) => {
+    if (typeof logRequest !== 'function') return;
+    logRequest({
+      provider: cfg.provider, model: reported?.model || cfg.model, role,
+      task: (typeof getTaskInfo === 'function' && getTaskInfo(signal).task) || '',
+      attempt, promptChars: prompt.length, systemChars: system.length,
+      usage: reported ? (reported.raw || { input: reported.input, output: reported.output }) : null,
+      ...extra
+    });
   };
   let rotationsSinceWait = 0;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     throwIfAborted(signal);
+    reported = null;
     try {
-      return await caller(cfg, pickKey(cfg), prompt, { json, schema, system, onUsage }, signal);
+      const text = await caller(cfg, pickKey(cfg), prompt, { json, schema, system, onUsage }, signal);
+      logAttempt(attempt, { ok: true });
+      return text;
     } catch (err) {
+      logAttempt(attempt, { ok: false, kind: isAbortError(err) || signal?.aborted ? 'abort' : (err.kind || 'error'), status: err.status || 0, error: err.message });
       if (isAbortError(err) || signal?.aborted) throw new LLMError('ผู้ใช้สั่งหยุดการทำงาน', 'abort');
       const retryable = ['rate', 'server', 'network'].includes(err.kind);
       if (!retryable || attempt === maxRetries) {

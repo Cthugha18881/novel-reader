@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/csp.js"></script>
-  <title>NovelTranslate AI v3.1.0</title>
+  <title>NovelTranslate AI v3.1.1</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -202,7 +202,8 @@
 
         <details style="margin-top: 14px;">
           <summary style="cursor: pointer; font-weight: 600;">🧾 บันทึกข้อผิดพลาด (<span id="diag-log-count">0</span> รายการ)</summary>
-          <div style="font-size: 11px; opacity: 0.7; margin: 6px 0;">เก็บ 200 รายการล่าสุด ตัด API Key ออกแล้ว ส่งไฟล์นี้ให้ผู้ช่วยตรวจปัญหาได้</div>
+          <div style="font-size: 11px; opacity: 0.7; margin: 6px 0;">เก็บข้อผิดพลาด 200 รายการ และยอด token ดิบจากผู้ให้บริการของ 300 คำขอล่าสุด ตัด API Key ออกแล้ว ส่งไฟล์นี้ให้ผู้ช่วยตรวจปัญหาได้</div>
+          <div id="request-log-summary" style="font-size: 11px; margin-bottom: 6px;"></div>
           <div id="diag-log-recent"></div>
           <div style="display: flex; gap: 6px; margin-top: 6px;">
             <button class="btn btn-secondary" style="padding: 3px 10px; font-size: 11px;" onclick="exportDiagnosticLog()">⬇️ ส่งออกบันทึก</button>

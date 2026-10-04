@@ -249,6 +249,32 @@ function countChapterCall(signal) {
   }
 }
 
+// ---------- บันทึกรายคำขอ (ใช้เทียบกับหน้าเว็บผู้ให้บริการ) ----------
+// เก็บยอดดิบที่ผู้ให้บริการตอบกลับมาของ 300 คำขอล่าสุด + คำขอที่ไม่ได้ยอดกลับมา (เช่นถูกยกเลิกกลางทาง)
+const REQUEST_LOG_META_KEY = 'requestLog';
+const REQUEST_LOG_MAX = 300;
+let requestLogChain = Promise.resolve();
+
+function logRequest(entry) {
+  const clean = { at: new Date().toISOString(), ...entry };
+  if (clean.error) clean.error = redactSecrets(clean.error).slice(0, 200);
+  requestLogChain = requestLogChain.then(async () => {
+    if (typeof db === 'undefined' || !db) return;
+    const list = (await dbGetMeta(REQUEST_LOG_META_KEY)) || [];
+    list.push(clean);
+    await dbSetMeta(REQUEST_LOG_META_KEY, list.slice(-REQUEST_LOG_MAX));
+  }).catch(() => {});
+  return requestLogChain;
+}
+
+async function getRequestLog() {
+  try {
+    return (await dbGetMeta(REQUEST_LOG_META_KEY)) || [];
+  } catch (e) {
+    return [];
+  }
+}
+
 // ---------- บันทึกข้อผิดพลาด ----------
 const DIAG_META_KEY = 'diagLog';
 const DIAG_MAX_ENTRIES = 200;
@@ -315,7 +341,8 @@ async function buildDiagnosticReport() {
     exportedAt: new Date().toISOString(),
     userAgent: navigator.userAgent,
     settings,
-    log: await getDiagnosticLog()
+    log: await getDiagnosticLog(),
+    requests: await getRequestLog()
   };
 }
 

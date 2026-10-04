@@ -1,7 +1,7 @@
 // Service worker: ทำให้เปิดแอพและอ่านตอนที่บันทึกไว้ได้แม้ออฟไลน์
 // ไฟล์ของแอพใช้ network-first (ออนไลน์ได้เวอร์ชันล่าสุดเสมอ) ส่วนฟอนต์/ไลบรารีจาก CDN ใช้ cache-first
 // คำขอไปยัง AI และ r.jina.ai จะไม่ถูกแตะต้องเลย
-const CACHE_NAME = 'noveltranslate-v3.1.0';
+const CACHE_NAME = 'noveltranslate-v3.1.1';
 const APP_SHELL = [
   './',
   'index.html',
@@ -29,7 +29,10 @@ const APP_SHELL = [
 const CACHEABLE_CDN_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
+  // cache: 'reload' = โหลดจากเซิร์ฟเวอร์จริง ไม่เอาไฟล์รุ่นเก่าจาก HTTP cache มาใส่ cache รุ่นใหม่
+  event.waitUntil(caches.open(CACHE_NAME)
+    .then(cache => cache.addAll(APP_SHELL.map(url => new Request(url, { cache: 'reload' }))))
+    .then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (event) => {
@@ -43,7 +46,11 @@ self.addEventListener('activate', (event) => {
 async function networkFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   try {
-    const response = await fetch(request);
+    // cache: 'no-cache' = ถามเซิร์ฟเวอร์ทุกครั้งว่าไฟล์เปลี่ยนไหม (ถ้าไม่เปลี่ยนได้ 304 เร็ว)
+    // ไม่งั้นเบราว์เซอร์อาจใช้ไฟล์เก่าจาก HTTP cache (GitHub Pages ให้เก็บ 10 นาที) ทำให้ไฟล์เก่า/ใหม่ปนกันหลังอัปเดต
+    const response = request.mode === 'navigate'
+      ? await fetch(request.url, { cache: 'no-cache', credentials: 'same-origin' })
+      : await fetch(request, { cache: 'no-cache' });
     if (response.ok) cache.put(request, response.clone());
     return response;
   } catch (err) {

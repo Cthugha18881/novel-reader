@@ -27,12 +27,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v3.1.0",
+    title: "คู่มือเริ่มต้น v3.1.1",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.1.0", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.1.1", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.1.0"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.1.1"
   }];
 }
 
@@ -2335,6 +2335,15 @@ async function renderUsageDashboard() {
       <input type="number" min="0" step="0.001" class="form-input" data-field="cached" placeholder="cache" value="${priceVal(p.cached)}">
     </div>`;
   }).join('') || '<div style="opacity: 0.6;">ยังไม่มีโมเดลที่ใช้งาน</div>';
+
+  // คำขอที่ผู้ให้บริการอาจคิดเงินแต่แอพไม่ได้ยอดกลับมา (ถูกยกเลิกกลางทาง / เชื่อมต่อหลุด)
+  const reqs = await getRequestLog();
+  const noUsage = reqs.filter(r => !r.usage);
+  const aborted = noUsage.filter(r => r.kind === 'abort').length;
+  const netFail = noUsage.filter(r => ['network', 'server', 'truncated', 'empty'].includes(r.kind)).length;
+  document.getElementById('request-log-summary').innerText = reqs.length
+    ? `คำขอล่าสุด ${reqs.length} ครั้ง: ได้ยอด token กลับมา ${reqs.length - noUsage.length} ครั้ง · ไม่ได้ยอดกลับมา ${noUsage.length} ครั้ง (ถูกยกเลิกกลางทาง ${aborted}, เชื่อมต่อหลุด/เซิร์ฟเวอร์ผิดพลาด ${netFail}) — คำขอที่ไม่ได้ยอดกลับมา ผู้ให้บริการอาจยังคิดค่า token ขาเข้าอยู่`
+    : 'ยังไม่มีบันทึกคำขอ';
 
   const log = await getDiagnosticLog();
   document.getElementById('diag-log-count').innerText = log.length;
