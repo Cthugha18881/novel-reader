@@ -10,13 +10,22 @@ async function getActiveGlossaryForCurrentBook() {
   return getActiveGlossaryForBook(currentBookId);
 }
 
+// คำแปลที่ใช้จริงกับเรื่องหนึ่ง: ถ้ามีคำแปลเฉพาะเรื่อง (override) ใช้อันนั้นก่อน
+function resolveTermForBook(item, bookId) {
+  const override = item?.overrides && item.overrides[bookId];
+  return cleanTermString(override || item?.tgt || '');
+}
+
+function hasBookOverride(item, bookId) {
+  return !!(item?.overrides && item.overrides[bookId]);
+}
+
 async function getActiveGlossaryForBook(bookId) {
   const allItems = await dbGetAllGlossaryItems();
   const activeMap = {};
   allItems.forEach(item => {
     if (item.scope === 'global' || (Array.isArray(item.books) && item.books.includes(bookId))) {
-      const resolvedTgt = (item.overrides && item.overrides[bookId]) ? item.overrides[bookId] : item.tgt;
-      const cleanTgt = cleanTermString(resolvedTgt);
+      const cleanTgt = resolveTermForBook(item, bookId);
       if (cleanTgt) {
         activeMap[item.src] = { ...item, resolvedTgt: cleanTgt };
       }
@@ -25,36 +34,50 @@ async function getActiveGlossaryForBook(bookId) {
   return activeMap;
 }
 
-async function syncGlossaryTermAcrossBooks(term, oldTgt, newTgt) {
-  const bookIds = term?.scope === 'global'
-    ? (await dbGetAllBooks()).map(book => book.bookId)
-    : (Array.isArray(term?.books) && term.books.length ? term.books : [currentBookId]);
-  await syncUpdatedTermAcrossChapters(term.src, oldTgt, newTgt, bookIds);
+function snapshotTerm(item) {
+  return { src: item.src, tgt: item.tgt, scope: item.scope, books: [...(item.books || [])], overrides: { ...(item.overrides || {}) } };
+}
+
+// เทียบคำแปลก่อน/หลังแก้ของแต่ละเรื่อง แล้วแทนที่ในบทที่แปลไว้เฉพาะเรื่องที่คำแปลเปลี่ยนจริง
+async function syncTermChange(before, after) {
+  const allBookIds = (await dbGetAllBooks()).map(b => b.bookId);
+  const involved = new Set([
+    ...(before.scope === 'global' || after.scope === 'global' ? allBookIds : []),
+    ...(before.books || []), ...(after.books || [])
+  ]);
+  for (const bookId of involved) {
+    const oldTgt = resolveTermForBook(before, bookId);
+    const newTgt = resolveTermForBook(after, bookId);
+    if (oldTgt && newTgt && oldTgt !== newTgt) {
+      await syncUpdatedTermAcrossChapters(after.src, oldTgt, newTgt, [bookId]);
+    }
+  }
+}
+
+// คอมไพล์ regex ครั้งเดียวต่อชุดคำศัพท์ (renderVirtualWindow สร้าง activeTerms ใหม่ทุกครั้ง)
+const highlightMatcherCache = new WeakMap();
+const MIN_HIGHLIGHT_LENGTH = 2;
+
+function getHighlightMatcher(activeTerms) {
+  if (highlightMatcherCache.has(activeTerms)) return highlightMatcherCache.get(activeTerms);
+  const termMap = new Map();
+  Object.values(activeTerms)
+    .map(t => ({ src: t.src, cleanTgt: cleanTermString(t.resolvedTgt) }))
+    .filter(t => t.cleanTgt.length >= MIN_HIGHLIGHT_LENGTH)
+    .sort((a, b) => b.cleanTgt.length - a.cleanTgt.length)
+    .forEach(t => { if (!termMap.has(t.cleanTgt)) termMap.set(t.cleanTgt, t.src); });
+  const matcher = termMap.size
+    ? { termMap, regex: new RegExp(`(${Array.from(termMap.keys()).map(escapeRegExp).join('|')})`, 'g') }
+    : null;
+  highlightMatcherCache.set(activeTerms, matcher);
+  return matcher;
 }
 
 function applyInlineTermHighlighting(plainThText, activeTerms) {
   if (!plainThText) return "";
-  const termEntries = Object.values(activeTerms);
-  if (termEntries.length === 0) return plainThText;
-
-  const validTerms = termEntries
-    .map(t => ({ ...t, cleanTgt: cleanTermString(t.resolvedTgt) }))
-    .filter(t => t.cleanTgt.length >= 1);
-
-  if (validTerms.length === 0) return plainThText;
-
-  validTerms.sort((a, b) => b.cleanTgt.length - a.cleanTgt.length);
-
-  const termMap = new Map();
-  validTerms.forEach(t => {
-    if (!termMap.has(t.cleanTgt)) {
-      termMap.set(t.cleanTgt, t.src);
-    }
-  });
-
-  const uniqueTgtList = Array.from(termMap.keys());
-  const pattern = uniqueTgtList.map(tgt => escapeRegExp(tgt)).join('|');
-  const regex = new RegExp(`(${pattern})`, 'g');
+  const matcher = getHighlightMatcher(activeTerms);
+  if (!matcher) return escapeHtml(plainThText);
+  const { termMap, regex } = matcher;
 
   let html = '';
   let lastIndex = 0;
@@ -258,6 +281,7 @@ async function renderGlossaryUI() {
             ${bookTagsHtml}
             ${attachBtn}
             <b>${escapeHtml(data.src)}</b> ➔ <span id="gloss-tgt-val-${escapeHtml(data.src)}" style="color:#2563eb; font-weight:600;">${escapeHtml(data.tgt)}</span>
+            ${hasBookOverride(data, currentBookId) ? `<span class="gloss-override-tag" title="เรื่องปัจจุบันใช้คำแปลเฉพาะเรื่องนี้">📌 เรื่องนี้: ${escapeHtml(data.overrides[currentBookId])}</span>` : ''}
             <span style="font-size:10px; opacity:0.4;">(${escapeHtml(data.count || 1)})</span>
           </div>
         </div>
@@ -482,25 +506,27 @@ async function addGlossary() {
   if (!s || !t) return alert("กรุณาใส่ทั้งคำจีนและคำแปลไทย");
 
   const existing = (await dbGetAllGlossaryItems()).find(it => it.src === s);
-  const booksList = existing && Array.isArray(existing.books) ? existing.books : [];
+  const before = existing ? snapshotTerm(existing) : null;
+  const booksList = existing && Array.isArray(existing.books) ? [...existing.books] : [];
   if (!booksList.includes(currentBookId)) booksList.push(currentBookId);
+  const overrides = { ...(existing?.overrides || {}) };
 
-  const oldTgt = existing ? existing.tgt : null;
+  // ถ้าเรื่องนี้มีคำแปลเฉพาะเรื่องอยู่แล้ว ให้แก้ที่คำแปลเฉพาะเรื่อง ไม่กระทบเรื่องอื่น
+  const updateOverrideOnly = existing && hasBookOverride(existing, currentBookId);
+  if (updateOverrideOnly) overrides[currentBookId] = t;
 
-  await dbSaveGlossaryItem({
+  const item = {
     src: s,
-    tgt: t,
+    tgt: updateOverrideOnly ? existing.tgt : t,
     category: cat,
     scope: existing ? existing.scope : 'tagged',
     books: booksList,
     count: existing ? (existing.count || 1) + 1 : 1,
-    overrides: existing?.overrides || {},
+    overrides,
     updatedAt: Date.now()
-  });
-
-  if (oldTgt && oldTgt !== t) {
-    await syncGlossaryTermAcrossBooks({ src: s, scope: existing?.scope, books: booksList }, oldTgt, t);
-  }
+  };
+  await dbSaveGlossaryItem(item);
+  if (before) await syncTermChange(before, item);
 
   document.getElementById('gloss-src').value = "";
   document.getElementById('gloss-tgt').value = "";
@@ -514,9 +540,21 @@ async function openEditTermModal(src) {
   const cur = items.find(x => x.src === src);
   if (!cur) return;
 
+  const isOverride = hasBookOverride(cur, currentBookId);
+  const isDefaultBook = currentBookId === 'default_novel';
   document.getElementById('edit-term-src-label').innerText = src;
-  document.getElementById('edit-term-tgt-input').value = cleanTermString(cur.tgt);
+  document.getElementById('edit-term-tgt-input').value = resolveTermForBook(cur, currentBookId);
   document.getElementById('edit-term-cat-select').value = cur.category || "character";
+
+  const bookOnlyChk = document.getElementById('edit-term-book-only');
+  bookOnlyChk.checked = isOverride;
+  bookOnlyChk.disabled = isDefaultBook;
+  document.getElementById('edit-term-book-only-label').innerText = isDefaultBook
+    ? 'ใช้คำแปลนี้เฉพาะเรื่องปัจจุบัน (ต้องเปิดนิยายก่อน)'
+    : `ใช้คำแปลนี้เฉพาะเรื่อง "${currentBookTitle}" เท่านั้น`;
+  document.getElementById('edit-term-global-hint').innerText = isOverride
+    ? `คำแปลหลัก (เรื่องอื่นใช้): ${cur.tgt}`
+    : '';
 
   openModal('edit-term-modal');
   setTimeout(() => document.getElementById('edit-term-tgt-input').focus(), 150);
@@ -530,19 +568,26 @@ async function saveEditedGlossaryTerm() {
 
   const newTgt = cleanTermString(document.getElementById('edit-term-tgt-input').value);
   const newCat = document.getElementById('edit-term-cat-select').value;
+  const bookOnly = document.getElementById('edit-term-book-only').checked && currentBookId !== 'default_novel';
 
   if (!newTgt) return alert("กรุณาระบุคำแปลภาษาไทย");
 
-  const oldTgt = cur.tgt;
-  cur.tgt = newTgt;
+  const before = snapshotTerm(cur);
+  cur.overrides = { ...(cur.overrides || {}) };
+  if (bookOnly) {
+    // คำแปลเฉพาะเรื่องนี้: เรื่องอื่นยังใช้คำแปลหลักเดิม
+    cur.overrides[currentBookId] = newTgt;
+    if (!Array.isArray(cur.books)) cur.books = [];
+    if (cur.scope !== 'global' && !cur.books.includes(currentBookId)) cur.books.push(currentBookId);
+  } else {
+    delete cur.overrides[currentBookId];
+    cur.tgt = newTgt;
+  }
   cur.category = newCat;
   cur.updatedAt = Date.now();
 
   await dbSaveGlossaryItem(cur);
-
-  if (oldTgt && oldTgt !== newTgt) {
-    await syncGlossaryTermAcrossBooks(cur, oldTgt, newTgt);
-  }
+  await syncTermChange(before, cur);
 
   closeModal('edit-term-modal');
   await renderGlossaryUI();
@@ -578,30 +623,30 @@ async function researchGlossaryTermDirect(src, persist = true, ctx = getCurrentB
   "category": "character|title|location|skill|equipment|resource|realm"
 }`;
 
-  const parsed = await callLLMJson(prompt, { maxRetries: 3 });
+  const parsed = await callLLMJson(prompt, { maxRetries: 3, schema: SCHEMAS.research });
   if (!parsed?.tgt) throw new Error('AI ไม่ส่งคำแปลกลับมา กรุณาลองอีกครั้ง');
 
   const cleanNewTgt = cleanTermString(parsed.tgt);
+  const category = TERM_CATEGORIES.includes(parsed.category) ? parsed.category : null;
   const items = await dbGetAllGlossaryItems();
   const cur = items.find(x => x.src === src);
   if (cur && persist) {
-    const oldTgt = cur.tgt;
-    cur.tgt = cleanNewTgt;
-    if (parsed.category) cur.category = parsed.category;
+    const before = snapshotTerm(cur);
+    // รีเสิร์ชตามบริบทของเรื่องนี้: ถ้าเรื่องนี้มีคำแปลเฉพาะเรื่อง ให้อัปเดตอันนั้นแทนคำแปลหลัก
+    if (hasBookOverride(cur, ctx.bookId)) cur.overrides = { ...cur.overrides, [ctx.bookId]: cleanNewTgt };
+    else cur.tgt = cleanNewTgt;
+    if (category) cur.category = category;
     cur.updatedAt = Date.now();
     await dbSaveGlossaryItem(cur);
-
-    if (oldTgt && oldTgt !== cleanNewTgt) {
-      await syncGlossaryTermAcrossBooks(cur, oldTgt, cleanNewTgt);
-    }
+    await syncTermChange(before, cur);
   } else if (!cur && persist) {
     await dbSaveGlossaryItem({
       src: cleanTermString(src), tgt: cleanNewTgt,
-      category: parsed.category || 'character', scope: 'tagged',
+      category: category || 'character', scope: 'tagged',
       books: [ctx.bookId], count: 1, overrides: {}, updatedAt: Date.now()
     });
   }
-  return { tgt: cleanNewTgt, category: parsed.category };
+  return { tgt: cleanNewTgt, category };
 }
 
 async function researchGlossaryTerm(src) {
@@ -662,7 +707,7 @@ ${JSON.stringify(termList)}
 
   showGlobalToast(`AI กำลังจัดหมวดหมู่ ${items.length} คำ...`);
   try {
-    const parsed = await callLLMJson(prompt, { onStatus: showGlobalToast });
+    const parsed = await callLLMJson(prompt, { onStatus: showGlobalToast, schema: SCHEMAS.classify });
 
     let updatedCount = 0;
     if (Array.isArray(parsed.classified)) {
@@ -702,7 +747,12 @@ async function extractAndStoreAutoGlossary(rawText, ctx, { signal = null, onStat
   const isDeepNer = localStorage.getItem('nov_enable_deep_ner') === 'true';
 
   const existingItems = await dbGetAllGlossaryItems();
-  const existingTerms = existingItems.map(x => x.src);
+  // คำที่มีในคลังและปรากฏในบทนี้จริง (คือคำที่โมเดลมีโอกาสส่งซ้ำ) แทนการส่ง 60 คำล่าสุดแบบสุ่ม
+  const existingTerms = existingItems
+    .filter(x => x.src && rawText.includes(x.src))
+    .sort((a, b) => b.src.length - a.src.length)
+    .slice(0, 300)
+    .map(x => x.src);
 
   const authorCtx = ctx.author ? `ผู้แต่ง: "${ctx.author}"` : '';
   const bookCtx = ctx.title ? `นิยายเรื่อง: "${ctx.title}"` : '';
@@ -726,7 +776,7 @@ ${isDeepNer ? `4. **คำประสมพิเศษและฉายา:**
 
 ข้อกำหนด:
 1. ห้ามเลือกคำทั่วไป (เช่น พ่อ, แม่, ประตู, ท้องฟ้า)
-2. คำที่มีอยู่แล้วห้ามส่งซ้ำ: [${existingTerms.slice(-60).join(', ')}]
+2. คำที่มีอยู่แล้วห้ามส่งซ้ำ: [${existingTerms.join(', ')}]
 3. คำแปลไทยใน "tgt" ต้องเป็นชื่อเฉพาะตรงตัว **ห้ามใส่วงเล็บทึบ 【 】 หรือเครื่องหมายคำพูดใดๆ ติดมา**
 
 ตอบกลับเป็น JSON เท่านั้น:
@@ -736,7 +786,7 @@ ${isDeepNer ? `4. **คำประสมพิเศษและฉายา:**
   ]
 }`;
 
-  const parsed = await callLLMJson(`${prompt}\n\nเนื้อหาบท:\n${rawText}`, { signal, onStatus });
+  const parsed = await callLLMJson(`${prompt}\n\nเนื้อหาบท:\n${rawText}`, { signal, onStatus, schema: SCHEMAS.newTerms });
   const items = Array.isArray(parsed?.newTerms) ? parsed.newTerms : [];
   let addedCount = 0;
   for (const item of items) {

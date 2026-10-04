@@ -3,7 +3,14 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.5.1</title>
+  <title>NovelTranslate AI v2.6.0</title>
+  <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
+  <meta name="theme-color" content="#2563eb">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="NovelTranslate">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
@@ -32,6 +39,7 @@
       </div>
 
       <div id="prefetch-badge">ตอนถัดไปพร้อม</div>
+      <button class="btn" id="install-app-btn" style="display: none;" onclick="promptInstallApp()" title="ติดตั้งเป็นแอพบนเครื่อง ใช้อ่านแบบออฟไลน์ได้">📲 ติดตั้งแอพ</button>
       <button class="btn" onclick="openBookshelfModal()">ชั้นหนังสือ</button>
       <button class="btn btn-primary" onclick="openImportModal()">+ วางลิงก์</button>
       <button class="btn" onclick="openGlossaryModal()">คลังศัพท์</button>
@@ -187,6 +195,16 @@
       <div class="form-group">
         <label class="form-label">คำแปลภาษาไทย:</label>
         <input type="text" id="edit-term-tgt-input" class="form-input" placeholder="ใส่คำแปลไทย...">
+        <div id="edit-term-global-hint" style="font-size: 11px; opacity: 0.65; margin-top: 4px;"></div>
+      </div>
+      <div class="form-group">
+        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px;">
+          <input type="checkbox" id="edit-term-book-only" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
+          <div>
+            <span id="edit-term-book-only-label" style="font-weight: 600;">ใช้คำแปลนี้เฉพาะเรื่องปัจจุบัน</span>
+            <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">เหมาะกับคำจีนเดียวกันที่แต่ละเรื่องแปลต่างกัน เรื่องอื่นจะยังใช้คำแปลหลักเหมือนเดิม</div>
+          </div>
+        </label>
       </div>
       <div class="form-group">
         <label class="form-label">หมวดหมู่คำศัพท์:</label>
@@ -412,15 +430,15 @@
         </div>
 
         <div class="form-group" style="margin-top: 10px;">
-          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
-            <input type="checkbox" id="enable-bilingual-verify" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
-            <div>
-              <span>🛡️ ตรวจสอบความถูกต้องเทียบต้นฉบับ 2 ภาษา (Bilingual Cross-Verification Pass)</span>
-              <div style="font-size: 11px; font-weight: normal; opacity: 0.65; margin-top: 2px;">
-                เทียบประโยคไทยกับจีนต้นฉบับ 1:1 ป้องกันใจความสลับ, ล็อกสรรพนามไม่ให้เปลี่ยน, ล็อกคำศัพท์คลังขึ้นเส้นประ 100%, แก้คำสะกดผิด และป้องกันคำในกรอบ 【 】 หาย
-              </div>
-            </div>
-          </label>
+          <label class="form-label" for="verify-mode-select">🛡️ ตรวจทานเทียบต้นฉบับ 2 ภาษา (Bilingual Cross-Verification)</label>
+          <select id="verify-mode-select" class="form-input">
+            <option value="smart">ตรวจเฉพาะย่อหน้าที่น่าสงสัย (แนะนำ / ประหยัด token)</option>
+            <option value="full">ตรวจทุกย่อหน้า (แม่นสุด / ใช้ token ประมาณ 2 เท่า)</option>
+            <option value="off">ปิดการตรวจทาน</option>
+          </select>
+          <div style="font-size: 11px; opacity: 0.65; margin-top: 4px; line-height: 1.4;">
+            ย่อหน้าที่น่าสงสัย = มีอักษรจีนหลุด, วงเล็บ 【 】 ว่างหรือหาย, ความยาวผิดปกติเทียบต้นฉบับ หรือไม่ได้ใช้คำแปลตามคลังศัพท์
+          </div>
         </div>
 
         <div class="form-group" style="margin-top: 10px;">
@@ -457,6 +475,7 @@
   <script src="js/api.js"></script>
   <script src="js/glossary.js"></script>
   <script src="js/shelf.js"></script>
+  <script src="js/export.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

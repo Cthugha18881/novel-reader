@@ -284,6 +284,11 @@ async function openBookshelfModal() {
           🔗 แก้ URL ถัดไป
         </button>
       </div>
+      <div class="batch-bar" style="padding-top: 6px; padding-bottom: 6px;">
+        <span style="font-size: 11px; opacity: 0.75;">ส่งออกทั้งเรื่อง (${bookChaps.length} ตอน):</span>
+        <button class="btn" style="padding: 2px 8px; font-size: 10px;" onclick="exportBookTxt(${jsArg(b.bookId)})" title="ไฟล์ข้อความ .txt รวมทุกตอนเรียงตามลำดับ">📄 TXT</button>
+        <button class="btn" style="padding: 2px 8px; font-size: 10px;" onclick="exportBookEpub(${jsArg(b.bookId)})" title="ไฟล์ e-book .epub เปิดได้ในแอพอ่านหนังสือทั่วไป มีสารบัญ">📘 EPUB</button>
+      </div>
 
       <div class="shelf-sub-toolbar" id="shelf-sub-bar-${b.bookId}" style="display: none;">
         <div style="display: flex; gap: 4px; align-items: center;">

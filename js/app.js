@@ -26,12 +26,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v2.5.1",
+    title: "คู่มือเริ่มต้น v2.6.0",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.5.1", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.6.0", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.5.1"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.6.0"
   }];
 }
 
@@ -160,7 +160,17 @@ function updateInfiniteStatusBanner(htmlContent = '', isVisible = true) {
   }
 }
 
-async function renderVirtualWindow(targetIdx, scrollToTop = false) {
+function scrollToParagraph(chapIdx, paraIdx) {
+  const el = document.getElementById(`para-box-${chapIdx}-${paraIdx}`);
+  if (!el) return false;
+  const header = document.querySelector('header');
+  const offset = document.body.classList.contains('is-fullscreen') ? 10 : (header?.offsetHeight || 0) + 10;
+  window.scrollTo({ top: window.scrollY + el.getBoundingClientRect().top - offset, behavior: 'auto' });
+  return true;
+}
+
+// targetParaIdx: กลับไปย่อหน้าที่อ่านค้างไว้ (ใช้ตอนเปิดเรื่องเดิมต่อ)
+async function renderVirtualWindow(targetIdx, scrollToTop = false, targetParaIdx = null) {
   const requestVersion = ++renderRequestVersion;
   const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
   const container = document.getElementById('reading-content');
@@ -184,7 +194,9 @@ async function renderVirtualWindow(targetIdx, scrollToTop = false) {
     container.innerHTML = buildChapterBlockHtml(curChap, currentChapterIndex, activeTerms);
     document.getElementById('manual-chap-nav').style.display = 'flex';
     updateInfiniteStatusBanner('', false);
-    if (scrollToTop) window.scrollTo({ top: 0, behavior: 'smooth' });
+    if (!(targetParaIdx > 0 && scrollToParagraph(currentChapterIndex, targetParaIdx)) && scrollToTop) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
     saveReadingPointer(currentChapterIndex);
     return;
   }
@@ -206,7 +218,9 @@ async function renderVirtualWindow(targetIdx, scrollToTop = false) {
   container.innerHTML = combinedHtml;
   setupChapterIntersectionObserver();
 
-  if (scrollToTop) {
+  if (targetParaIdx > 0 && scrollToParagraph(currentChapterIndex, targetParaIdx)) {
+    // อยู่ที่ย่อหน้าที่อ่านค้างแล้ว
+  } else if (scrollToTop) {
     const targetEl = document.getElementById(`chapter-block-${currentChapterIndex}`);
     if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     else window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -365,8 +379,36 @@ function promptFixNextUrlFromBottom() {
   }
 }
 
+// ย่อหน้าแรกที่ยังมองเห็นอยู่ใต้ header
+function findTopVisibleParagraph() {
+  const header = document.querySelector('header');
+  const topLine = (document.body.classList.contains('is-fullscreen') ? 0 : (header?.offsetHeight || 0)) + 10;
+  for (const el of document.querySelectorAll('#reading-content .para-item')) {
+    if (el.getBoundingClientRect().bottom > topLine) {
+      const m = el.id.match(/^para-box-(\d+)-(\d+)$/);
+      if (m) return { chapIdx: parseInt(m[1], 10), paraIdx: parseInt(m[2], 10) };
+      break;
+    }
+  }
+  return null;
+}
+
+let readingPositionTimer = null;
+let lastSavedPosition = '';
+
 function setupScrollMonitor() {
   window.addEventListener('scroll', () => {
+    // บันทึกตำแหน่งย่อหน้าหลังหยุดเลื่อน (debounce) เพื่อไม่ให้เขียนฐานข้อมูลถี่เกินไป
+    clearTimeout(readingPositionTimer);
+    readingPositionTimer = setTimeout(() => {
+      const pos = findTopVisibleParagraph();
+      if (!pos || !chapters[pos.chapIdx]) return;
+      const key = `${currentBookId}:${chapters[pos.chapIdx].id}:${pos.paraIdx}`;
+      if (key === lastSavedPosition) return;
+      lastSavedPosition = key;
+      saveReadingPointer(pos.chapIdx, pos.paraIdx);
+    }, 700);
+
     const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
     if (!isInfinite) return;
 
@@ -377,12 +419,16 @@ function setupScrollMonitor() {
   }, { passive: true });
 }
 
-async function saveReadingPointer(idx) {
+async function saveReadingPointer(idx, paraIdx = null) {
   if (currentBookId === "default_novel" || !chapters[idx]) return;
   const targetChap = chapters[idx];
 
   const books = await dbGetAllBooks();
   const curBook = books.find(b => b.bookId === currentBookId);
+  // ไม่ระบุย่อหน้า: คงตำแหน่งเดิมถ้ายังเป็นบทเดิม ไม่งั้นเริ่มที่ต้นบท
+  const lastParaIndex = paraIdx !== null
+    ? paraIdx
+    : (curBook?.lastChapterId === targetChap.id ? (curBook.lastParaIndex || 0) : 0);
 
   await dbSaveBook({
     ...(curBook || {}),
@@ -394,6 +440,7 @@ async function saveReadingPointer(idx) {
     lastChapterId: targetChap.id,
     lastChapterIndex: idx,
     lastChapterTitle: targetChap.title,
+    lastParaIndex,
     totalChapters: chapters.length,
     lastUrl: targetChap.sourceUrl || currentUrl,
     updatedAt: Date.now()
@@ -574,7 +621,7 @@ async function findChineseForSelection() {
   button.innerText = 'กำลังค้นหา...';
   try {
     const prompt = `จับคู่คำแปลไทยที่ผู้ใช้อ่านเลือกกับข้อความจีนในย่อหน้าต้นฉบับ โดยคืนเฉพาะคำหรือวลีจีนที่ตรงกันและปรากฏต่อเนื่องในต้นฉบับ ห้ามเดาคำที่ไม่มีอยู่\nข้อความที่เลือก: ${JSON.stringify(selectedWordBuffer)}\nย่อหน้าไทย: ${JSON.stringify(th)}\nต้นฉบับจีน: ${JSON.stringify(src)}\nตอบ JSON เท่านั้น: {"src":"วลีจีนที่พบ"}`;
-    const answer = await callLLMJson(prompt, { maxRetries: 3 });
+    const answer = await callLLMJson(prompt, { maxRetries: 3, schema: SCHEMAS.findSource });
     const candidate = (typeof answer?.src === 'string' ? answer.src : '').trim();
     if (!candidate || !src.includes(candidate)) throw new Error('ไม่พบวลีจีนที่ตรงกับต้นฉบับ');
 
@@ -713,7 +760,11 @@ async function loadBookFromDB(bookId, specifyChapIdOrIdx = null) {
     currentUrl = currentActiveChap.sourceUrl || targetBook.lastUrl || "";
     nextUrlCalculated = latestChap.nextUrl;
 
-    renderVirtualWindow(currentChapterIndex, true);
+    // เปิดเรื่องเดิมต่อโดยไม่ระบุบท: กลับไปย่อหน้าที่อ่านค้างไว้
+    const resumePara = (specifyChapIdOrIdx === null && currentActiveChap.id === targetBook.lastChapterId)
+      ? (targetBook.lastParaIndex || 0) : null;
+    lastSavedPosition = '';
+    renderVirtualWindow(currentChapterIndex, true, resumePara);
     refreshShelfViewOnly(bookId);
   } else {
     chapters = [{
@@ -1189,7 +1240,7 @@ function saveSettings() {
 
   localStorage.setItem('nov_retry_limit', document.getElementById('retry-limit').value || "10");
   localStorage.setItem('nov_enable_deep_ner', document.getElementById('enable-deep-ner-scan').checked ? 'true' : 'false');
-  localStorage.setItem('nov_enable_bilingual_verify', document.getElementById('enable-bilingual-verify').checked ? 'true' : 'false');
+  localStorage.setItem('nov_verify_mode', document.getElementById('verify-mode-select').value);
   localStorage.setItem('nov_enable_infinite', document.getElementById('enable-infinite-scroll').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_prefetch', document.getElementById('enable-live-prefetch').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_auto_glossary', document.getElementById('enable-auto-glossary').checked ? 'true' : 'false');
@@ -1228,8 +1279,8 @@ function loadSettings() {
   const deepNerChk = document.getElementById('enable-deep-ner-scan');
   if (deepNerChk) deepNerChk.checked = (localStorage.getItem('nov_enable_deep_ner') === 'true');
 
-  const bilingualVerifyChk = document.getElementById('enable-bilingual-verify');
-  if (bilingualVerifyChk) bilingualVerifyChk.checked = (localStorage.getItem('nov_enable_bilingual_verify') !== 'false');
+  const verifySelect = document.getElementById('verify-mode-select');
+  if (verifySelect) verifySelect.value = getVerifyMode();
 
   const prefetchChk = document.getElementById('enable-live-prefetch');
   if (prefetchChk) prefetchChk.checked = (localStorage.getItem('nov_enable_prefetch') !== 'false');
@@ -1300,7 +1351,35 @@ function exportTxt() {
   a.click();
 }
 
+// ==================== PWA ====================
+let deferredInstallPrompt = null;
+
+function setupPwa() {
+  const isSecure = location.protocol === 'https:' || ['localhost', '127.0.0.1'].includes(location.hostname);
+  if ('serviceWorker' in navigator && isSecure) {
+    navigator.serviceWorker.register('sw.js').catch(err => console.warn('Service worker registration failed:', err));
+  }
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredInstallPrompt = e;
+    document.getElementById('install-app-btn').style.display = 'inline-flex';
+  });
+  window.addEventListener('appinstalled', () => {
+    deferredInstallPrompt = null;
+    document.getElementById('install-app-btn').style.display = 'none';
+  });
+}
+
+async function promptInstallApp() {
+  if (!deferredInstallPrompt) return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice.catch(() => null);
+  deferredInstallPrompt = null;
+  document.getElementById('install-app-btn').style.display = 'none';
+}
+
 window.addEventListener('DOMContentLoaded', async () => {
+  setupPwa();
   try {
     await initDB();
     await refreshInMemoryGlossaryCache();

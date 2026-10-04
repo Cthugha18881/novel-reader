@@ -188,20 +188,51 @@ async function guardedFetch(url, options) {
   }
 }
 
+// ---------- Structured output schemas ----------
+// schema เขียนเป็น JSON Schema มาตรฐาน (object ต้องมี additionalProperties:false และ required ครบ)
+// แล้วแปลงให้เข้ากับรูปแบบของแต่ละ provider; ถ้า provider ปฏิเสธ schema จะลองใหม่แบบไม่มี schema
+
+function toGeminiSchema(schema) {
+  if (!schema || typeof schema !== 'object') return schema;
+  const out = {};
+  if (schema.type) out.type = String(schema.type).toUpperCase();
+  if (schema.description) out.description = schema.description;
+  if (schema.enum) out.enum = schema.enum;
+  if (schema.properties) {
+    out.properties = {};
+    Object.entries(schema.properties).forEach(([k, v]) => { out.properties[k] = toGeminiSchema(v); });
+    out.propertyOrdering = Object.keys(schema.properties);
+  }
+  if (schema.required) out.required = schema.required;
+  if (schema.items) out.items = toGeminiSchema(schema.items);
+  return out;
+}
+
+function isSchemaRejection(err) {
+  return err?.kind === 'bad_request' && /schema|response_format|output_config|responseSchema|json_schema|propertyOrdering|format/i.test(err.message || '');
+}
+
 // ---------- Providers ----------
-async function callGeminiOnce(cfg, key, prompt, json, signal) {
+async function callGeminiOnce(cfg, key, prompt, opts, signal) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent`;
+  const generationConfig = {};
+  if (opts.json) generationConfig.response_mime_type = 'application/json';
+  if (opts.json && opts.schema) generationConfig.responseSchema = toGeminiSchema(opts.schema);
   const res = await guardedFetch(endpoint, {
     method: 'POST',
     signal,
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify({
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: json ? { response_mime_type: 'application/json' } : {}
+      generationConfig
     })
   });
   const data = await readJsonSafe(res);
-  if (!res.ok) throw errorFromStatus(res.status, data.error?.message || data._raw?.slice(0, 200));
+  if (!res.ok) {
+    const err = errorFromStatus(res.status, data.error?.message || data._raw?.slice(0, 200));
+    if (opts.schema && isSchemaRejection(err)) return callGeminiOnce(cfg, key, prompt, { ...opts, schema: null }, signal);
+    throw err;
+  }
 
   const blockReason = data.promptFeedback?.blockReason;
   if (blockReason) throw new LLMError(`คำขอถูกบล็อกโดยระบบความปลอดภัย (${blockReason})`, 'blocked');
@@ -217,7 +248,7 @@ async function callGeminiOnce(cfg, key, prompt, json, signal) {
   return text;
 }
 
-async function callAnthropicOnce(cfg, key, prompt, json, signal, useFallbacks = true) {
+async function callAnthropicOnce(cfg, key, prompt, opts, signal, useFallbacks = true) {
   const withFallbacks = useFallbacks && ANTHROPIC_FALLBACK_MODELS.has(cfg.model);
   const headers = {
     'content-type': 'application/json',
@@ -234,6 +265,7 @@ async function callAnthropicOnce(cfg, key, prompt, json, signal, useFallbacks = 
     messages: [{ role: 'user', content: prompt }]
   };
   if (withFallbacks) body.fallbacks = 'default';
+  if (opts.json && opts.schema) body.output_config = { format: { type: 'json_schema', schema: opts.schema } };
 
   const res = await guardedFetch('https://api.anthropic.com/v1/messages', {
     method: 'POST', signal, headers, body: JSON.stringify(body)
@@ -242,10 +274,12 @@ async function callAnthropicOnce(cfg, key, prompt, json, signal, useFallbacks = 
     const data = await readJsonSafe(res);
     const msg = data.error?.message || data._raw?.slice(0, 200);
     if (withFallbacks && res.status === 400 && /fallback/i.test(msg || '')) {
-      return callAnthropicOnce(cfg, key, prompt, json, signal, false);
+      return callAnthropicOnce(cfg, key, prompt, opts, signal, false);
     }
     if (data.error?.type === 'overloaded_error') throw new LLMError(`เซิร์ฟเวอร์ Claude หนาแน่น: ${msg}`, 'server', res.status);
-    throw errorFromStatus(res.status, msg);
+    const err = errorFromStatus(res.status, msg);
+    if (opts.schema && isSchemaRejection(err)) return callAnthropicOnce(cfg, key, prompt, { ...opts, schema: null }, signal, useFallbacks);
+    throw err;
   }
 
   // อ่าน SSE stream: ข้อความอาจมาหลาย text block (เช่นหลัง fallback) จึงต่อกันทั้งหมด
@@ -293,13 +327,16 @@ async function callAnthropicOnce(cfg, key, prompt, json, signal, useFallbacks = 
   return text;
 }
 
-async function callOpenAIOnce(cfg, key, prompt, json, signal, useJsonMode = true) {
+// jsonMode: 'schema' -> 'object' -> 'none' (ลดระดับเมื่อ provider ที่เข้ากันได้กับ OpenAI ไม่รองรับ)
+async function callOpenAIOnce(cfg, key, prompt, opts, signal, jsonMode = null) {
   if (!cfg.baseUrl) throw new LLMError('กรุณาระบุ Base URL ของ API', 'config');
+  const mode = jsonMode || (!opts.json ? 'none' : (opts.schema ? 'schema' : 'object'));
   const body = {
     model: cfg.model,
     messages: [{ role: 'user', content: prompt }]
   };
-  if (json && useJsonMode) body.response_format = { type: 'json_object' };
+  if (mode === 'schema') body.response_format = { type: 'json_schema', json_schema: { name: 'result', strict: true, schema: opts.schema } };
+  else if (mode === 'object') body.response_format = { type: 'json_object' };
 
   const res = await guardedFetch(`${cfg.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -310,9 +347,9 @@ async function callOpenAIOnce(cfg, key, prompt, json, signal, useJsonMode = true
   const data = await readJsonSafe(res);
   if (!res.ok) {
     const msg = data.error?.message || data._raw?.slice(0, 200);
-    // บาง provider ที่เข้ากันได้กับ OpenAI ไม่รองรับ response_format
-    if (useJsonMode && body.response_format && res.status === 400 && /response_format|json/i.test(msg || '')) {
-      return callOpenAIOnce(cfg, key, prompt, json, signal, false);
+    // บาง provider ที่เข้ากันได้กับ OpenAI ไม่รองรับ response_format บางแบบ
+    if (body.response_format && res.status === 400 && /response_format|json|schema/i.test(msg || '')) {
+      return callOpenAIOnce(cfg, key, prompt, opts, signal, mode === 'schema' ? 'object' : 'none');
     }
     throw errorFromStatus(res.status, msg);
   }
@@ -335,7 +372,7 @@ const PROVIDER_CALLERS = {
  * เรียก AI ตาม provider ที่ตั้งค่าไว้ พร้อม retry/หมุนคีย์/ยกเลิก
  * @returns {Promise<string>} ข้อความดิบจากโมเดล
  */
-async function callLLM(prompt, { json = true, signal = null, onStatus = null, maxRetries = getRetryLimit() } = {}) {
+async function callLLM(prompt, { json = true, schema = null, signal = null, onStatus = null, maxRetries = getRetryLimit() } = {}) {
   const cfg = getActiveLlmConfig();
   if (cfg.keys.length === 0) throw new LLMError(`กรุณาใส่ API Key ของ ${LLM_PROVIDERS[cfg.provider].label} ในเมนู 'ตั้งค่า' ก่อน`, 'config');
   if (!cfg.model) throw new LLMError("กรุณาเลือกโมเดลในเมนู 'ตั้งค่า' ก่อน", 'config');
@@ -346,7 +383,7 @@ async function callLLM(prompt, { json = true, signal = null, onStatus = null, ma
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     throwIfAborted(signal);
     try {
-      return await caller(cfg, pickKey(cfg), prompt, json, signal);
+      return await caller(cfg, pickKey(cfg), prompt, { json, schema }, signal);
     } catch (err) {
       if (isAbortError(err) || signal?.aborted) throw new LLMError('ผู้ใช้สั่งหยุดการทำงาน', 'abort');
       const retryable = ['rate', 'server', 'network'].includes(err.kind);

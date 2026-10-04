@@ -302,6 +302,11 @@ body.theme-dark .gloss-badge { background: rgba(96,165,250,0.15); color: #93c5fd
 }
 .gloss-scope-global { background: #dcfce7; color: #166534; }
 .gloss-scope-local { background: #fef3c7; color: #92400e; }
+.gloss-override-tag {
+  font-size: 10px; padding: 1px 6px; border-radius: 4px; font-weight: 600;
+  background: rgba(168,85,247,0.12); color: #7e22ce;
+}
+body.theme-dark .gloss-override-tag { background: rgba(192,132,252,0.18); color: #d8b4fe; }
 
 .gloss-batch-toolbar {
   display: none; align-items: center; justify-content: space-between;

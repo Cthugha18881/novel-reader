@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NovelTranslate Unit Tests</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; background: #f8fafc; color: #1e293b; }
+    h1 { font-size: 18px; }
+    #summary { font-weight: 600; margin: 8px 0 16px; }
+    .pass { color: #166534; } .fail { color: #b91c1c; }
+    li { font-family: ui-monospace, monospace; font-size: 13px; margin: 2px 0; word-break: break-word; }
+  </style>
+</head>
+<body>
+  <h1>NovelTranslate — Unit Tests</h1>
+  <div id="summary">กำลังรัน...</div>
+  <ul id="results"></ul>
+
+  <script>
+    // ตัวแปร global ที่ปกติประกาศใน app.js (หน้านี้ไม่โหลด app.js)
+    var currentBookId = 'book_test', currentBookTitle = 'เรื่องทดสอบ', currentAuthor = '', currentBookGenre = 'xianxia', chapters = [];
+  </script>
+  <script src="../js/db.js"></script>
+  <script src="../js/llm.js"></script>
+  <script src="../js/api.js"></script>
+  <script src="../js/glossary.js"></script>
+  <script src="../js/export.js"></script>
+  <script>
+    const results = [];
+    function test(name, fn) {
+      try {
+        const out = fn();
+        results.push({ name, ok: out !== false, detail: out === false ? 'returned false' : '' });
+      } catch (err) {
+        results.push({ name, ok: false, detail: err.message });
+      }
+    }
+    function eq(actual, expected) {
+      const a = JSON.stringify(actual), e = JSON.stringify(expected);
+      if (a !== e) throw new Error(`expected ${e} got ${a}`);
+      return true;
+    }
+
+    // ---------- URL / scraper ----------
+    test('computeNextNumericUrl: เลขท้าย URL +1', () => eq(computeNextNumericUrl('https://www.69shuba.com/txt/88724/40717272'), 'https://www.69shuba.com/txt/88724/40717273'));
+    test('computeNextNumericUrl: คงเลข 0 นำหน้าและนามสกุล', () => eq(computeNextNumericUrl('https://x.test/b/0099.html'), 'https://x.test/b/0100.html'));
+    test('computeNextNumericUrl: ไม่มีตัวเลข', () => eq(computeNextNumericUrl('https://x.test/abc'), null));
+
+    test('extractNavLinks: หา "下一章" และแปลงเป็น URL เต็ม', () => {
+      const md = '[上一章](/book/1/100.html) [目录](/book/1/) [下一章 →](/book/1/105.html)';
+      return eq(extractNavLinks(md, 'https://x.test/book/1/101.html'), { nextChapter: 'https://x.test/book/1/105.html', nextPage: null });
+    });
+    test('extractNavLinks: "下一页" แยกจาก "下一章"', () => {
+      const md = '[下一页](https://x.test/b/101_2.html)\n[下一章](https://x.test/b/102.html)';
+      return eq(extractNavLinks(md, 'https://x.test/b/101.html'), { nextChapter: 'https://x.test/b/102.html', nextPage: 'https://x.test/b/101_2.html' });
+    });
+    test('extractNavLinks: ข้ามลิงก์ที่ชี้กลับหน้าเดิม', () => eq(extractNavLinks('[下一章](https://x.test/b/1.html)', 'https://x.test/b/1.html').nextChapter, null));
+
+    test('isContinuationPage: 123.html -> 123_2.html', () => isContinuationPage('https://x.test/a/123.html', 'https://x.test/a/123_2.html'));
+    test('isContinuationPage: 123_2 -> 123_3', () => isContinuationPage('https://x.test/a/123.html', 'https://x.test/a/123_3.html'));
+    test('isContinuationPage: 123 -> 124 ไม่ใช่หน้าต่อ', () => !isContinuationPage('https://x.test/a/123.html', 'https://x.test/a/124.html'));
+    test('isContinuationPage: ต่างโฟลเดอร์ไม่ใช่หน้าต่อ', () => !isContinuationPage('https://x.test/a/123.html', 'https://x.test/b/123_2.html'));
+
+    test('parseJinaMarkdown: ตัดบรรทัดเมนูนำทางและดึงชื่อ/ผู้แต่ง', () => {
+      const md = [
+        'Title: 我的书-第5章 风起-69书吧',
+        'URL Source: https://x.test/txt/1/5',
+        'Markdown Content:',
+        '作者：张三',
+        '上一章 ← [目录](https://x.test/txt/1/) → [下一章](https://x.test/txt/1/6)',
+        '他抬头看向天空。',
+        '',
+        '风起云涌。'
+      ].join('\n');
+      const r = parseJinaMarkdown(md, 'https://x.test/txt/1/5');
+      eq(r.rawBookTitle, '我的书');
+      eq(r.author, '张三');
+      eq(r.nav.nextChapter, 'https://x.test/txt/1/6');
+      if (r.text.includes('目录')) throw new Error('nav line leaked into text: ' + r.text);
+      return r.text.includes('他抬头看向天空') && r.text.includes('风起云涌');
+    });
+
+    // ---------- JSON parsing ----------
+    test('cleanAndParseJSON: trailing comma + newline ดิบใน string', () => eq(cleanAndParseJSON('```json\n{"a":"x\ny",}\n```'), { a: 'x\ny' }));
+    test('cleanAndParseJSON: กู้ย่อหน้าแบบมีหมายเลขจาก JSON ที่ถูกตัด', () => {
+      const r = cleanAndParseJSON('{"translatedChapterTitle":"บทที่ 1","paragraphs":[{"i":0,"th":"หนึ่ง"},{"i":1,"th":"สอง \\"คำพูด\\""},{"i":2,"th":"สา');
+      eq(r.translatedChapterTitle, 'บทที่ 1');
+      return eq(r.paragraphs, [{ i: 0, th: 'หนึ่ง' }, { i: 1, th: 'สอง "คำพูด"' }]) && r._partial === true;
+    });
+    test('cleanAndParseJSON: JSON เสียหมดโยน error', () => { try { cleanAndParseJSON('not json'); return false; } catch (e) { return true; } });
+
+    // ---------- Chunking / glossary filter ----------
+    test('splitSourceParagraphs: แยกตามบรรทัดว่าง', () => eq(splitSourceParagraphs('甲\n\n乙\n\n\n丙 '), ['甲', '乙', '丙']));
+    test('chunkParagraphs: แบ่งตามจำนวนอักษร', () => {
+      const items = [{ i: 0, src: 'a'.repeat(60) }, { i: 1, src: 'b'.repeat(60) }, { i: 2, src: 'c'.repeat(30) }];
+      return eq(chunkParagraphs(items, 100).map(c => c.map(x => x.i)), [[0], [1, 2]]);
+    });
+    test('chunkParagraphs: ย่อหน้าเดียวที่ยาวเกินยังอยู่ในชุดของตัวเอง', () => eq(chunkParagraphs([{ i: 0, src: 'x'.repeat(500) }], 100).length, 1));
+    test('buildRelevantTermList: ส่งเฉพาะคำที่อยู่ในบท เรียงคำยาวก่อน', () => {
+      const terms = { '林': { resolvedTgt: 'หลิน' }, '林动': { resolvedTgt: 'หลินต้ง' }, '萧炎': { resolvedTgt: 'เซียวเหยียน' } };
+      return eq(buildRelevantTermList(terms, '林动说'), '林动=หลินต้ง, 林=หลิน');
+    });
+
+    // ---------- Suspicious paragraph detection ----------
+    test('findSuspiciousParagraphs: จับอักษรจีนหลุด/วงเล็บว่าง/ไม่ใช้คำในคลัง', () => {
+      const terms = { '林动': { resolvedTgt: 'หลินต้ง' } };
+      const paras = [
+        { src: '林动走进了大殿，抬头看了看四周的人群。', th: 'หลินต้งเดินเข้าไปในท้องพระโรง เงยหน้ามองฝูงชนรอบตัว' },
+        { src: '林动走进了大殿，抬头看了看四周的人群。', th: 'หลินตงเดินเข้าไปในท้องพระโรง เงยหน้ามองฝูงชนรอบตัว' },
+        { src: '他说道，这是【大海水】的力量啊啊啊。', th: 'เขากล่าวว่า นี่คือพลังของ【 】' },
+        { src: '天空中出现了一道金光，照亮了整片大地。', th: 'บนท้องฟ้าปรากฏแสง金ทองสาดส่องผืนแผ่นดินทั้งหมด' }
+      ];
+      return eq(findSuspiciousParagraphs(paras, terms), [1, 2, 3]);
+    });
+    test('findSuspiciousParagraphs: คำแปลสั้นผิดปกติ', () => eq(findSuspiciousParagraphs([{ src: '这是一个非常非常长的中文句子需要好好翻译。', th: 'สั้น' }], {}), [0]));
+
+    // ---------- Schema conversion ----------
+    test('toGeminiSchema: ตัวพิมพ์ใหญ่ + propertyOrdering + ตัด additionalProperties', () => {
+      const g = toGeminiSchema(SCHEMAS.research);
+      eq(g.type, 'OBJECT');
+      eq(g.propertyOrdering, ['tgt', 'category']);
+      eq(g.properties.category.enum.length, 7);
+      return !('additionalProperties' in g);
+    });
+    test('SCHEMAS: ทุก object มี required ครบตาม properties (OpenAI strict)', () => {
+      const walk = (s) => {
+        if (s.type === 'object') {
+          eq([...s.required].sort(), Object.keys(s.properties).sort());
+          if (s.additionalProperties !== false) throw new Error('missing additionalProperties:false');
+          Object.values(s.properties).forEach(walk);
+        }
+        if (s.items) walk(s.items);
+      };
+      Object.values(SCHEMAS).forEach(walk);
+      return true;
+    });
+
+    // ---------- Misc ----------
+    test('rescueEmptyBrackets: เติมคำจีนเดิมเมื่อวงเล็บว่าง', () => eq(rescueEmptyBrackets('พลังของ【 】', 'X【大海水】Y'), 'พลังของ【大海水】'));
+    test('cleanThaiOutput: ตัดขีด —— นำหน้า', () => eq(cleanThaiOutput('——ไปกันเถอะ\n——ได้เลย', ''), 'ไปกันเถอะ\nได้เลย'));
+    test('resolveTermForBook: override เฉพาะเรื่อง', () => {
+      const item = { src: '林', tgt: 'หลิน', overrides: { book_b: 'ลิ่ม' } };
+      return eq([resolveTermForBook(item, 'book_a'), resolveTermForBook(item, 'book_b')], ['หลิน', 'ลิ่ม']);
+    });
+    test('applyInlineTermHighlighting: escape HTML แม้ไม่มีคำศัพท์', () => eq(applyInlineTermHighlighting('<b>x</b>', {}), '&lt;b&gt;x&lt;/b&gt;'));
+    test('applyInlineTermHighlighting: ไม่ไฮไลต์คำ 1 ตัวอักษร', () => !applyInlineTermHighlighting('ก ข', { '甲': { src: '甲', resolvedTgt: 'ก' } }).includes('inline-term-highlight'));
+    test('isMissingPageError: 404 จาก AI ไม่นับเป็นหน้าเว็บหาย', () => !isMissingPageError(new LLMError('คำขอไม่ถูกต้อง (404): model not found', 'bad_request', 404)) && isMissingPageError(new Error('404')));
+    test('xmlEscape: escape และตัดอักขระควบคุม', () => eq(xmlEscape('a&<b>"\u0001'), 'a&amp;&lt;b&gt;&quot;'));
+    test('getVerifyMode: ค่าเก่า false -> off', () => {
+      const prevMode = localStorage.getItem('nov_verify_mode'), prevOld = localStorage.getItem('nov_enable_bilingual_verify');
+      localStorage.removeItem('nov_verify_mode');
+      localStorage.setItem('nov_enable_bilingual_verify', 'false');
+      const r = getVerifyMode();
+      if (prevMode === null) localStorage.removeItem('nov_verify_mode'); else localStorage.setItem('nov_verify_mode', prevMode);
+      if (prevOld === null) localStorage.removeItem('nov_enable_bilingual_verify'); else localStorage.setItem('nov_enable_bilingual_verify', prevOld);
+      return eq(r, 'off');
+    });
+
+    const passed = results.filter(r => r.ok).length;
+    const summary = document.getElementById('summary');
+    summary.textContent = `ผ่าน ${passed}/${results.length}`;
+    summary.className = passed === results.length ? 'pass' : 'fail';
+    document.getElementById('results').innerHTML = results.map(r =>
+      `<li class="${r.ok ? 'pass' : 'fail'}">${r.ok ? '✓' : '✗'} ${r.name.replace(/</g, '&lt;')}${r.detail ? ' — ' + r.detail.replace(/</g, '&lt;') : ''}</li>`
+    ).join('');
+    window.__testResults = results;
+  </script>
+</body>
+</html>
