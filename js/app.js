@@ -27,12 +27,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v2.7.1",
+    title: "คู่มือเริ่มต้น v2.8.0",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.7.1", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.8.0", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.7.1"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.8.0"
   }];
 }
 
@@ -170,11 +170,16 @@ function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
       const noteLabel = (kind === 'author_note' && !isNoteChapter)
         ? `<span class="para-kind-label">📝 ข้อความผู้เขียน <button class="para-kind-reset" onclick="markParagraphAsStory(event, ${chapIdx}, ${pIdx})" title="ไม่ใช่ข้อความผู้เขียน เปลี่ยนเป็นเนื้อเรื่อง">ไม่ใช่</button></span>`
         : '';
+      const actions = `
+          <div class="para-actions">
+            <button class="para-action-btn" onclick="openEditParagraphModal(event, ${chapIdx}, ${pIdx})">✎ แก้คำแปล</button>
+            ${p.thDraft && p.thDraft !== p.th ? `<button class="para-action-btn" onclick="swapParagraphDraft(event, ${chapIdx}, ${pIdx})" title="สลับไปใช้คำแปลอีกฉบับ (ก่อนเกลา/ก่อนแก้)">↺ ใช้ฉบับ${p.userEdited ? 'ของ AI' : 'ก่อนเกลา'}</button>` : ''}
+          </div>`;
       parasHtml += `
-      <div class="para-item${kind === 'author_note' ? ' para-note' : ''}" id="para-box-${chapIdx}-${pIdx}">
+      <div class="para-item${kind === 'author_note' ? ' para-note' : ''}${p.userEdited ? ' para-user-edited' : ''}" id="para-box-${chapIdx}-${pIdx}">
         ${noteLabel}
         <div class="para-th" onclick="toggleParagraphSrc(event, '${chapIdx}-${pIdx}')" data-unique-key="${chapIdx}-${pIdx}" data-th="${escapeHtml(encodeURIComponent(p.th || ''))}" data-src="${escapeHtml(encodeURIComponent(p.src || ''))}">${highlightedTh}</div>
-        <div class="para-src" id="src-${chapIdx}-${pIdx}">${escapeHtml(p.src || "ไม่มีข้อความต้นฉบับ")}</div>
+        <div class="para-src" id="src-${chapIdx}-${pIdx}"><span class="para-src-text">${escapeHtml(p.src || "ไม่มีข้อความต้นฉบับ")}</span>${p.src ? actions : ''}</div>
       </div>
     `;
     });
@@ -202,6 +207,59 @@ function toggleShowJunk(e) {
   localStorage.setItem('nov_show_junk', show ? 'true' : 'false');
   const chk = document.getElementById('show-junk-paras');
   if (chk) chk.checked = show;
+  renderVirtualWindow(currentChapterIndex);
+}
+
+// ==================== EDIT TRANSLATION IN READER ====================
+let paragraphBeingEdited = null;
+
+function openEditParagraphModal(e, chapIdx, pIdx) {
+  if (e) e.stopPropagation();
+  const p = chapters[chapIdx]?.paragraphs[pIdx];
+  if (!p) return;
+  paragraphBeingEdited = { chapIdx, pIdx, chapId: chapters[chapIdx].id };
+  document.getElementById('edit-para-src').innerText = p.src || '';
+  document.getElementById('edit-para-th').value = p.th || '';
+  const exampleChk = document.getElementById('edit-para-as-example');
+  exampleChk.checked = (p.kind || 'story') === 'story';
+  exampleChk.disabled = (p.kind || 'story') !== 'story';
+  openModal('edit-para-modal');
+  setTimeout(() => document.getElementById('edit-para-th').focus(), 150);
+}
+
+async function saveEditedParagraph() {
+  if (!paragraphBeingEdited) return;
+  const { chapIdx, pIdx, chapId } = paragraphBeingEdited;
+  const chap = chapters[chapIdx];
+  if (!chap || chap.id !== chapId) return closeModal('edit-para-modal');
+  const p = chap.paragraphs[pIdx];
+  const newTh = document.getElementById('edit-para-th').value.trim();
+  if (!newTh) return alert('กรุณาใส่คำแปล');
+  if (newTh !== p.th) {
+    // เก็บคำแปลของ AI ไว้ครั้งแรก เพื่อสลับกลับได้
+    if (!p.userEdited && !p.thDraft) p.thDraft = p.th;
+    p.th = newTh;
+    p.userEdited = true;
+    await dbSaveChapter(chap);
+    if (document.getElementById('edit-para-as-example').checked && (p.kind || 'story') === 'story') {
+      await addStyleExample(chap.bookId, p.src, newTh);
+    }
+  }
+  closeModal('edit-para-modal');
+  paragraphBeingEdited = null;
+  renderVirtualWindow(currentChapterIndex);
+}
+
+/** สลับคำแปลปัจจุบันกับฉบับสำรอง (ฉบับก่อนเกลาของ AI หรือฉบับ AI ก่อนผู้ใช้แก้) */
+async function swapParagraphDraft(e, chapIdx, pIdx) {
+  if (e) e.stopPropagation();
+  const chap = chapters[chapIdx];
+  const p = chap?.paragraphs[pIdx];
+  if (!p?.thDraft) return;
+  [p.th, p.thDraft] = [p.thDraft, p.th];
+  // ผู้ใช้เลือกฉบับเองแล้ว ถือว่าเป็นคำแปลที่ยืนยันแล้ว จะไม่ถูกทับตอนแปลใหม่
+  p.userEdited = true;
+  await dbSaveChapter(chap);
   renderVirtualWindow(currentChapterIndex);
 }
 
@@ -655,6 +713,12 @@ async function retranslateSpecificChapterDirect(chapId) {
 
   if (isTaskRunning('retranslate')) return alert('กำลังแปลบทอื่นใหม่อยู่ กรุณารอให้เสร็จก่อน');
 
+  // ย่อหน้าที่ผู้ใช้แก้เองจะไม่ถูกเขียนทับ ถ้าผู้ใช้ไม่ยืนยัน
+  const editedCount = chapter.paragraphs.filter(p => p.userEdited).length;
+  const keepEdits = editedCount > 0
+    ? confirm(`ตอนนี้มี ${editedCount} ย่อหน้าที่คุณแก้คำแปลเอง\n\nกด OK = เก็บย่อหน้าที่แก้ไว้ (แปลใหม่เฉพาะย่อหน้าอื่น)\nกด Cancel = แปลใหม่ทั้งหมด (ทับที่แก้ไว้)`)
+    : false;
+
   const books = await dbGetAllBooks();
   const bookId = chapter.bookId || currentBookId;
   const ctx = makeBookContext(books.find(item => item.bookId === bookId) || getCurrentBookContext());
@@ -667,16 +731,35 @@ async function retranslateSpecificChapterDirect(chapId) {
       signal: controller.signal,
       onStatus: showGlobalToast,
       rawChapTitle: chapter.title,
-      prevSummary: findPrevStoryChapter(bookChaps, chapter.order ?? 0)?.summary || ''
+      prevChapter: findPrevStoryChapter(bookChaps, chapter.order ?? 0)
     });
+    if (keepEdits) result.paragraphs = mergeUserEdits(chapter.paragraphs, result.paragraphs);
     await applyTranslationToChapter(chapter, result, { updateTitle: false });
-    alert(`แปล "${chapter.title}" ใหม่และบันทึกแล้ว`);
+    alert(`แปล "${chapter.title}" ใหม่และบันทึกแล้ว${keepEdits ? ` (เก็บย่อหน้าที่แก้เองไว้ ${editedCount} ย่อหน้า)` : ''}`);
   } catch (err) {
     if (!isAbortError(err)) alert(`แปลบทใหม่ไม่สำเร็จ: ${err.message}`);
   } finally {
     endTask('retranslate', controller);
     hideGlobalToast();
   }
+}
+
+/**
+ * ใส่ย่อหน้าที่ผู้ใช้แก้เองกลับเข้าไปในผลแปลใหม่ จับคู่ด้วยข้อความต้นฉบับ (ไม่ใช่ตำแหน่ง)
+ * เพื่อให้ถูกต้องแม้จำนวนย่อหน้าจะเปลี่ยน
+ */
+function mergeUserEdits(oldParas, newParas) {
+  const edited = oldParas.filter(p => p.userEdited && p.src);
+  if (!edited.length) return newParas;
+  const used = new Set();
+  const result = newParas.slice();
+  for (const old of edited) {
+    const idx = result.findIndex((p, i) => !used.has(i) && p.src === old.src);
+    if (idx === -1) continue;
+    used.add(idx);
+    result[idx] = { ...result[idx], th: old.th, userEdited: true, thDraft: result[idx].th };
+  }
+  return result;
 }
 
 // บันทึกผลแปลทับตอนเดิม (คง id/ลำดับ/URL ไว้) แล้วอัปเดตหน้าจอที่เกี่ยวข้อง
@@ -726,7 +809,7 @@ async function refetchChapterFromSource(chapId) {
       onStatus: showGlobalToast,
       rawChapTitle: scraped.rawChapTitle,
       rawBookTitle: scraped.rawBookTitle,
-      prevSummary: findPrevStoryChapter(bookChaps, chapter.order ?? 0)?.summary || ''
+      prevChapter: findPrevStoryChapter(bookChaps, chapter.order ?? 0)
     });
     await applyTranslationToChapter(chapter, result, { updateTitle: true, nextUrl: scraped.nextUrlSource === 'link' ? scraped.nextUrl : undefined });
     alert(`ดึงและแปล "${chapter.title}" เรียบร้อยแล้ว`);
@@ -747,12 +830,26 @@ async function findChineseForSelection() {
   button.disabled = true;
   button.innerText = 'กำลังค้นหา...';
   try {
-    const prompt = `จับคู่คำแปลไทยที่ผู้ใช้อ่านเลือกกับข้อความจีนในย่อหน้าต้นฉบับ โดยคืนเฉพาะคำหรือวลีจีนที่ตรงกันและปรากฏต่อเนื่องในต้นฉบับ ห้ามเดาคำที่ไม่มีอยู่\nข้อความที่เลือก: ${JSON.stringify(selectedWordBuffer)}\nย่อหน้าไทย: ${JSON.stringify(th)}\nต้นฉบับจีน: ${JSON.stringify(src)}\nตอบ JSON เท่านั้น: {"src":"วลีจีนที่พบ"}`;
-    const answer = await callLLMJson(prompt, { maxRetries: 3, schema: SCHEMAS.findSource });
+    // คำแปลที่ถูกเกลาสำนวนอาจย้ายความหมายไปใกล้ย่อหน้าข้างเคียง จึงส่งต้นฉบับย่อหน้าก่อน/หลังไปด้วย
+    const [chapIdx, pIdx] = (selectedParagraphContext.uniqueKey || '').split('-').map(Number);
+    const neighbours = [pIdx - 1, pIdx + 1]
+      .map(i => ({ i, src: chapters[chapIdx]?.paragraphs[i]?.src || '' }))
+      .filter(n => n.src && (chapters[chapIdx].paragraphs[n.i].kind || 'story') !== 'site_junk');
+    const prompt = `จับคู่คำแปลไทยที่ผู้ใช้อ่านเลือกกับข้อความจีนในต้นฉบับ โดยคืนเฉพาะคำหรือวลีจีนที่ตรงกันและปรากฏต่อเนื่องในต้นฉบับ ห้ามเดาคำที่ไม่มีอยู่
+ค้นในต้นฉบับย่อหน้าหลักก่อน ถ้าไม่พบจึงค้นในย่อหน้าข้างเคียง
+ข้อความที่เลือก: ${JSON.stringify(selectedWordBuffer)}
+ย่อหน้าไทย: ${JSON.stringify(th)}
+ต้นฉบับจีนย่อหน้าหลัก: ${JSON.stringify(src)}
+${neighbours.length ? `ต้นฉบับย่อหน้าข้างเคียง: ${JSON.stringify(neighbours.map(n => n.src))}` : ''}
+ตอบ JSON เท่านั้น: {"src":"วลีจีนที่พบ"}`;
+    const answer = await callLLMJson(prompt, { maxRetries: 3, schema: SCHEMAS.findSource, role: 'aux' });
     const candidate = (typeof answer?.src === 'string' ? answer.src : '').trim();
-    if (!candidate || !src.includes(candidate)) throw new Error('ไม่พบวลีจีนที่ตรงกับต้นฉบับ');
+    const foundIn = candidate && src.includes(candidate)
+      ? pIdx
+      : neighbours.find(n => candidate && n.src.includes(candidate))?.i;
+    if (foundIn === undefined) throw new Error('ไม่พบวลีจีนที่ตรงกับต้นฉบับ');
 
-    const srcEl = document.getElementById(`src-${selectedParagraphContext.uniqueKey}`);
+    const srcEl = document.getElementById(`src-${chapIdx}-${foundIn}`);
     if (srcEl) {
       srcEl.style.display = 'block';
       srcEl.querySelectorAll('mark.selection-term-mark').forEach(mark => mark.replaceWith(document.createTextNode(mark.textContent)));
@@ -1045,7 +1142,7 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       signal,
       rawChapTitle,
       rawBookTitle,
-      prevSummary: findPrevStoryChapter(chapters)?.summary || "",
+      prevChapter: findPrevStoryChapter(chapters),
       onStatus: (msg) => {
         if (currentBookId !== requestBookId) return;
         updateInfiniteStatusBanner(`
@@ -1149,7 +1246,7 @@ async function handleNextChapterClick() {
       signal,
       rawChapTitle,
       rawBookTitle,
-      prevSummary: findPrevStoryChapter(chapters)?.summary || "",
+      prevChapter: findPrevStoryChapter(chapters),
       onStatus: (msg) => { btnText.innerText = msg.substring(0, 30) + "..."; }
     });
 
@@ -1307,7 +1404,7 @@ async function startTranslateFirst() {
       signal,
       rawChapTitle,
       rawBookTitle,
-      prevSummary: prevChap?.summary || "",
+      prevChapter: prevChap,
       onStatus: (msg) => {
         status.style.background = '#fffbeb';
         status.style.color = '#b45309';
@@ -1375,6 +1472,7 @@ function readProviderDraftFromStorage(provider) {
   return {
     keys: getProviderKeys(provider).join('\n'),
     model: getProviderModel(provider),
+    auxModel: getProviderAuxModel(provider),
     baseUrl: getProviderBaseUrl(provider)
   };
 }
@@ -1383,6 +1481,7 @@ function stashSettingsForm() {
   settingsDrafts[settingsFormProvider] = {
     keys: document.getElementById('llm-keys-area').value,
     model: document.getElementById('llm-model-input').value.trim(),
+    auxModel: document.getElementById('llm-aux-model-input').value.trim(),
     baseUrl: document.getElementById('llm-baseurl-input').value.trim()
   };
 }
@@ -1418,6 +1517,7 @@ function showSettingsForProvider(provider) {
   keysArea.placeholder = `วาง API Key (1 คีย์ต่อ 1 บรรทัด)\n${meta.keyHint}\n${meta.keyHint}`;
   const modelInput = document.getElementById('llm-model-input');
   modelInput.value = draft.model;
+  document.getElementById('llm-aux-model-input').value = draft.auxModel || '';
   modelInput.placeholder = meta.defaultModel || 'ชื่อโมเดล เช่น ที่ได้จากปุ่มตรวจเช็กโมเดล';
   document.getElementById('llm-baseurl-input').value = draft.baseUrl || meta.defaultBaseUrl || '';
   document.getElementById('llm-baseurl-group').style.display = provider === 'openai' ? 'block' : 'none';
@@ -1479,6 +1579,7 @@ function saveSettings() {
     const parsedKeys = draft.keys.split('\n').map(k => k.trim()).filter(k => k.length > 5);
     localStorage.setItem(`nov_llm_keys_${provider}`, JSON.stringify(parsedKeys));
     localStorage.setItem(`nov_llm_model_${provider}`, draft.model);
+    localStorage.setItem(`nov_llm_aux_model_${provider}`, draft.auxModel || '');
     if (provider === 'openai') localStorage.setItem(`nov_llm_baseurl_${provider}`, draft.baseUrl);
     keyIndexByProvider[provider] = 0;
   });
@@ -1487,7 +1588,7 @@ function saveSettings() {
 
   localStorage.setItem('nov_retry_limit', document.getElementById('retry-limit').value || "10");
   localStorage.setItem('nov_enable_deep_ner', document.getElementById('enable-deep-ner-scan').checked ? 'true' : 'false');
-  localStorage.setItem('nov_verify_mode', document.getElementById('verify-mode-select').value);
+  localStorage.setItem('nov_quality_mode', document.getElementById('quality-mode-select').value);
   localStorage.setItem('nov_enable_infinite', document.getElementById('enable-infinite-scroll').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_prefetch', document.getElementById('enable-live-prefetch').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_auto_glossary', document.getElementById('enable-auto-glossary').checked ? 'true' : 'false');
@@ -1530,8 +1631,8 @@ function loadSettings() {
   const deepNerChk = document.getElementById('enable-deep-ner-scan');
   if (deepNerChk) deepNerChk.checked = (localStorage.getItem('nov_enable_deep_ner') === 'true');
 
-  const verifySelect = document.getElementById('verify-mode-select');
-  if (verifySelect) verifySelect.value = getVerifyMode();
+  const qualitySelect = document.getElementById('quality-mode-select');
+  if (qualitySelect) qualitySelect.value = getQualityMode();
 
   const prefetchChk = document.getElementById('enable-live-prefetch');
   if (prefetchChk) prefetchChk.checked = (localStorage.getItem('nov_enable_prefetch') !== 'false');

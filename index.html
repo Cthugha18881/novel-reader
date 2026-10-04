@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.7.1</title>
+  <title>NovelTranslate AI v2.8.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -43,6 +43,7 @@
       <button class="btn" onclick="openBookshelfModal()">ชั้นหนังสือ</button>
       <button class="btn btn-primary" onclick="openImportModal()">+ วางลิงก์</button>
       <button class="btn" onclick="openGlossaryModal()">คลังศัพท์</button>
+      <button class="btn" onclick="openBibleModal()" title="ตัวละคร สรรพนาม แนวทางสำนวน กฎแทนคำ และตัวอย่างสำนวนของเรื่องนี้">คู่มือเรื่อง</button>
       <button class="btn" onclick="openSettingsModal()">ตั้งค่า</button>
     </div>
   </header>
@@ -147,6 +148,81 @@
         <input type="file" id="backup-file-input" accept=".json,application/json" style="display: none;" onchange="handleBackupFileSelected(this)">
       </div>
       <p style="font-size: 11px; opacity: 0.6; text-align: center;">*กด 🔄 บนมุมขวาของหน้าอ่านเพื่อแปลบทปัจจุบันใหม่ตามคลังศัพท์ล่าสุดได้ทันที<br>*ข้อมูลทั้งหมดเก็บอยู่ในเบราว์เซอร์เครื่องนี้เท่านั้น ควรสำรองข้อมูลเป็นระยะ</p>
+    </div>
+  </div>
+
+  <!-- MODAL: BOOK BIBLE (คู่มือเรื่อง) -->
+  <div class="modal-overlay" id="bible-modal">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">คู่มือเรื่อง</div>
+          <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">เรื่อง: <b id="bible-book-title">...</b> — AI ใช้ข้อมูลนี้ทุกครั้งที่แปลเรื่องนี้</div>
+        </div>
+        <button class="modal-close" onclick="closeModal('bible-modal')">✕</button>
+      </div>
+      <div class="gloss-category-tabs" style="margin-bottom: 10px;">
+        <button class="cat-tab-btn bible-tab-btn" data-tab="characters" onclick="switchBibleTab('characters')">👤 ตัวละคร</button>
+        <button class="cat-tab-btn bible-tab-btn" data-tab="style" onclick="switchBibleTab('style')">🖋️ แนวทางสำนวน</button>
+        <button class="cat-tab-btn bible-tab-btn" data-tab="rules" onclick="switchBibleTab('rules')">🔁 กฎแทนคำ</button>
+        <button class="cat-tab-btn bible-tab-btn" data-tab="examples" onclick="switchBibleTab('examples')">⭐ ตัวอย่างสำนวน</button>
+      </div>
+      <div class="modal-scrollable-body" style="max-height: 55vh;">
+        <div class="bible-tab-panel" data-tab="characters">
+          <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; align-items: center;">
+            <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="addBibleCharacter()">+ เพิ่มตัวละคร</button>
+            <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="generateBibleFromChapters()" title="ให้ AI อ่านตอนที่แปลแล้วล่าสุดเพื่อเติมข้อมูลตัวละคร">✨ สร้างจากตอนที่แปลแล้ว</button>
+            <label style="font-size: 11px; display: flex; gap: 4px; align-items: center; margin-left: auto; cursor: pointer;">
+              <input type="checkbox" id="bible-auto-chk" style="accent-color: #2563eb;"> อัปเดตอัตโนมัติระหว่างแปล
+            </label>
+          </div>
+          <div id="bible-pending-note" style="font-size: 11px; color: #a16207; margin-bottom: 6px;"></div>
+          <div id="bible-characters-list"></div>
+        </div>
+        <div class="bible-tab-panel" data-tab="style" style="display: none;">
+          <label class="form-label" for="bible-style-notes">แนวทางสำนวนของเรื่องนี้ (AI จะยึดตามนี้ทุกตอน)</label>
+          <textarea id="bible-style-notes" class="form-input" rows="8" oninput="bibleDraft.bible.styleNotes = this.value" placeholder="ตัวอย่าง:&#10;- พระเอกพูดห้วน ประชดประชัน ใช้ 'ข้า' กับทุกคน&#10;- เรียกระดับพลังด้วยคำไทยล้วน ไม่ทับศัพท์&#10;- บทบรรยายใช้ภาษาวรรณกรรมแบบนิยายกำลังภายในยุคเก่า"></textarea>
+        </div>
+        <div class="bible-tab-panel" data-tab="rules" style="display: none;">
+          <div style="font-size: 11px; opacity: 0.7; margin-bottom: 8px;">แทนคำที่ AI ชอบใช้แปลกๆ ด้วยคำที่ต้องการ ทำงานอัตโนมัติหลังแปลทุกตอน และไม่แตะคำในคลังศัพท์</div>
+          <div id="bible-rules-list"></div>
+          <div style="display: flex; gap: 6px; margin-top: 8px;">
+            <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="addReplaceRule()">+ เพิ่มกฎ</button>
+            <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="applyReplaceRulesToBook()">ใช้กฎกับตอนที่แปลแล้วทั้งหมด</button>
+          </div>
+        </div>
+        <div class="bible-tab-panel" data-tab="examples" style="display: none;">
+          <div style="font-size: 11px; opacity: 0.7; margin-bottom: 8px;">คำแปลที่คุณแก้เองในหน้าอ่าน จะถูกเก็บไว้ที่นี่ และส่งให้ AI เป็นตัวอย่างสำนวนในตอนถัดๆ ไป (เลือกตัวอย่างที่ใกล้เคียงกับเนื้อหาที่กำลังแปล)</div>
+          <div id="bible-examples-list"></div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px; flex-shrink: 0;">
+        <button class="btn" onclick="closeModal('bible-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveBibleModal()">บันทึกคู่มือ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: EDIT PARAGRAPH TRANSLATION -->
+  <div class="modal-overlay" id="edit-para-modal" style="z-index: 65;">
+    <div class="modal-box" style="max-width: 520px;">
+      <div class="modal-head">
+        <div class="modal-title">แก้คำแปลย่อหน้านี้</div>
+        <button class="modal-close" onclick="closeModal('edit-para-modal')">✕</button>
+      </div>
+      <div class="para-src" id="edit-para-src" style="display: block; margin: 0 0 10px;"></div>
+      <textarea id="edit-para-th" class="form-input" rows="6" style="resize: vertical; font-size: 15px; line-height: 1.7;"></textarea>
+      <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; margin-top: 10px;">
+        <input type="checkbox" id="edit-para-as-example" style="accent-color: #2563eb; margin-top: 2px;" checked>
+        <div>
+          <span style="font-weight: 600;">ใช้เป็นตัวอย่างสำนวนให้ AI</span>
+          <div style="font-size: 11px; opacity: 0.65;">AI จะดูตัวอย่างนี้เวลาแปลเนื้อหาที่คล้ายกันในตอนถัดไป ย่อหน้าที่แก้เองจะไม่ถูกเขียนทับเมื่อกดแปลใหม่ (ถ้าไม่ยืนยัน)</div>
+        </div>
+      </label>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
+        <button class="btn" onclick="closeModal('edit-para-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveEditedParagraph()">บันทึก</button>
+      </div>
     </div>
   </div>
 
@@ -445,6 +521,14 @@
         </div>
 
         <div class="form-group">
+          <label class="form-label" for="llm-aux-model-input">โมเดลสำหรับงานรอง (ไม่บังคับ)</label>
+          <input type="text" id="llm-aux-model-input" class="form-input" list="llm-model-list" autocomplete="off" placeholder="เว้นว่าง = ใช้โมเดลหลัก" style="font-family: monospace; font-size: 12px;">
+          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
+            * ใช้กับการสแกนคำศัพท์/ตัวละคร การตรวจทาน และการตรวจความหมาย แนะนำให้ใช้โมเดลที่ถูกกว่า แล้วเลือกโมเดลที่เก่งกว่าเป็นโมเดลหลักสำหรับแปลและเกลาสำนวน
+          </div>
+        </div>
+
+        <div class="form-group">
           <label class="form-label">ลิมิตส่งซ้ำเมื่อเซิร์ฟเวอร์หนาแน่น (รอบ)</label>
           <input type="number" id="retry-limit" class="form-input" min="1" max="50" value="10" placeholder="10">
         </div>
@@ -463,14 +547,16 @@
         </div>
 
         <div class="form-group" style="margin-top: 10px;">
-          <label class="form-label" for="verify-mode-select">🛡️ ตรวจทานเทียบต้นฉบับ 2 ภาษา (Bilingual Cross-Verification)</label>
-          <select id="verify-mode-select" class="form-input">
-            <option value="smart">ตรวจเฉพาะย่อหน้าที่น่าสงสัย (แนะนำ / ประหยัด token)</option>
-            <option value="full">ตรวจทุกย่อหน้า (แม่นสุด / ใช้ token ประมาณ 2 เท่า)</option>
-            <option value="off">ปิดการตรวจทาน</option>
+          <label class="form-label" for="quality-mode-select">🛡️ โหมดคุณภาพการแปล</label>
+          <select id="quality-mode-select" class="form-input">
+            <option value="fast">เร็ว — แปลรอบเดียว (ประหยัดสุด)</option>
+            <option value="balanced">สมดุล — แปล + ตรวจย่อหน้าที่น่าสงสัย (แนะนำ)</option>
+            <option value="thorough">ละเอียด — แปล + ตรวจทุกย่อหน้าเทียบต้นฉบับ (~2 เท่า)</option>
+            <option value="best">ดีที่สุด — แปล + บรรณาธิการเกลาสำนวน + ตรวจความหมาย (~2.5-3 เท่า)</option>
           </select>
           <div style="font-size: 11px; opacity: 0.65; margin-top: 4px; line-height: 1.4;">
-            ย่อหน้าที่น่าสงสัย = มีอักษรจีนหลุด, วงเล็บ 【 】 ว่างหรือหาย, ความยาวผิดปกติเทียบต้นฉบับ หรือไม่ได้ใช้คำแปลตามคลังศัพท์
+            ทุกโหมดมีการแก้อักษรจีนที่หลงเหลือ และทำความสะอาดเครื่องหมาย/คำสะกดผิดอัตโนมัติ (ไม่เสีย token)<br>
+            โหมด "ดีที่สุด": ชื่อในคลังศัพท์ถูกล็อกระหว่างเกลา และย่อหน้าที่ตรวจแล้วความหมายเพี้ยนจะกลับไปใช้ฉบับก่อนเกลา
           </div>
         </div>
 
@@ -526,7 +612,9 @@
   <script src="js/db.js"></script>
   <script src="js/llm.js"></script>
   <script src="js/api.js"></script>
+  <script src="js/cleanup.js"></script>
   <script src="js/glossary.js"></script>
+  <script src="js/bible.js"></script>
   <script src="js/shelf.js"></script>
   <script src="js/export.js"></script>
   <script src="js/app.js"></script>

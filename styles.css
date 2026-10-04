@@ -214,6 +214,38 @@ body.theme-dark .chapter-type-badge { color: #e9d5ff; }
 }
 body.theme-dark .chap-type-select { border-color: rgba(255,255,255,0.15); background: #161b22; }
 
+/* PARAGRAPH ACTIONS (แก้คำแปลในหน้าอ่าน) */
+.para-actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; font-family: 'Sarabun', sans-serif; }
+.para-action-btn {
+  font-size: 11px; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-family: inherit;
+  border: 1px solid rgba(37,99,235,0.35); background: rgba(37,99,235,0.08); color: #2563eb;
+}
+body.theme-dark .para-action-btn { color: #93c5fd; border-color: rgba(96,165,250,0.4); }
+.para-user-edited .para-th { border-right: 2px solid rgba(16,185,129,0.6); padding-right: 6px; }
+
+/* BOOK BIBLE */
+.bible-char-card {
+  border: 1px solid rgba(0,0,0,0.1); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px;
+}
+body.theme-dark .bible-char-card { border-color: rgba(255,255,255,0.12); }
+.bible-char-card.locked { border-color: rgba(16,185,129,0.5); }
+.bible-char-card.has-pending { border-color: #eab308; }
+.bible-char-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; flex-wrap: wrap; }
+.bible-char-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 6px; }
+.bible-char-grid label { display: flex; flex-direction: column; gap: 2px; font-size: 10px; opacity: 0.85; }
+.bible-char-grid label.wide { grid-column: 1 / -1; }
+.bible-char-grid input, .bible-char-grid select, .bible-rule-row input {
+  font-size: 12px; padding: 4px 6px; border-radius: 4px; border: 1px solid rgba(0,0,0,0.15);
+  font-family: inherit; background: #fff; color: #000;
+}
+body.theme-dark .bible-char-grid input, body.theme-dark .bible-char-grid select, body.theme-dark .bible-rule-row input {
+  background: #0d1117; color: #fff; border-color: rgba(255,255,255,0.2);
+}
+.bible-pending { margin-top: 6px; padding: 6px 8px; border-radius: 6px; background: rgba(234,179,8,0.12); font-size: 11px; }
+.bible-rule-row { display: flex; gap: 6px; align-items: center; margin-bottom: 6px; }
+.bible-rule-row input[type="text"] { flex: 1; min-width: 0; }
+.bible-example { border-bottom: 1px solid rgba(0,0,0,0.06); padding: 8px 0; }
+
 /* INLINE TERM QUICK POPOVER */
 #term-popover {
   display: none; position: fixed; z-index: 100;

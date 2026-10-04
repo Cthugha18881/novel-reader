@@ -110,7 +110,7 @@ async function startBatchTranslateForBook(bookId) {
           signal,
           rawChapTitle,
           rawBookTitle,
-          prevSummary: findPrevStoryChapter(existingAll)?.summary || "",
+          prevChapter: findPrevStoryChapter(existingAll),
           onStatus: (msg) => { progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 60)}`; }
         });
 

@@ -24,7 +24,9 @@
   <script src="../js/db.js"></script>
   <script src="../js/llm.js"></script>
   <script src="../js/api.js"></script>
+  <script src="../js/cleanup.js"></script>
   <script src="../js/glossary.js"></script>
+  <script src="../js/bible.js"></script>
   <script src="../js/export.js"></script>
   <script>
     const results = [];
@@ -148,12 +150,13 @@
     test('isMissingPageError: 404 จาก AI ไม่นับเป็นหน้าเว็บหาย', () => !isMissingPageError(new LLMError('คำขอไม่ถูกต้อง (404): model not found', 'bad_request', 404)) && isMissingPageError(new Error('404')));
     test('xmlEscape: escape และตัดอักขระควบคุม', () => eq(xmlEscape('a&<b>"\u0001'), 'a&amp;&lt;b&gt;&quot;'));
     test('getVerifyMode: ค่าเก่า false -> off', () => {
-      const prevMode = localStorage.getItem('nov_verify_mode'), prevOld = localStorage.getItem('nov_enable_bilingual_verify');
+      const keys = ['nov_quality_mode', 'nov_verify_mode', 'nov_enable_bilingual_verify'];
+      const saved = keys.map(k => [k, localStorage.getItem(k)]);
+      localStorage.removeItem('nov_quality_mode');
       localStorage.removeItem('nov_verify_mode');
       localStorage.setItem('nov_enable_bilingual_verify', 'false');
       const r = getVerifyMode();
-      if (prevMode === null) localStorage.removeItem('nov_verify_mode'); else localStorage.setItem('nov_verify_mode', prevMode);
-      if (prevOld === null) localStorage.removeItem('nov_enable_bilingual_verify'); else localStorage.setItem('nov_enable_bilingual_verify', prevOld);
+      saved.forEach(([k, v]) => v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v));
       return eq(r, 'off');
     });
 
@@ -255,6 +258,76 @@
       return eq(without.map(c => [c.title, c.paragraphs.length]), [['a', 1], ['d', 1]]) && eq(withNotes.map(c => [c.title, c.paragraphs.length]), [['a', 2], ['b', 1], ['d', 1]]);
     });
     test('SCHEMAS.translation มี chapter_type และ kind', () => SCHEMAS.translation.required.includes('chapter_type') && SCHEMAS.translation.properties.paragraphs.items.required.includes('kind'));
+
+    // ---------- Phase 3: cleanup ----------
+    test('cleanup: เครื่องหมายจีน -> ไทย', () => eq(cleanupThaiText('เขาพูดว่า「ไปกันเถอะ」，แล้วเดินออกไป……'), 'เขาพูดว่า“ไปกันเถอะ” แล้วเดินออกไป...'));
+    test('cleanup: แก้คำผิดที่ผิดแน่นอน', () => eq(cleanupThaiText('ขออนุญาติ ศรีษะ สังเกตุ โอกาศ ปรากฎ'), 'ขออนุญาต ศีรษะ สังเกต โอกาส ปรากฏ'));
+    test('cleanup: ไม่แก้คำที่ถูกอยู่แล้ว (สร้างสรรค์, เวทมนตร์, สัมพันธไมตรี)', () => eq(cleanupThaiText('สร้างสรรค์ เวทมนตร์ สัมพันธไมตรี'), 'สร้างสรรค์ เวทมนตร์ สัมพันธไมตรี'));
+    test('cleanup: ไม่แตะคำในคลังศัพท์', () => eq(cleanupThaiText('ท่านโอกาศมาแล้ว และโอกาศก็มา', { termTgts: ['ท่านโอกาศ'] }), 'ท่านโอกาศมาแล้ว และโอกาสก็มา'));
+    test('cleanup: กฎแทนคำของผู้ใช้ (คำยาวก่อน, ปิดได้)', () => {
+      const rules = [{ from: 'ข้าน้อย', to: 'ผู้น้อย' }, { from: 'ข้า', to: 'ข้าพเจ้า', enabled: false }, { from: 'ปราณ', to: 'ลมปราณ' }];
+      return eq(cleanupThaiText('ข้าน้อยฝึกปราณ ข้าไม่ยอม', { replaceRules: rules }), 'ผู้น้อยฝึกลมปราณ ข้าไม่ยอม');
+    });
+    test('cleanup: กฎแทนคำไม่แตะคำในคลังศัพท์', () => eq(cleanupThaiText('ปราณสวรรค์ กับ ปราณ', { termTgts: ['ปราณสวรรค์'], replaceRules: [{ from: 'ปราณ', to: 'ลมปราณ' }] }), 'ปราณสวรรค์ กับ ลมปราณ'));
+    test('cleanupParagraphs: ข้ามข้อความเว็บ', () => eq(cleanupParagraphs([{ th: 'ก，ข', src: 'x' }, { th: '', src: 'y', kind: 'site_junk' }]).map(p => p.th), ['ก ข', '']));
+
+    // ---------- Phase 3: term locking ----------
+    test('lockTerms/unlockTerms: คืนคำศัพท์ครบ', () => {
+      const lk = lockTerms('หลินต้งมองหลินต้งในกระจก ส่วนเซียวเหยียนยิ้ม', ['หลินต้ง', 'เซียวเหยียน']);
+      eq(lk.text, '⟦T0⟧มอง⟦T0⟧ในกระจก ส่วน⟦T1⟧ยิ้ม');
+      return eq(unlockTerms(lk.text, '⟦T1⟧ยิ้ม ขณะที่⟦T0⟧มอง⟦T0⟧ในกระจก', lk.tokens), 'เซียวเหยียนยิ้ม ขณะที่หลินต้งมองหลินต้งในกระจก');
+    });
+    test('unlockTerms: รหัสหาย/เกิน/เพี้ยน = null', () => {
+      const lk = lockTerms('หลินต้งเดิน', ['หลินต้ง']);
+      return unlockTerms(lk.text, 'เขาเดิน', lk.tokens) === null && unlockTerms(lk.text, '⟦T0⟧⟦T0⟧เดิน', lk.tokens) === null && unlockTerms(lk.text, '⟦T0⟧เดิน⟦T9⟧', lk.tokens) === null && unlockTerms(lk.text, '⟦T0⟧เดิน⟦', lk.tokens) === null;
+    });
+
+    // ---------- Phase 3: bible ----------
+    test('mergeCharacterUpdates: เพิ่มตัวละครใหม่', () => {
+      const bible = emptyBible();
+      const r = mergeCharacterUpdates(bible, [{ src: '林动', aliases: ['小动'], gender: 'male', role: 'พระเอก', selfRef: 'ข้า', addressing: [{ to: '萧炎', term: 'พี่เซียว' }] }]);
+      return eq([r.added, bible.characters.length, bible.characters[0].gender, bible.characters[0].aliases], [1, 1, 'male', ['小动']]);
+    });
+    test('mergeCharacterUpdates: เติมช่องว่าง, ค่าที่ขัดกันเป็นข้อเสนอ, ล็อกแล้วไม่แตะ', () => {
+      const bible = emptyBible();
+      bible.characters.push({ id: 'a', src: '林动', aliases: [], gender: 'unknown', role: 'พระเอก', selfRef: '', addressing: [], locked: false });
+      bible.characters.push({ id: 'b', src: '萧炎', aliases: [], gender: 'male', role: '', selfRef: '', addressing: [], locked: true });
+      const r = mergeCharacterUpdates(bible, [
+        { src: '小动', aliases: ['林动'], gender: 'male', role: 'ศัตรู', selfRef: 'ข้า', addressing: [] },
+        { src: '萧炎', aliases: [], gender: 'female', role: 'x', selfRef: 'y', addressing: [] }
+      ]);
+      const a = bible.characters[0], b = bible.characters[1];
+      return eq([r.added, a.gender, a.selfRef, a.role, a.pending, a.aliases, b.gender, b.role], [0, 'male', 'ข้า', 'พระเอก', { role: 'ศัตรู' }, ['小动'], 'male', '']);
+    });
+    test('buildGuideSection: ส่งเฉพาะตัวละครที่อยู่ในข้อความ + แนวทางสำนวน', () => {
+      const extras = { bible: { styleNotes: 'ใช้ ข้า-เจ้า', characters: [
+        { src: '林动', aliases: ['小动'], gender: 'male', role: 'พระเอก', selfRef: 'ข้า', addressing: [] },
+        { src: '萧炎', aliases: [], gender: 'male', role: '', selfRef: '', addressing: [] }
+      ] } };
+      const s = buildGuideSection(extras, { '林动': { resolvedTgt: 'หลินต้ง' } }, '小动说话了');
+      return s.includes('ใช้ ข้า-เจ้า') && s.includes('林动 = หลินต้ง') && s.includes('เพศ: ชาย') && !s.includes('萧炎');
+    });
+    test('pickStyleExamples: เลือกตัวอย่างที่ใกล้เคียง', () => {
+      const exs = [{ src: '天空很蓝', th: 'a' }, { src: '林动拔剑而起', th: 'b' }, { src: '雨下了', th: 'c' }, { src: '风很大', th: 'd' }];
+      return eq(pickStyleExamples(exs, '林动拔剑冲向敌人', 1).map(e => e.th), ['b']);
+    });
+
+    // ---------- Phase 3: quality modes & context ----------
+    test('getQualityMode: ย้ายค่าจาก verify mode เดิม', () => {
+      const keep = ['nov_quality_mode', 'nov_verify_mode'].map(k => [k, localStorage.getItem(k)]);
+      localStorage.removeItem('nov_quality_mode');
+      localStorage.setItem('nov_verify_mode', 'full');
+      const a = getQualityMode();
+      localStorage.setItem('nov_quality_mode', 'best');
+      const b = [getQualityMode(), getVerifyMode()];
+      keep.forEach(([k, v]) => v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v));
+      return eq([a, ...b], ['thorough', 'best', 'smart']);
+    });
+    test('buildChapterTail: ท้ายตอนเฉพาะเนื้อเรื่อง', () => {
+      const ch = { paragraphs: [{ th: 'หนึ่ง' }, { th: 'สอง' }, { th: 'ขอโหวต', kind: 'author_note' }, { th: '', kind: 'site_junk' }] };
+      return eq(buildChapterTail(ch, 4), 'หนึ่ง / สอง');
+    });
+    test('SCHEMAS ใหม่ strict ครบ (polish/fidelity/preScan/characters)', () => ['polish', 'fidelity', 'preScan', 'characters'].every(k => SCHEMAS[k] && SCHEMAS[k].additionalProperties === false));
 
     const passed = results.filter(r => r.ok).length;
     const summary = document.getElementById('summary');

@@ -129,12 +129,22 @@ function getProviderBaseUrl(provider) {
   return raw.replace(/\/+$/, '');
 }
 
-function getActiveLlmConfig() {
+// โมเดลสำหรับงานรอง (สแกนคำศัพท์/ตรวจทาน/ตรวจความหมาย) ว่างไว้ = ใช้โมเดลหลัก
+function getProviderAuxModel(provider) {
+  return (localStorage.getItem(`nov_llm_aux_model_${provider}`) || '').trim();
+}
+
+/** @param {'main'|'aux'} role งานแปล/เกลาใช้ main, งานตรวจและสกัดข้อมูลใช้ aux */
+function getActiveLlmConfig(role = 'main') {
   const provider = getActiveProvider();
+  const mainModel = getProviderModel(provider);
+  const auxModel = getProviderAuxModel(provider);
   return {
     provider,
     keys: getProviderKeys(provider),
-    model: getProviderModel(provider),
+    model: role === 'aux' && auxModel ? auxModel : mainModel,
+    mainModel,
+    auxModel,
     baseUrl: getProviderBaseUrl(provider)
   };
 }
@@ -372,8 +382,8 @@ const PROVIDER_CALLERS = {
  * เรียก AI ตาม provider ที่ตั้งค่าไว้ พร้อม retry/หมุนคีย์/ยกเลิก
  * @returns {Promise<string>} ข้อความดิบจากโมเดล
  */
-async function callLLM(prompt, { json = true, schema = null, signal = null, onStatus = null, maxRetries = getRetryLimit() } = {}) {
-  const cfg = getActiveLlmConfig();
+async function callLLM(prompt, { json = true, schema = null, signal = null, onStatus = null, maxRetries = getRetryLimit(), role = 'main' } = {}) {
+  const cfg = getActiveLlmConfig(role);
   if (cfg.keys.length === 0) throw new LLMError(`กรุณาใส่ API Key ของ ${LLM_PROVIDERS[cfg.provider].label} ในเมนู 'ตั้งค่า' ก่อน`, 'config');
   if (!cfg.model) throw new LLMError("กรุณาเลือกโมเดลในเมนู 'ตั้งค่า' ก่อน", 'config');
 

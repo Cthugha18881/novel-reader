@@ -50,6 +50,8 @@ async function syncTermChange(before, after) {
     const newTgt = resolveTermForBook(after, bookId);
     if (oldTgt && newTgt && oldTgt !== newTgt) {
       await syncUpdatedTermAcrossChapters(after.src, oldTgt, newTgt, [bookId]);
+      // ตัวอย่างสำนวนต้องเปลี่ยนชื่อตามด้วย ไม่งั้นจะสอนชื่อเก่าให้ AI
+      await syncStyleExamplesForTerm(bookId, oldTgt, newTgt);
     }
   }
 }
@@ -624,7 +626,7 @@ async function researchGlossaryTermDirect(src, persist = true, ctx = getCurrentB
   "category": "character|title|location|skill|equipment|resource|realm"
 }`;
 
-  const parsed = await callLLMJson(prompt, { maxRetries: 3, schema: SCHEMAS.research });
+  const parsed = await callLLMJson(prompt, { maxRetries: 3, schema: SCHEMAS.research, role: 'aux' });
   if (!parsed?.tgt) throw new Error('AI ไม่ส่งคำแปลกลับมา กรุณาลองอีกครั้ง');
 
   const cleanNewTgt = cleanTermString(parsed.tgt);
@@ -708,7 +710,7 @@ ${JSON.stringify(termList)}
 
   showGlobalToast(`AI กำลังจัดหมวดหมู่ ${items.length} คำ...`);
   try {
-    const parsed = await callLLMJson(prompt, { onStatus: showGlobalToast, schema: SCHEMAS.classify });
+    const parsed = await callLLMJson(prompt, { onStatus: showGlobalToast, schema: SCHEMAS.classify, role: 'aux' });
 
     let updatedCount = 0;
     if (Array.isArray(parsed.classified)) {
@@ -739,9 +741,12 @@ async function delGloss(src) {
 }
 
 // โยน error ออกไปให้ผู้เรียกตัดสินใจ (pipeline แปลจะข้ามไป, ปุ่มสแกนเองจะแจ้งผู้ใช้)
+// สแกนก่อนแปล: คำศัพท์ใหม่ + ข้อมูลตัวละครสำหรับคู่มือเรื่อง (รวมเป็นคำขอเดียว)
 async function extractAndStoreAutoGlossary(rawText, ctx, { signal = null, onStatus = null, force = false } = {}) {
-  const isAutoGlossaryEnabled = localStorage.getItem('nov_enable_auto_glossary') !== 'false';
-  if (!isAutoGlossaryEnabled && !force) return 0;
+  const isAutoGlossaryEnabled = localStorage.getItem('nov_enable_auto_glossary') !== 'false' || force;
+  const isBibleEnabled = isBibleAutoEnabled() && ctx.bookId && ctx.bookId !== 'default_novel';
+  if (!isAutoGlossaryEnabled && !isBibleEnabled) return 0;
+  const extras = isBibleEnabled ? await getBookExtras(ctx.bookId) : null;
 
   const genre = ctx.genre;
   const bookId = ctx.bookId;
@@ -779,15 +784,24 @@ ${isDeepNer ? `4. **คำประสมพิเศษและฉายา:**
 1. ห้ามเลือกคำทั่วไป (เช่น พ่อ, แม่, ประตู, ท้องฟ้า)
 2. คำที่มีอยู่แล้วห้ามส่งซ้ำ: [${existingTerms.join(', ')}]
 3. คำแปลไทยใน "tgt" ต้องเป็นชื่อเฉพาะตรงตัว **ห้ามใส่วงเล็บทึบ 【 】 หรือเครื่องหมายคำพูดใดๆ ติดมา**
-
+${isBibleEnabled ? `\n${buildCharacterExtractionInstruction(extras.bible, rawText)}\n` : ''}
 ตอบกลับเป็น JSON เท่านั้น:
 {
   "newTerms": [
     { "src": "คำจีน", "tgt": "คำแปลไทยมาตรฐาน", "category": "character|title|location|skill|equipment|resource|realm" }
-  ]
+  ]${isBibleEnabled ? `,
+  "characters": [
+    { "src": "ชื่อต้นฉบับ", "aliases": [], "gender": "male|female|unknown", "role": "", "selfRef": "", "addressing": [{"to": "", "term": ""}] }
+  ]` : ''}
 }`;
 
-  const parsed = await callLLMJson(`${prompt}\n\nเนื้อหาบท:\n${rawText}`, { signal, onStatus, schema: SCHEMAS.newTerms });
+  const parsed = await callLLMJson(`${prompt}\n\nเนื้อหาบท:\n${rawText}`, {
+    signal, onStatus, role: 'aux', schema: isBibleEnabled ? SCHEMAS.preScan : SCHEMAS.newTerms
+  });
+  if (isBibleEnabled && Array.isArray(parsed?.characters) && parsed.characters.length) {
+    await applyCharacterUpdates(ctx.bookId, parsed.characters);
+  }
+  if (!isAutoGlossaryEnabled) return 0;
   const items = Array.isArray(parsed?.newTerms) ? parsed.newTerms : [];
   let addedCount = 0;
   for (const item of items) {

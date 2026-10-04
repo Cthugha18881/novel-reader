@@ -34,6 +34,16 @@ const termItemSchema = strictObject({
   src: { type: 'string' }, tgt: { type: 'string' }, category: { type: 'string', enum: TERM_CATEGORIES }
 });
 const numberedThSchema = { type: 'array', items: strictObject({ i: { type: 'integer' }, th: { type: 'string' } }) };
+function characterItemSchema() {
+  return strictObject({
+    src: { type: 'string' },
+    aliases: { type: 'array', items: { type: 'string' } },
+    gender: { type: 'string', enum: ['male', 'female', 'unknown'] },
+    role: { type: 'string' },
+    selfRef: { type: 'string' },
+    addressing: { type: 'array', items: strictObject({ to: { type: 'string' }, term: { type: 'string' } }) }
+  });
+}
 
 // ประเภทเนื้อหา: ระดับตอน และระดับย่อหน้า (site_junk ใช้กฎตรวจจับเท่านั้น ไม่ให้ AI ตัดสิน)
 const CHAPTER_TYPES = ['story', 'side_story', 'author_note', 'placeholder'];
@@ -52,7 +62,16 @@ const SCHEMAS = {
     used_entities: { type: 'array', items: termItemSchema }
   }),
   verify: strictObject({ verified: numberedThSchema }),
+  polish: strictObject({ polished: numberedThSchema }),
+  fidelity: strictObject({
+    checks: { type: 'array', items: strictObject({ i: { type: 'integer' }, ok: { type: 'boolean' }, issue: { type: 'string' } }) }
+  }),
   newTerms: strictObject({ newTerms: { type: 'array', items: termItemSchema } }),
+  characters: strictObject({ characters: { type: 'array', items: characterItemSchema() } }),
+  preScan: strictObject({
+    newTerms: { type: 'array', items: termItemSchema },
+    characters: { type: 'array', items: characterItemSchema() }
+  }),
   research: strictObject({ tgt: { type: 'string' }, category: { type: 'string', enum: TERM_CATEGORIES } }),
   classify: strictObject({
     classified: { type: 'array', items: strictObject({ src: { type: 'string' }, category: { type: 'string', enum: TERM_CATEGORIES } }) }
@@ -181,13 +200,30 @@ function findExistingBookForUrl(url, books) {
 
 // ---------- Chapter records ----------
 // เพิ่มเลขนี้ทุกครั้งที่เปลี่ยน prompt แปลอย่างมีนัยสำคัญ เพื่อให้รู้ว่าตอนไหนแปลด้วย prompt รุ่นเก่า
-const PROMPT_VERSION = '2.7';
+const PROMPT_VERSION = '3.0';
+
+// โหมดคุณภาพ: fast = แปลรอบเดียว, balanced = + ตรวจย่อหน้าน่าสงสัย, thorough = + ตรวจทุกย่อหน้า,
+// best = แปล -> บรรณาธิการเกลาสำนวน -> ตรวจความหมายเทียบต้นฉบับ (+ ตรวจย่อหน้าน่าสงสัย)
+const QUALITY_MODES = ['fast', 'balanced', 'thorough', 'best'];
+
+function getQualityMode() {
+  const mode = localStorage.getItem('nov_quality_mode');
+  if (QUALITY_MODES.includes(mode)) return mode;
+  // ค่าจากรุ่นก่อน (nov_verify_mode / nov_enable_bilingual_verify)
+  const legacy = localStorage.getItem('nov_verify_mode');
+  if (legacy === 'off') return 'fast';
+  if (legacy === 'full') return 'thorough';
+  if (legacy === 'smart') return 'balanced';
+  return localStorage.getItem('nov_enable_bilingual_verify') === 'false' ? 'fast' : 'balanced';
+}
 
 function buildTranslationMeta() {
   const cfg = getActiveLlmConfig();
   return {
     provider: cfg.provider,
-    model: cfg.model,
+    model: cfg.mainModel,
+    auxModel: cfg.auxModel || '',
+    qualityMode: getQualityMode(),
     verifyMode: getVerifyMode(),
     promptVersion: PROMPT_VERSION,
     translatedAt: Date.now()
@@ -662,23 +698,40 @@ function findSuspiciousParagraphs(paragraphs, activeTerms) {
   return suspicious;
 }
 
+// โหมดตรวจทานคำนวณจากโหมดคุณภาพ (โหมด best ใช้การตรวจความหมายหลังเกลาแทนการตรวจทุกย่อหน้า)
 function getVerifyMode() {
-  const mode = localStorage.getItem('nov_verify_mode');
-  if (['off', 'smart', 'full'].includes(mode)) return mode;
-  return localStorage.getItem('nov_enable_bilingual_verify') === 'false' ? 'off' : 'smart';
+  return ({ fast: 'off', balanced: 'smart', thorough: 'full', best: 'smart' })[getQualityMode()];
 }
 
-// ---------- Verification pass ----------
+// ---------- Shared prompt context ----------
+/** ข้อมูลประกอบ prompt ที่ใช้ร่วมกันทุกขั้น: คลังศัพท์ของเรื่อง + คู่มือเรื่อง/กฎแทนคำ/ตัวอย่างสำนวน */
+async function loadPromptContext(ctx) {
+  const [activeTerms, extras] = await Promise.all([getActiveGlossaryForBook(ctx.bookId), getBookExtras(ctx.bookId)]);
+  return { activeTerms, extras };
+}
+
+function buildContextBlocks(pctx, text, { includeExamples = true } = {}) {
+  const blocks = [buildGuideSection(pctx.extras, pctx.activeTerms, text)];
+  if (includeExamples) blocks.push(buildStyleExamplesSection(pctx.extras, text));
+  return blocks.filter(Boolean).join('\n\n');
+}
+
 function isStoryParagraph(p) {
   return (p?.kind || 'story') === 'story';
 }
 
-async function bilingualCrossVerificationPass(paragraphs, ctx, { signal = null, onStatus = null, mode = getVerifyMode() } = {}) {
+function storyIndices(paragraphs) {
+  return paragraphs.map((p, i) => isStoryParagraph(p) && (p.th || '').trim() ? i : -1).filter(i => i >= 0);
+}
+
+// ---------- Verification pass ----------
+async function bilingualCrossVerificationPass(paragraphs, ctx, { signal = null, onStatus = null, mode = getVerifyMode(), pctx = null } = {}) {
   if (!paragraphs || paragraphs.length === 0 || mode === 'off') return paragraphs;
 
-  const activeTerms = await getActiveGlossaryForBook(ctx.bookId);
+  const promptCtx = pctx || await loadPromptContext(ctx);
+  const { activeTerms } = promptCtx;
   // ตรวจเฉพาะเนื้อเรื่อง ข้อความผู้เขียน/ข้อความเว็บไม่ต้องล็อกสรรพนามหรือคำศัพท์
-  const storyIdx = paragraphs.map((p, i) => isStoryParagraph(p) && (p.th || '').trim() ? i : -1).filter(i => i >= 0);
+  const storyIdx = storyIndices(paragraphs);
   const targetIdx = mode === 'full'
     ? storyIdx
     : findSuspiciousParagraphs(storyIdx.map(i => paragraphs[i]), activeTerms).map(k => storyIdx[k]);
@@ -692,38 +745,211 @@ async function bilingualCrossVerificationPass(paragraphs, ctx, { signal = null, 
   for (const chunk of chunkParagraphs(items)) {
     const chunkText = chunk.map(c => c.src).join('\n');
     const termList = buildRelevantTermList(activeTerms, chunkText);
-    const prompt = `คุณคือบรรณาธิการอาวุโสและผู้ตรวจสอบความถูกต้องของงานแปล (Bilingual Quality Auditor)
-หน้าที่ของคุณ: ตรวจเทียบคำแปลภาษาไทยกับภาษาจีนต้นฉบับแบบย่อหน้าต่อย่อหน้า (1 ต่อ 1) แล้วแก้ไขให้ความหมายสมบูรณ์ตรงตามต้นฉบับที่สุด
+    const contextBlocks = buildContextBlocks(promptCtx, chunkText, { includeExamples: false });
+    const prompt = `คุณคือบรรณาธิการอาวุโสผู้ตรวจงานแปลนิยายจีน-ไทย
+ตรวจคำแปลภาษาไทยเทียบกับต้นฉบับทีละย่อหน้า แล้วแก้เฉพาะจุดที่ผิด:
+1. ความหมายต้องตรงต้นฉบับ: ใครทำอะไรกับใคร, คำปฏิเสธ ('ไม่', 'มิได้'), เงื่อนไข, ตัวเลข ห้ามหาย ห้ามเพิ่มเนื้อหาที่ต้นฉบับไม่มี
+2. ชื่อและคำศัพท์ต้องตรงตามคลังศัพท์ทุกตัวอักษร: [${termList}]
+3. สรรพนามและคำเรียกขานต้องสอดคล้องกับเพศและความสัมพันธ์ของตัวละคร และคงชุดสรรพนามตามแนวเรื่อง
+4. คำในวงเล็บ 【 】 หรือ [ ] ต้องมีคำแปลไทยอยู่ข้างในเสมอ และต้องไม่มีอักษรจีนหลงเหลือ
+5. แก้คำสะกดผิดและประโยคที่อ่านแล้วสะดุด ให้เป็นภาษาไทยที่เป็นธรรมชาติ แต่ถ้าย่อหน้าไหนถูกต้องอยู่แล้วให้คงคำแปลเดิม
+6. ไม่ใส่ขีด —— นำหน้าบทสนทนา และตอบกลับทุกย่อหน้าที่ส่งมาโดยใช้หมายเลข "i" เดิม
 
-แนวเรื่อง: "${ctx.genre}"
-${genreRule}
+แนวเรื่อง: ${genreRule}
+${contextBlocks}
 
-กฎเหล็กสำคัญที่สุด (ฝ่าฝืนไม่ได้เด็ดขาด):
-1. **ล็อกสรรพนามให้คงที่ 100% (Pronoun Lock):** ห้ามเปลี่ยนชุดสรรพนามของตัวละคร หากใช้ 'ข้า-เจ้า' หรือ 'ข้า-ท่าน' ให้คงไว้ ห้ามสลับเป็น 'ผม/ฉัน/นาย/คุณ'
-2. **ความถูกต้องของใจความ:** ตรวจว่าประธาน กริยา กรรม สลับจนความหมายเพี้ยนหรือไม่ และห้ามตกหล่นคำปฏิเสธ ('ไม่', 'มิได้', 'หาได้...ไม่')
-3. **คำในคลังศัพท์ต้องตรงรูปเดิม 100%:** หากย่อหน้าจีนมีคำเหล่านี้ ภาษาไทยต้องใช้คำแปลตามนี้เป๊ะๆ: [${termList}]
-4. **คำในวงเล็บทึบ 【 】 หรือ [ ] ต้องมีคำแปลไทยอยู่ข้างในเสมอ** ห้ามส่งวงเล็บว่าง
-5. **ภาษาไทยล้วน 100%** ห้ามมีอักษรจีนหลุดมา ห้ามใส่ขีด —— นำหน้าบทสนทนา ให้ใช้ '...' หรือ “...” และแก้คำสะกดผิด
-6. ตอบกลับทุกย่อหน้าที่ส่งมา โดยใช้หมายเลข "i" เดิมของแต่ละย่อหน้า
-
-ย่อหน้าที่ต้องตรวจทาน (i = หมายเลขย่อหน้า, src = จีนต้นฉบับ, th = คำแปลปัจจุบัน):
+ย่อหน้าที่ต้องตรวจ (i = หมายเลข, src = ต้นฉบับ, th = คำแปลปัจจุบัน):
 ${JSON.stringify(chunk)}
 
-ตอบกลับเป็น JSON เท่านั้น: {"verified":[{"i":หมายเลข,"th":"ข้อความไทยที่ตรวจทานแล้ว"}]}`;
+ตอบกลับเป็น JSON เท่านั้น: {"verified":[{"i":หมายเลข,"th":"ข้อความไทยที่ตรวจแล้ว"}]}`;
 
     try {
-      const parsed = await callLLMJson(prompt, { signal, onStatus, schema: SCHEMAS.verify });
+      const parsed = await callLLMJson(prompt, { signal, onStatus, schema: SCHEMAS.verify, role: 'aux' });
       const list = Array.isArray(parsed?.verified) ? parsed.verified : [];
       const allowed = new Set(chunk.map(c => c.i));
       list.forEach(v => {
         const i = Number(v?.i);
         if (!allowed.has(i) || typeof v.th !== 'string') return;
-        const cleaned = cleanThaiOutput(v.th, result[i].src).replace(HANZI_REGEX_G, '').trim();
+        const cleaned = cleanThaiOutput(v.th, result[i].src);
         if (cleaned) result[i] = { ...result[i], th: cleaned };
       });
     } catch (err) {
       if (isAbortError(err)) throw err;
       console.warn("Bilingual verification fallback:", err);
+    }
+  }
+  return result;
+}
+
+// ---------- Term locking (ใช้ระหว่างเกลาสำนวน) ----------
+// แทนคำในคลังศัพท์ด้วยรหัส ⟦T0⟧ ก่อนส่งให้บรรณาธิการ เพื่อให้คำศัพท์คงรูปเดิมทุกตัวอักษร
+function lockTerms(text, termTgts) {
+  const tokens = [];
+  const ranges = findProtectedRanges(text, termTgts);
+  let out = '';
+  let cursor = 0;
+  for (const r of ranges) {
+    const term = text.slice(r.start, r.end);
+    let idx = tokens.indexOf(term);
+    if (idx === -1) { tokens.push(term); idx = tokens.length - 1; }
+    out += text.slice(cursor, r.start) + `⟦T${idx}⟧`;
+    cursor = r.end;
+  }
+  return { text: out + text.slice(cursor), tokens };
+}
+
+function countTokens(text) {
+  const counts = {};
+  (text.match(/⟦T\d+⟧/g) || []).forEach(t => { counts[t] = (counts[t] || 0) + 1; });
+  return counts;
+}
+
+/** คืนค่าคำศัพท์กลับ ถ้ารหัสหาย/เกิน/เพี้ยน คืน null (ให้ใช้ร่างเดิมแทน) */
+function unlockTerms(lockedOriginal, polished, tokens) {
+  if (typeof polished !== 'string') return null;
+  const before = countTokens(lockedOriginal);
+  const after = countTokens(polished);
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)]);
+  for (const k of keys) if (before[k] !== after[k]) return null;
+  if (/⟦|⟧/.test(polished.replace(/⟦T\d+⟧/g, ''))) return null;
+  return polished.replace(/⟦T(\d+)⟧/g, (_, n) => tokens[Number(n)] ?? '');
+}
+
+// ---------- Polish pass (โหมด best) ----------
+async function polishParagraphs(paragraphs, ctx, pctx, { signal = null, onStatus = null } = {}) {
+  const termTgts = Object.values(pctx.activeTerms).map(t => t.resolvedTgt);
+  const idxList = storyIndices(paragraphs);
+  if (idxList.length === 0) return { paragraphs, changed: [] };
+  if (onStatus) onStatus(`✍️ บรรณาธิการกำลังเกลาสำนวน ${idxList.length} ย่อหน้า...`);
+
+  const locked = new Map();
+  const items = idxList.map(i => {
+    const lk = lockTerms(paragraphs[i].th, termTgts);
+    locked.set(i, lk);
+    return { i, src: paragraphs[i].src, th: lk.text };
+  });
+
+  const result = paragraphs.slice();
+  const changed = [];
+  for (const chunk of chunkParagraphs(items)) {
+    const chunkText = chunk.map(c => c.src).join('\n');
+    const prompt = `คุณคือบรรณาธิการนิยายแปลภาษาไทยมือหนึ่ง หน้าที่: เกลาคำแปลให้อ่านลื่นไหลเหมือนนักแปลมืออาชีพเขียน โดยความหมายต้องเท่าเดิมทุกประการ
+หลักการเกลา:
+1. เรียงคำและประโยคใหม่ได้ภายในย่อหน้าเดียวกัน ให้เป็นสำนวนไทยที่เป็นธรรมชาติ ตัดโครงสร้างแบบแปลตรงตัว (เช่น "การ...ของ..." ซ้อนกัน, ประโยค "ถูก..." ที่ไม่จำเป็น, คำเชื่อมซ้ำซาก)
+2. ห้ามเพิ่มหรือตัดข้อมูล ห้ามเปลี่ยนว่าใครทำอะไร ห้ามย้ายเนื้อหาข้ามย่อหน้า ห้ามรวมหรือแยกย่อหน้า
+3. รหัส ⟦T0⟧, ⟦T1⟧ ... คือชื่อและคำศัพท์ที่ล็อกไว้ ต้องคงไว้ทุกตัว ครบจำนวนเท่าเดิม ห้ามแก้ ห้ามแปล ห้ามลบ (ย้ายตำแหน่งในประโยคได้)
+4. คงชุดสรรพนามและคำเรียกขานตามข้อมูลตัวละคร แก้คำสะกดผิดให้ถูกต้องตามพจนานุกรม
+5. ถ้าย่อหน้าไหนดีอยู่แล้ว ให้ส่งข้อความเดิมกลับมา ห้ามแก้เพื่อให้ดูต่างเฉยๆ
+
+แนวเรื่อง: ${getGenreInstruction(ctx.genre)}
+${buildContextBlocks(pctx, chunkText)}
+
+ย่อหน้า (i = หมายเลข, src = ต้นฉบับใช้ตรวจความหมาย, th = คำแปลที่ต้องเกลา):
+${JSON.stringify(chunk)}
+
+ตอบกลับเป็น JSON เท่านั้น: {"polished":[{"i":หมายเลข,"th":"ข้อความที่เกลาแล้ว (คงรหัส ⟦T⟧ ครบ)"}]}`;
+
+    try {
+      const parsed = await callLLMJson(prompt, { signal, onStatus, schema: SCHEMAS.polish });
+      const allowed = new Set(chunk.map(c => c.i));
+      (Array.isArray(parsed?.polished) ? parsed.polished : []).forEach(p => {
+        const i = Number(p?.i);
+        if (!allowed.has(i)) return;
+        const lk = locked.get(i);
+        const restored = unlockTerms(lk.text, p.th, lk.tokens);
+        if (!restored) return;
+        const cleaned = cleanThaiOutput(restored, result[i].src);
+        const draft = result[i].th;
+        // กันการเกลาที่ตัด/เติมเนื้อหาจนความยาวเปลี่ยนผิดปกติ
+        const ratio = cleaned.length / Math.max(1, draft.length);
+        if (!cleaned || cleaned === draft || ratio < 0.6 || ratio > 1.6) return;
+        if (HANZI_REGEX.test(cleaned) && !HANZI_REGEX.test(draft)) return;
+        result[i] = { ...result[i], th: cleaned, thDraft: result[i].thDraft || draft };
+        changed.push(i);
+      });
+    } catch (err) {
+      if (isAbortError(err)) throw err;
+      console.warn('Polish pass skipped:', err);
+    }
+  }
+  return { paragraphs: result, changed };
+}
+
+/** ตรวจว่าย่อหน้าที่ถูกเกลายังมีความหมายตรงกับต้นฉบับ ย่อหน้าที่ไม่ผ่านจะกลับไปใช้ร่างแรก */
+async function fidelityCheck(paragraphs, changedIdx, ctx, pctx, { signal = null, onStatus = null } = {}) {
+  if (changedIdx.length === 0) return paragraphs;
+  if (onStatus) onStatus(`🛡️ ตรวจความหมายหลังเกลา ${changedIdx.length} ย่อหน้า...`);
+  const result = paragraphs.slice();
+  const items = changedIdx.map(i => ({ i, src: paragraphs[i].src, before: paragraphs[i].thDraft, after: paragraphs[i].th }));
+
+  for (const chunk of chunkParagraphs(items.map(it => ({ ...it, src: it.src })))) {
+    const termList = buildRelevantTermList(pctx.activeTerms, chunk.map(c => c.src).join('\n'));
+    const prompt = `คุณคือผู้ตรวจความถูกต้องของงานแปล เทียบข้อความ "after" (ฉบับเกลาแล้ว) กับต้นฉบับ "src" และ "before" (ฉบับแปลก่อนเกลา)
+ให้ ok=false เฉพาะเมื่อ "after" มีปัญหาจริงอย่างใดอย่างหนึ่ง:
+- ความหมายเปลี่ยนจากต้นฉบับ (ผู้กระทำ/ผู้ถูกกระทำสลับ, คำปฏิเสธหาย, ตัวเลขผิด)
+- มีเนื้อหาที่ต้นฉบับไม่มี หรือเนื้อหาสำคัญหายไป
+- ชื่อหรือคำศัพท์ไม่ตรงคลังศัพท์: [${termList}]
+- สรรพนามหรือเพศของตัวละครผิด
+การเปลี่ยนสำนวนหรือเรียงประโยคใหม่โดยความหมายเท่าเดิม ถือว่า ok=true
+
+${JSON.stringify(chunk)}
+
+ตอบกลับเป็น JSON เท่านั้น: {"checks":[{"i":หมายเลข,"ok":true,"issue":"ถ้าไม่ผ่านให้อธิบายสั้นๆ"}]}`;
+    try {
+      const parsed = await callLLMJson(prompt, { signal, onStatus, schema: SCHEMAS.fidelity, role: 'aux' });
+      const allowed = new Set(chunk.map(c => c.i));
+      const answered = new Set();
+      (Array.isArray(parsed?.checks) ? parsed.checks : []).forEach(c => {
+        const i = Number(c?.i);
+        if (!allowed.has(i)) return;
+        answered.add(i);
+        if (c.ok === false) result[i] = { ...result[i], th: result[i].thDraft, polishRejected: c.issue || true };
+      });
+      // ย่อหน้าที่ตัวตรวจไม่ตอบ ถือว่ายืนยันไม่ได้ ใช้ร่างแรกเพื่อความปลอดภัย
+      chunk.forEach(c => { if (!answered.has(c.i)) result[c.i] = { ...result[c.i], th: result[c.i].thDraft, polishRejected: 'unchecked' }; });
+    } catch (err) {
+      if (isAbortError(err)) throw err;
+      console.warn('Fidelity check failed, reverting polish:', err);
+      chunk.forEach(c => { result[c.i] = { ...result[c.i], th: result[c.i].thDraft, polishRejected: 'check-failed' }; });
+    }
+  }
+  // ย่อหน้าที่กลับไปใช้ร่างแรก ไม่ต้องเก็บร่างซ้ำ
+  return result.map(p => {
+    if (p.thDraft && p.th === p.thDraft) {
+      const { thDraft, polishRejected, ...rest } = p;
+      return rest;
+    }
+    return p;
+  });
+}
+
+// ---------- Leftover source-script fix ----------
+/** แปลอักษรจีนที่หลงเหลือในคำแปลเฉพาะจุด แทนการลบทิ้งจนประโยคแหว่ง */
+async function fixLeftoverHanzi(paragraphs, ctx, pctx, { signal = null, onStatus = null } = {}) {
+  const idxList = paragraphs.map((p, i) => (p.kind !== 'site_junk' && HANZI_REGEX.test(p.th || '')) ? i : -1).filter(i => i >= 0);
+  if (idxList.length === 0) return paragraphs;
+  if (onStatus) onStatus(`กำลังแปลอักษรจีนที่หลงเหลือ ${idxList.length} ย่อหน้า...`);
+  const result = paragraphs.slice();
+  const items = idxList.map(i => ({ i, src: paragraphs[i].src, th: paragraphs[i].th }));
+  for (const chunk of chunkParagraphs(items)) {
+    const termList = buildRelevantTermList(pctx.activeTerms, chunk.map(c => c.src).join('\n'));
+    const prompt = `คำแปลภาษาไทยต่อไปนี้ยังมีอักษรจีนหลงเหลืออยู่ ให้แปลเฉพาะส่วนที่ยังเป็นอักษรจีนให้เป็นภาษาไทยที่เข้ากับประโยค โดยแก้ส่วนอื่นให้น้อยที่สุด
+ชื่อและคำศัพท์ให้ใช้ตามคลังศัพท์: [${termList}]
+${JSON.stringify(chunk)}
+ตอบกลับเป็น JSON เท่านั้น: {"verified":[{"i":หมายเลข,"th":"ข้อความไทยที่ไม่มีอักษรจีนแล้ว"}]}`;
+    try {
+      const parsed = await callLLMJson(prompt, { signal, onStatus, schema: SCHEMAS.verify, role: 'aux' });
+      const allowed = new Set(chunk.map(c => c.i));
+      (Array.isArray(parsed?.verified) ? parsed.verified : []).forEach(v => {
+        const i = Number(v?.i);
+        if (!allowed.has(i) || typeof v.th !== 'string') return;
+        const cleaned = cleanThaiOutput(v.th, result[i].src);
+        const ratio = cleaned.length / Math.max(1, result[i].th.length);
+        if (cleaned && !HANZI_REGEX.test(cleaned) && ratio > 0.5 && ratio < 2) result[i] = { ...result[i], th: cleaned };
+      });
+    } catch (err) {
+      if (isAbortError(err)) throw err;
+      console.warn('Leftover hanzi fix failed:', err);
     }
   }
   return result;
@@ -761,55 +987,55 @@ async function saveUsedEntities(entities, bookId, lang = DEFAULT_SOURCE_LANG) {
 // ---------- Translation ----------
 const NOTE_MODE_STYLE = `ข้อความนี้เป็นข้อความที่ผู้เขียนพูดกับผู้อ่านโดยตรง (เช่น ประกาศลาหยุด ขอบคุณผู้อ่าน ขอโหวต แจ้งข่าว)
 - แปลด้วยภาษาไทยสุภาพ เป็นกันเอง แบบที่นักเขียนคุยกับผู้อ่าน
-- ห้ามใช้สรรพนามหรือศัพท์แบบในเนื้อเรื่อง (เช่น ข้า-เจ้า) ให้ใช้ ผม/ฉัน/ผู้เขียน และ ทุกคน/ผู้อ่าน ตามบริบท`;
+- ไม่ใช้สรรพนามหรือศัพท์แบบในเนื้อเรื่อง (เช่น ข้า-เจ้า) ให้ใช้ ผม/ฉัน/ผู้เขียน และ ทุกคน/ผู้อ่าน ตามบริบท`;
 
-function buildTranslationPrompt(chunk, ctx, { termList, isFirstChunk, partLabel, rawChapTitle, rawBookTitle, prevSummary, prevTranslatedTail, noteMode = false }) {
-  const genreRule = getGenreInstruction(ctx.genre);
+const SCENE_STYLE = `การปรับสำนวนตามฉาก:
+- ฉากต่อสู้/ระทึก: ประโยคสั้น กระชับ กริยามีพลัง
+- ฉากบทสนทนา/อุบาย: คารมเฉียบคม รักษาบุคลิกและระดับความสัมพันธ์ของตัวละคร
+- ฉากบรรยาย/ปรัชญา: ภาษาวรรณกรรมที่สละสลวยแต่อ่านเข้าใจทันที
+- สำนวนจีน 4 ตัวอักษร (成语): ถอดความเป็นสำนวนหรือภาษาไทยที่สื่อความหมายเดียวกัน ไม่แปลทีละคำ`;
+
+function buildTranslationPrompt(chunk, ctx, {
+  termList, isFirstChunk, partLabel, rawChapTitle, rawBookTitle, prevSummary, prevTranslatedTail,
+  prevChapterTail = '', noteMode = false, contextBlocks = ''
+}) {
   const authorCtx = ctx.author ? `ผู้แต่ง: "${ctx.author}"` : '';
   const bookCtx = ctx.title ? `นิยายเรื่อง: "${ctx.title}"` : '';
+  const styleSection = noteMode
+    ? `ลักษณะของข้อความ:\n${NOTE_MODE_STYLE}`
+    : `แนวเรื่องและสรรพนาม:\n${getGenreInstruction(ctx.genre)}\n\n${SCENE_STYLE}`;
 
-  const styleSection = noteMode ? `ลักษณะของข้อความ:\n${NOTE_MODE_STYLE}` : `สไตล์และบรรยากาศหลักของแนวเรื่อง:
-${genreRule}
+  return `คุณคือนักแปลนิยายจีน-ไทยมืออาชีพ งานของคุณต้องอ่านแล้วเหมือนนิยายที่เขียนเป็นภาษาไทยตั้งแต่แรก แต่เนื้อหาตรงกับต้นฉบับทุกประการ
 
-กฎการปรับแต่งโทนอารมณ์ตามฉาก (Scene-Adaptive Translation) และถอดรหัสสำนวน:
-1. **ฉากต่อสู้/ระทึกขวัญ:** ใช้ประโยคสั้น กระชับ ใช้คำกริยาแสดงความรวดเร็วและหนักหน่วง ตัดคำเชื่อมเยิ่นเย้อเพื่อสร้างจังหวะที่ดุเดือด
-2. **ฉากบทสนทนา/อุบาย:** ถ่ายทอดคารมให้เฉียบคม รักษาบุคลิกและระดับความสัมพันธ์ของตัวละครให้คงที่
-3. **ฉากฝึกตน/บรรยายปรัชญา:** ใช้ศัพท์แสงวรรณกรรมที่ลึกซึ้ง ให้ความรู้สึกขลังและสง่างาม
-4. **สำนวนจีน 4 ตัวอักษร (成语):** ห้ามแปลตรงตัวแบบคำต่อคำจนขัดหู ให้ถอดความหมายเป็นสำนวนไทยหรือภาษาเขียนที่สละสลวยและเข้าใจง่ายทันที แต่ **คำในคลังศัพท์ต้องคงเดิม 100% เหนือกฎสำนวน**`;
-
-  return `คุณคือนักแปลนิยายมืออาชีพ แปลเนื้อหาภาษาจีนต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย เป็นธรรมชาติ โดยคงความหมายและรูปประโยคให้ใกล้เคียงต้นฉบับที่สุด
+ลำดับความสำคัญ (ข้อบนสำคัญกว่าข้อล่าง):
+1. ความหมายตรงต้นฉบับ: ไม่เพิ่ม ไม่ตัด ไม่ตีความเกิน รักษาว่าใครทำอะไรกับใคร คำปฏิเสธ เงื่อนไข และตัวเลข
+2. ชื่อและคำศัพท์: คำที่อยู่ในคลังศัพท์ต้องใช้คำแปลตามที่กำหนดตรงทุกตัวอักษร: [${termList}]
+3. ตัวละคร: เพศ สรรพนาม และคำเรียกขานต้องสอดคล้องกับข้อมูลตัวละครและคงที่ตลอดเรื่อง
+4. ภาษาไทยที่เป็นธรรมชาติ: เรียบเรียงลำดับคำและประโยคใหม่ได้ภายในย่อหน้าเดียวกัน หลีกเลี่ยงโครงสร้างแปลตรงตัว (เช่น "การ...ของ..." ซ้อนกัน, ประโยค "ถูก..." ที่ไม่จำเป็น, คำเชื่อมซ้ำซาก) และสะกดคำให้ถูกต้องตามพจนานุกรม
 
 ${styleSection}
 
 ข้อมูลบริบท:
 - ${bookCtx} ${authorCtx}
 ${prevSummary && !noteMode ? `- เหตุการณ์ในตอนก่อนหน้า: "${prevSummary}"` : ''}
+${prevChapterTail && !noteMode ? `- ท้ายตอนก่อนหน้าที่แปลแล้ว (ใช้ต่อสำนวนและน้ำเสียง ห้ามแปลซ้ำ): "${prevChapterTail}"` : ''}
 ${partLabel ? `- ข้อความนี้คือ${partLabel}ของบท` : ''}
 ${prevTranslatedTail ? `- ย่อหน้าก่อนหน้าที่แปลแล้ว (ใช้รักษาความต่อเนื่องของสำนวน ห้ามแปลซ้ำ): "${prevTranslatedTail}"` : ''}
+- คำใหม่ที่ไม่มีในคลังศัพท์: ใช้คำแปล/ทับศัพท์ที่นิยมในฉบับแปลไทยของเรื่องนี้หรือผลงานอื่นของผู้แต่ง ถ้าไม่มีให้แปลตามมาตรฐานนิยายแนว "${ctx.genre}"
 
-กฎการเทียบเคียงและล็อกคำศัพท์ (3-Tier Priority):
-1. Tier 1 (ตรงเรื่อง): หากเป็นชื่อตัวละครหรือสถานที่ในนิยายเรื่อง "${ctx.title}" ให้ใช้คำแปล/ทับศัพท์ที่ตรงกับฉบับแปลไทย
-2. Tier 2 (ผู้แต่ง/จักรวาลเดียวกัน): หากไม่พบในเรื่องนี้ ให้เทียบเคียงกับศัพท์ที่ใช้ในผลงานอื่นของ ${authorCtx} ในจักรวาลเดียวกัน
-3. Tier 3 (มาตรฐานแนวเรื่อง): หากเป็นคำใหม่ ให้ใช้คำแปลที่สละสลวยตามมาตรฐานวรรณกรรมนิยายแนว "${ctx.genre}"
+${contextBlocks}
 
-กฎเหล็กเรื่องการจัดย่อหน้า สรรพนาม และโครงสร้าง (สำคัญสูงสุด):
-1. **ล็อกสรรพนามให้คงที่ 100%:** สรรพนามตัวละครต้องสอดคล้องกันตลอดทั้งบท (เช่น หากใช้ 'ข้า-เจ้า' ต้องคงไว้ตามนั้น ห้ามสลับเป็น 'ผม/ฉัน/คุณ' เด็ดขาด)
-2. ${isFirstChunk ? `แปลชื่อตอนและชื่อเรื่องภาษาจีนให้สละสลวยตรงความหมาย
-   - ชื่อตอนต้นฉบับ: "${rawChapTitle}"
-   - ชื่อเรื่องต้นฉบับ: "${rawBookTitle}"` : 'ส่วนนี้ไม่ต้องแปลชื่อตอน/ชื่อเรื่อง ให้ส่งสตริงว่าง "" ในสองฟิลด์นั้น'}
-3. **แปลทุกย่อหน้าแยกกันแบบ 1 ต่อ 1** ตอบกลับย่อหน้าละ 1 รายการพร้อมหมายเลข "i" เดิม ห้ามรวมหรือข้ามย่อหน้า และไม่ต้องส่งข้อความจีนกลับมา
-4. คำศัพท์เฉพาะที่ต้องล็อกคำแปล 100%: [${termList}]
-5. **ข้อความในวงเล็บทึบ 【 】 หรือ [ ] ต้องแปลเป็นภาษาไทยเสมอ ห้ามส่งวงเล็บว่างเปล่า 【 】 เด็ดขาด เช่น 【大海水】 -> 【น้ำมหาสมุทร】, 【石榴木】 -> 【ไม้ทับทิม】, 【城头土】 -> 【ดินหัวเมือง】**
-6. ในบทสนทนา ให้ใช้เครื่องหมายอัญประกาศ ' หรือ “ ” ห้ามใช้เครื่องหมาย " ซ้ำซ้อน และ **ห้ามใส่ขีด —— นำหน้าบทสนทนา**
-7. สรุปเหตุการณ์สำคัญ**ของเนื้อเรื่อง**ในฟิลด์ "chapter_summary" ความยาว 1-2 ประโยค เพื่อใช้ต่อบริบทในบทถัดไป (ไม่ต้องสรุปข้อความที่ผู้เขียนพูดกับผู้อ่าน ถ้าไม่มีเนื้อเรื่องให้ส่ง "")
-8. สกัด "used_entities" (ชื่อเฉพาะสำคัญและระดับพลังที่ปรากฏในเนื้อเรื่อง) แนบกลับมาด้วยเพื่อบันทึกลงคลังศัพท์
+รูปแบบ:
+- แปลแยกทีละย่อหน้าแบบ 1 ต่อ 1 ตอบกลับย่อหน้าละ 1 รายการพร้อมหมายเลข "i" เดิม ห้ามรวม แยก ข้าม หรือย้ายเนื้อหาข้ามย่อหน้า ไม่ต้องส่งต้นฉบับกลับมา
+- ${isFirstChunk ? `แปลชื่อตอน "${rawChapTitle}" และชื่อเรื่อง "${rawBookTitle}" ให้สละสลวยตรงความหมาย` : 'ส่วนนี้ไม่ต้องแปลชื่อตอน/ชื่อเรื่อง ให้ส่งสตริงว่าง "" ในสองฟิลด์นั้น'}
+- ข้อความในวงเล็บ 【 】 หรือ [ ] ต้องแปลเป็นไทยไว้ในวงเล็บเสมอ ห้ามปล่อยวงเล็บว่าง (เช่น 【大海水】 -> 【น้ำมหาสมุทร】)
+- บทสนทนาใช้ “ ” หรือ ' ' และไม่ใส่ขีด —— นำหน้า
+- "chapter_summary": สรุปเหตุการณ์ของเนื้อเรื่อง 1-2 ประโยค (ไม่สรุปข้อความที่ผู้เขียนพูดกับผู้อ่าน ถ้าไม่มีเนื้อเรื่องให้ส่ง "")
+- "used_entities": ชื่อเฉพาะสำคัญและระดับพลังที่ปรากฏในเนื้อเรื่อง พร้อมคำแปลที่ใช้
+- "kind" ของแต่ละย่อหน้า: "story" = เนื้อเรื่อง, "author_note" = ผู้เขียนพูดกับผู้อ่าน (ขอโหวต ขอบคุณ แจ้งลาหยุด PS) แปลด้วยภาษาสุภาพทั่วไป ย่อหน้าที่มี "hint" คือระบบตรวจพบล่วงหน้าแล้ว
+- "chapter_type": "story" = เนื้อเรื่องหลัก, "side_story" = ตอนพิเศษนอกเส้นเรื่องหลัก, "author_note" = ทั้งตอนเป็นประกาศจากผู้เขียน, "placeholder" = ข้อความหลอกกันก๊อป
 
-การระบุประเภทเนื้อหา:
-- "kind" ของแต่ละย่อหน้า: "story" = เนื้อเรื่อง, "author_note" = ผู้เขียนพูดกับผู้อ่านโดยตรง (ขอโหวต ขอบคุณ แจ้งลาหยุด PS ฯลฯ) ย่อหน้า author_note ให้แปลด้วยภาษาสุภาพทั่วไป ไม่ใช้สรรพนามแบบเนื้อเรื่อง
-- ย่อหน้าที่มี "hint" คือระบบตรวจพบล่วงหน้าแล้ว ให้ใช้เป็นข้อมูลประกอบ
-- "chapter_type" ของข้อความนี้: "story" = เนื้อเรื่องหลัก, "side_story" = ตอนพิเศษ/ตอนเสริมนอกเส้นเรื่องหลัก, "author_note" = ทั้งตอนเป็นประกาศหรือข้อความจากผู้เขียน, "placeholder" = ข้อความหลอกกันก๊อปที่ยังไม่ใช่เนื้อหาจริง
-
-ผลลัพธ์ต้องส่งกลับเป็น JSON Object ตามโครงสร้างนี้เท่านั้น:
+ตอบกลับเป็น JSON Object ตามโครงสร้างนี้เท่านั้น:
 {
   "translatedBookTitle": "คำแปลชื่อเรื่องภาษาไทย",
   "translatedChapterTitle": "คำแปลชื่อตอนภาษาไทย",
@@ -829,7 +1055,9 @@ ${JSON.stringify(chunk.map(c => (c.hint ? { i: c.i, src: c.src, hint: c.hint } :
  */
 async function translateChunkAdaptive(chunk, ctx, options) {
   try {
-    const prompt = buildTranslationPrompt(chunk, ctx, options);
+    const chunkText = chunk.map(c => c.src).join('\n');
+    const contextBlocks = options.pctx ? buildContextBlocks(options.pctx, chunkText, { includeExamples: !options.noteMode }) : '';
+    const prompt = buildTranslationPrompt(chunk, ctx, { ...options, contextBlocks });
     const parsed = await callLLMJson(prompt, { signal: options.signal, onStatus: options.onStatus, schema: SCHEMAS.translation });
     const allowed = new Set(chunk.map(c => c.i));
     const map = new Map();
@@ -865,13 +1093,14 @@ async function translateChunkAdaptive(chunk, ctx, options) {
 const UNTRANSLATED_MARK = '⚠️ (ย่อหน้านี้แปลไม่สำเร็จ แตะเพื่อดูต้นฉบับ หรือกด 🔄 เพื่อแปลบทนี้ใหม่)';
 
 async function executeApiCall(rawText, ctx, {
-  rawChapTitle = "", rawBookTitle = "", prevSummary = "", signal = null, onStatus = null,
+  rawChapTitle = "", rawBookTitle = "", prevSummary = "", prevChapterTail = "", signal = null, onStatus = null,
   sourceParas = null, ruleKinds = null, chapterRule = null, noteMode = false
 } = {}) {
   const paras = sourceParas || splitSourceParagraphs(rawText);
   if (paras.length === 0) throw new Error('ไม่พบย่อหน้าต้นฉบับสำหรับแปล');
   const kindsByRule = ruleKinds || labelParagraphsByRules(paras);
   const rule = chapterRule || classifyChapterByRules(rawChapTitle, rawText);
+  const qualityMode = getQualityMode();
 
   // ข้อความจากหน้าเว็บไม่ส่งให้ AI แปล (เก็บต้นฉบับไว้ และซ่อนตอนแสดงผล)
   const items = paras
@@ -879,8 +1108,8 @@ async function executeApiCall(rawText, ctx, {
     .filter(it => kindsByRule[it.i] !== 'site_junk');
   if (items.length === 0) throw new Error('ไม่พบเนื้อหาที่ต้องแปลในหน้านี้');
   const chunks = chunkParagraphs(items);
-  const activeTerms = await getActiveGlossaryForBook(ctx.bookId);
-  const providerLabel = `${LLM_PROVIDERS[getActiveProvider()].label} (${getActiveLlmConfig().model})`;
+  let pctx = await loadPromptContext(ctx);
+  const providerLabel = `${LLM_PROVIDERS[getActiveProvider()].label} (${getActiveLlmConfig().mainModel})`;
 
   const translated = new Map();
   const aiKinds = new Map();
@@ -896,14 +1125,16 @@ async function executeApiCall(rawText, ctx, {
     if (onStatus) onStatus(`กำลังแปลผ่าน ${providerLabel}${partLabel ? ` — ${partLabel}` : ''}...`);
     const lastIdx = chunk[0].i - 1;
     const res = await translateChunkAdaptive(chunk, ctx, {
-      termList: buildRelevantTermList(activeTerms, chunk.map(x => x.src).join('\n')),
+      termList: buildRelevantTermList(pctx.activeTerms, chunk.map(x => x.src).join('\n')),
       isFirstChunk: c === 0,
       partLabel,
       rawChapTitle,
       rawBookTitle,
       prevSummary,
+      prevChapterTail: c === 0 ? prevChapterTail : '',
       prevTranslatedTail: lastIdx >= 0 ? (translated.get(lastIdx) || '').slice(-300) : '',
       noteMode,
+      pctx,
       signal,
       onStatus
     });
@@ -925,11 +1156,12 @@ async function executeApiCall(rawText, ctx, {
     for (const chunk of chunkParagraphs(missing)) {
       try {
         const res = await translateChunkAdaptive(chunk, ctx, {
-          termList: buildRelevantTermList(activeTerms, chunk.map(x => x.src).join('\n')),
+          termList: buildRelevantTermList(pctx.activeTerms, chunk.map(x => x.src).join('\n')),
           isFirstChunk: false,
           partLabel: 'ย่อหน้าที่ตกหล่นบางส่วน',
           prevSummary,
           noteMode,
+          pctx,
           signal,
           onStatus
         });
@@ -964,14 +1196,28 @@ async function executeApiCall(rawText, ctx, {
   // ประเภทตอน: AI ส่วนใหญ่ว่าอย่างไร (ถ้าแต่ละส่วนตอบต่างกันเลือกอันที่พบบ่อยสุด)
   const aiType = aiChapterTypes.sort((a, b) => aiChapterTypes.filter(x => x === b).length - aiChapterTypes.filter(x => x === a).length)[0];
   const chapterType = noteMode ? 'author_note' : resolveChapterType(rule, aiType, paragraphs);
+  const isStoryLike = chapterType !== 'author_note' && chapterType !== 'placeholder';
 
   // ประกาศผู้เขียนไม่ควรเพิ่มชื่อเว็บ/ชื่อแพลตฟอร์มเข้าคลังศัพท์
-  if (chapterType !== 'author_note') await saveUsedEntities(entities, ctx.bookId, ctx.sourceLang);
-
-  if (chapterType !== 'author_note' && chapterType !== 'placeholder') {
-    paragraphs = await bilingualCrossVerificationPass(paragraphs, ctx, { signal, onStatus });
+  if (isStoryLike && entities.length) {
+    await saveUsedEntities(entities, ctx.bookId, ctx.sourceLang);
+    pctx = await loadPromptContext(ctx);
   }
-  paragraphs = paragraphs.map(p => p.kind === 'site_junk' ? p : { ...p, th: cleanThaiOutput(p.th, p.src) || p.th });
+
+  if (isStoryLike) {
+    paragraphs = await bilingualCrossVerificationPass(paragraphs, ctx, { signal, onStatus, pctx });
+    if (qualityMode === 'best') {
+      const polished = await polishParagraphs(paragraphs, ctx, pctx, { signal, onStatus });
+      paragraphs = await fidelityCheck(polished.paragraphs, polished.changed, ctx, pctx, { signal, onStatus });
+    }
+  }
+  paragraphs = await fixLeftoverHanzi(paragraphs, ctx, pctx, { signal, onStatus });
+
+  // ทำความสะอาดแบบไม่ใช้ AI: เครื่องหมาย, คำสะกดผิดที่ผิดแน่นอน, กฎแทนคำของเรื่องนี้ (ไม่แตะคำในคลังศัพท์)
+  paragraphs = cleanupParagraphs(
+    paragraphs.map(p => p.kind === 'site_junk' ? p : { ...p, th: cleanThaiOutput(p.th, p.src) || p.th }),
+    { termTgts: Object.values(pctx.activeTerms).map(t => t.resolvedTgt), replaceRules: pctx.extras.replaceRules }
+  );
 
   return {
     bookTitle: bookTitle || rawBookTitle,
@@ -998,11 +1244,20 @@ function buildPlaceholderResult(sourceParas, rawChapTitle, rawBookTitle) {
   };
 }
 
+/** ท้ายตอนก่อนหน้าที่แปลแล้ว (เฉพาะเนื้อเรื่อง) ใช้ต่อสำนวนข้ามตอน */
+function buildChapterTail(chapter, maxParas = 4, maxChars = 500) {
+  if (!chapter?.paragraphs?.length) return '';
+  const story = chapter.paragraphs.filter(p => isStoryParagraph(p) && (p.th || '').trim() && p.th !== UNTRANSLATED_MARK);
+  const tail = story.slice(-maxParas).map(p => p.th.trim()).join(' / ');
+  return tail.length > maxChars ? '…' + tail.slice(-maxChars) : tail;
+}
+
 /**
- * Pipeline แปล 1 บท: แยกประเภทเนื้อหา -> สกัดศัพท์ใหม่ (เฉพาะเนื้อเรื่อง) -> แปล (แบ่งส่วนอัตโนมัติ) -> ตรวจทาน
- * retry/หมุนคีย์อยู่ใน callLLM แล้ว ที่นี่จึงไม่ต้องวนซ้ำเอง
+ * Pipeline แปล 1 บท: แยกประเภทเนื้อหา -> สแกนคำศัพท์/ตัวละคร (เฉพาะเนื้อเรื่อง) -> แปล (แบ่งส่วนอัตโนมัติ)
+ * -> ตรวจทาน -> (โหมด best) เกลา + ตรวจความหมาย -> แก้อักษรจีนที่หลงเหลือ -> ทำความสะอาด
+ * @param {object} [options.prevChapter] ตอนเนื้อเรื่องก่อนหน้า (ใช้ทั้งสรุปและท้ายตอนเป็นบริบท)
  */
-async function translateChapter(rawText, ctx, { onStatus = null, signal = null, rawChapTitle = "", rawBookTitle = "", prevSummary = "" } = {}) {
+async function translateChapter(rawText, ctx, { onStatus = null, signal = null, rawChapTitle = "", rawBookTitle = "", prevSummary = "", prevChapter = null } = {}) {
   if (!ctx?.bookId) throw new Error('ไม่พบข้อมูลนิยายสำหรับการแปล');
   throwIfAborted(signal);
 
@@ -1015,10 +1270,10 @@ async function translateChapter(rawText, ctx, { onStatus = null, signal = null, 
   const ruleKinds = labelParagraphsByRules(sourceParas);
   const noteMode = chapterRule.type === 'author_note' && chapterRule.confidence === 'high';
 
-  // สกัดคำศัพท์จากเนื้อเรื่องเท่านั้น (ไม่รวมข้อความผู้เขียนและข้อความเว็บ)
+  // สแกนคำศัพท์และตัวละครจากเนื้อเรื่องเท่านั้น (ไม่รวมข้อความผู้เขียนและข้อความเว็บ)
   const storyText = sourceParas.filter((_, i) => ruleKinds[i] === 'story').join('\n\n');
   if (!noteMode && storyText) {
-    if (onStatus) onStatus("กำลังสแกนหาชื่อเฉพาะและระดับพลังใหม่...");
+    if (onStatus) onStatus("กำลังสแกนหาชื่อเฉพาะ ตัวละคร และระดับพลังใหม่...");
     try {
       await extractAndStoreAutoGlossary(storyText, ctx, { signal, onStatus });
     } catch (err) {
@@ -1028,7 +1283,9 @@ async function translateChapter(rawText, ctx, { onStatus = null, signal = null, 
   }
 
   return executeApiCall(rawText, ctx, {
-    rawChapTitle, rawBookTitle, prevSummary, signal, onStatus,
+    rawChapTitle, rawBookTitle, signal, onStatus,
+    prevSummary: prevChapter?.summary || prevSummary,
+    prevChapterTail: buildChapterTail(prevChapter),
     sourceParas, ruleKinds, chapterRule, noteMode
   });
 }
