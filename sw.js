@@ -1,7 +1,7 @@
 // Service worker: ทำให้เปิดแอพและอ่านตอนที่บันทึกไว้ได้แม้ออฟไลน์
 // ไฟล์ของแอพใช้ network-first (ออนไลน์ได้เวอร์ชันล่าสุดเสมอ) ส่วนฟอนต์/ไลบรารีจาก CDN ใช้ cache-first
 // คำขอไปยัง AI และ r.jina.ai จะไม่ถูกแตะต้องเลย
-const CACHE_NAME = 'noveltranslate-v3.0.0';
+const CACHE_NAME = 'noveltranslate-v3.1.0';
 const APP_SHELL = [
   './',
   'index.html',
@@ -11,6 +11,7 @@ const APP_SHELL = [
   'js/db.js',
   'js/safety.js',
   'js/llm.js',
+  'js/usage.js',
   'js/lang.js',
   'js/api.js',
   'js/source.js',

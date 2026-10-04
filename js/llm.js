@@ -29,7 +29,7 @@ const ANTHROPIC_FALLBACK_MODELS = new Set(['claude-fable-5-1', 'claude-opus-5-5'
 const keyIndexByProvider = {};
 
 class LLMError extends Error {
-  // kind: auth | rate | server | network | truncated | blocked | bad_request | empty | abort | config
+  // kind: auth | rate | server | network | truncated | blocked | bad_request | empty | abort | config | model | budget
   constructor(message, kind, status = 0) {
     super(message);
     this.name = 'LLMError';
@@ -68,6 +68,7 @@ function beginTask(name) {
   abortTask(name);
   const controller = new AbortController();
   runningTasks.set(name, controller);
+  if (typeof tagTask === 'function') tagTask(controller.signal, { task: name });
   return controller;
 }
 
@@ -200,6 +201,21 @@ function errorFromStatus(status, message) {
   return new LLMError(`คำขอไม่ถูกต้อง (${status}): ${msg}`, 'bad_request', status);
 }
 
+/**
+ * โมเดลไม่มีอยู่/ถูกยกเลิก (เช่นผู้ให้บริการปลดโมเดลรุ่นเก่า): แยกออกมาให้ผู้ใช้รู้ว่าต้องเลือกโมเดลใหม่ ไม่ใช่ลองซ้ำ
+ * Gemini: 404 "models/x is not found" | Claude: 404 not_found_error "model: x" | OpenAI: 404 "The model `x` does not exist"
+ */
+function classifyModelError(err, model) {
+  if (!(err instanceof LLMError)) return err;
+  const msg = err.message || '';
+  const mentionsModel = /model/i.test(msg);
+  const retired = /deprecat|decommission|no longer (available|supported)|has been (retired|shut down)|retired/i.test(msg);
+  if ((err.status === 404 && mentionsModel) || (mentionsModel && retired && [400, 404, 410].includes(err.status))) {
+    return new LLMError(`ไม่พบโมเดล "${model}" หรือโมเดลนี้ถูกยกเลิกแล้ว กรุณากด "ตรวจเช็กโมเดล" ในหน้าตั้งค่าแล้วเลือกโมเดลใหม่ (${msg.slice(0, 160)})`, 'model', err.status);
+  }
+  return err;
+}
+
 async function guardedFetch(url, options) {
   // CSP (csp.js) อนุญาตเฉพาะปลายทางที่ตั้งไว้ตอนเปิดหน้า ถ้าเพิ่งเปลี่ยน Base URL ต้องรีโหลดก่อน
   if (typeof isConnectAllowedByCsp === 'function' && !isConnectAllowedByCsp(url)) {
@@ -248,16 +264,21 @@ async function callGeminiOnce(cfg, key, prompt, opts, signal) {
     signal,
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key },
     body: JSON.stringify({
+      ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}),
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       generationConfig
     })
   });
   const data = await readJsonSafe(res);
   if (!res.ok) {
-    const err = errorFromStatus(res.status, data.error?.message || data._raw?.slice(0, 200));
+    const err = classifyModelError(errorFromStatus(res.status, data.error?.message || data._raw?.slice(0, 200)), cfg.model);
     if (opts.schema && isSchemaRejection(err)) return callGeminiOnce(cfg, key, prompt, { ...opts, schema: null }, signal);
     throw err;
   }
+
+  // Gemini: promptTokenCount รวมส่วนที่อ่านจาก cache แล้ว, token ที่ใช้คิด (thoughts) คิดเงินแบบ output
+  const um = data.usageMetadata;
+  if (um && opts.onUsage) opts.onUsage({ input: um.promptTokenCount || 0, output: (um.candidatesTokenCount || 0) + (um.thoughtsTokenCount || 0), cacheRead: um.cachedContentTokenCount || 0 });
 
   const blockReason = data.promptFeedback?.blockReason;
   if (blockReason) throw new LLMError(`คำขอถูกบล็อกโดยระบบความปลอดภัย (${blockReason})`, 'blocked');
@@ -289,6 +310,8 @@ async function callAnthropicOnce(cfg, key, prompt, opts, signal, useFallbacks = 
     stream: true,
     messages: [{ role: 'user', content: prompt }]
   };
+  // ส่วนคำสั่งที่ไม่เปลี่ยนระหว่างส่วนของตอน/ระหว่างตอน: ให้ Claude cache ไว้ (คิดราคาถูกลงมากเมื่ออ่านซ้ำภายในไม่กี่นาที)
+  if (opts.system) body.system = [{ type: 'text', text: opts.system, cache_control: { type: 'ephemeral' } }];
   if (withFallbacks) body.fallbacks = 'default';
   if (opts.json && opts.schema) body.output_config = { format: { type: 'json_schema', schema: opts.schema } };
 
@@ -302,7 +325,7 @@ async function callAnthropicOnce(cfg, key, prompt, opts, signal, useFallbacks = 
       return callAnthropicOnce(cfg, key, prompt, opts, signal, false);
     }
     if (data.error?.type === 'overloaded_error') throw new LLMError(`เซิร์ฟเวอร์ Claude หนาแน่น: ${msg}`, 'server', res.status);
-    const err = errorFromStatus(res.status, msg);
+    const err = classifyModelError(errorFromStatus(res.status, msg), cfg.model);
     if (opts.schema && isSchemaRejection(err)) return callAnthropicOnce(cfg, key, prompt, { ...opts, schema: null }, signal, useFallbacks);
     throw err;
   }
@@ -313,13 +336,33 @@ async function callAnthropicOnce(cfg, key, prompt, opts, signal, useFallbacks = 
   let buffer = '';
   let text = '';
   let stopReason = '';
+  // Claude: input_tokens ไม่รวม token ที่อ่าน/เขียน cache จึงต้องบวกเพิ่ม, output_tokens ใน message_delta เป็นยอดสะสม
+  const rawUsage = { input_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, output_tokens: 0 };
+  let servedModel = '';
+  const takeUsage = (u) => {
+    if (!u) return;
+    Object.keys(rawUsage).forEach(k => { if (Number.isFinite(u[k])) rawUsage[k] = u[k]; });
+  };
+  const buildUsage = () => ({
+    input: rawUsage.input_tokens + rawUsage.cache_read_input_tokens + rawUsage.cache_creation_input_tokens,
+    output: rawUsage.output_tokens,
+    cacheRead: rawUsage.cache_read_input_tokens,
+    cacheWrite: rawUsage.cache_creation_input_tokens,
+    model: servedModel
+  });
   const handleEvent = (raw) => {
     const dataLine = raw.split('\n').find(l => l.startsWith('data:'));
     if (!dataLine) return;
     let evt;
     try { evt = JSON.parse(dataLine.slice(5).trim()); } catch (e) { return; }
     if (evt.type === 'content_block_delta' && evt.delta?.type === 'text_delta') text += evt.delta.text;
-    else if (evt.type === 'message_delta' && evt.delta?.stop_reason) stopReason = evt.delta.stop_reason;
+    else if (evt.type === 'message_start') {
+      takeUsage(evt.message?.usage);
+      if (evt.message?.model) servedModel = evt.message.model;
+    } else if (evt.type === 'message_delta') {
+      if (evt.delta?.stop_reason) stopReason = evt.delta.stop_reason;
+      takeUsage(evt.usage);
+    }
     else if (evt.type === 'error') {
       const t = evt.error?.type;
       const m = evt.error?.message || t || 'stream error';
@@ -344,6 +387,10 @@ async function callAnthropicOnce(cfg, key, prompt, opts, signal, useFallbacks = 
     if (err?.name === 'AbortError') throw new LLMError('ผู้ใช้สั่งหยุดการทำงาน', 'abort');
     if (err instanceof LLMError) throw err;
     throw new LLMError(`การเชื่อมต่อหลุดระหว่างรับผล: ${err.message}`, 'network');
+  } finally {
+    // คิดเงินตาม token ที่ส่ง/รับไปแล้ว แม้ stream จะหลุดหรือถูกตัดกลางคัน
+    const usage = buildUsage();
+    if (opts.onUsage && (usage.input || usage.output)) opts.onUsage(usage);
   }
 
   if (stopReason === 'refusal') throw new LLMError('Claude ปฏิเสธคำขอนี้ (refusal)', 'blocked');
@@ -358,7 +405,9 @@ async function callOpenAIOnce(cfg, key, prompt, opts, signal, jsonMode = null) {
   const mode = jsonMode || (!opts.json ? 'none' : (opts.schema ? 'schema' : 'object'));
   const body = {
     model: cfg.model,
-    messages: [{ role: 'user', content: prompt }]
+    messages: opts.system
+      ? [{ role: 'system', content: opts.system }, { role: 'user', content: prompt }]
+      : [{ role: 'user', content: prompt }]
   };
   if (mode === 'schema') body.response_format = { type: 'json_schema', json_schema: { name: 'result', strict: true, schema: opts.schema } };
   else if (mode === 'object') body.response_format = { type: 'json_object' };
@@ -376,7 +425,15 @@ async function callOpenAIOnce(cfg, key, prompt, opts, signal, jsonMode = null) {
     if (body.response_format && res.status === 400 && /response_format|json|schema/i.test(msg || '')) {
       return callOpenAIOnce(cfg, key, prompt, opts, signal, mode === 'schema' ? 'object' : 'none');
     }
-    throw errorFromStatus(res.status, msg);
+    throw classifyModelError(errorFromStatus(res.status, msg), cfg.model);
+  }
+  // OpenAI: prompt_tokens รวมส่วนที่อ่านจาก cache แล้ว
+  if (data.usage && opts.onUsage) {
+    opts.onUsage({
+      input: data.usage.prompt_tokens || 0,
+      output: data.usage.completion_tokens || 0,
+      cacheRead: data.usage.prompt_tokens_details?.cached_tokens || 0
+    });
   }
   const choice = data.choices?.[0];
   const text = choice?.message?.content || '';
@@ -411,22 +468,38 @@ async function callLLM(prompt, options = {}) {
   }
 }
 
-async function callLLMWithProvider(prompt, { json = true, schema = null, signal = null, onStatus = null, maxRetries = getRetryLimit(), role = 'main', providerOverride = '' } = {}) {
+async function callLLMWithProvider(prompt, { json = true, schema = null, system = '', signal = null, onStatus = null, maxRetries = getRetryLimit(), role = 'main', providerOverride = '' } = {}) {
   const cfg = getActiveLlmConfig(role, providerOverride);
   if (cfg.keys.length === 0) throw new LLMError(`กรุณาใส่ API Key ของ ${LLM_PROVIDERS[cfg.provider].label} ในเมนู 'ตั้งค่า' ก่อน`, 'config');
   if (!cfg.model) throw new LLMError("กรุณาเลือกโมเดลในเมนู 'ตั้งค่า' ก่อน", 'config');
 
+  // เพดานค่าใช้จ่ายและเพดานจำนวนครั้งต่อตอน (usage.js)
+  if (typeof checkBudgetBeforeCall === 'function') await checkBudgetBeforeCall(signal);
+  if (typeof countChapterCall === 'function') countChapterCall(signal);
+
   const caller = PROVIDER_CALLERS[cfg.provider];
+  const onUsage = (u) => {
+    if (typeof recordUsage === 'function') recordUsage({ ...u, provider: cfg.provider, model: u.model || cfg.model }, signal);
+  };
   let rotationsSinceWait = 0;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     throwIfAborted(signal);
     try {
-      return await caller(cfg, pickKey(cfg), prompt, { json, schema }, signal);
+      return await caller(cfg, pickKey(cfg), prompt, { json, schema, system, onUsage }, signal);
     } catch (err) {
       if (isAbortError(err) || signal?.aborted) throw new LLMError('ผู้ใช้สั่งหยุดการทำงาน', 'abort');
       const retryable = ['rate', 'server', 'network'].includes(err.kind);
-      if (!retryable || attempt === maxRetries) throw err;
+      if (!retryable || attempt === maxRetries) {
+        if (typeof logDiagnostic === 'function') {
+          logDiagnostic({
+            source: 'llm', kind: err.kind || 'error', status: err.status, provider: cfg.provider, model: cfg.model,
+            task: (typeof getTaskInfo === 'function' && getTaskInfo(signal).task) || '',
+            message: `${err.message}${attempt > 1 ? ` (หลังลอง ${attempt} รอบ)` : ''}`
+          });
+        }
+        throw err;
+      }
 
       if (err.kind === 'rate' && cfg.keys.length > 1 && rotationsSinceWait < cfg.keys.length - 1) {
         rotateKey(cfg);

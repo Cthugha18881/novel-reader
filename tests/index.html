@@ -24,6 +24,7 @@
   <script src="../js/db.js"></script>
   <script src="../js/safety.js"></script>
   <script src="../js/llm.js"></script>
+  <script src="../js/usage.js"></script>
   <script src="../js/lang.js"></script>
   <script src="../js/api.js"></script>
   <script src="../js/source.js"></script>
@@ -445,7 +446,7 @@
         bookData: [{ bookId: 'b', replaceRules: 'bad', bible: { characters: 'bad' } }] });
       const b = up.books[0], c = up.chapters[0], g = up.glossaries[0], d = up.bookData[0];
       return eq([up.dropped, b.title, b.lastUrl, 'totalChapters' in b, c.order, c.paragraphs, c.nextUrl, c.sourceUrl, g.books, g.overrides, 'replaceRules' in d, d.bible.characters],
-        [{ books: 2, chapters: 1, glossaries: 1, bookData: 0 }, '5', '', false, 0, [{ src: '甲', th: '1' }], null, 'https://a.com/1', ['b'], { b: 'ข' }, false, []]);
+        [{ books: 2, chapters: 1, glossaries: 1, bookData: 0, usage: 0 }, '5', '', false, 0, [{ src: '甲', th: '1' }], null, 'https://a.com/1', ['b'], { b: 'ข' }, false, []]);
     });
     test('upgradeBackup: ตัด key __proto__ ที่ซ่อนมาในไฟล์', () => {
       const up = upgradeBackup(JSON.parse('{"format":"NovelTranslateBackup","version":3,"books":[{"bookId":"b","__proto__":{"polluted":1},"extra":{"constructor":{"x":1},"keep":2}}],"chapters":[],"glossaries":[]}'));
@@ -524,6 +525,61 @@
       checkImportFileSize({ name: 'a.epub', size: IMPORT_LIMITS.txtBytes + 1 });
       checkImportChapterCount(10);
       return big && many;
+    });
+    // ---------- Round 2 step 2: usage & budget ----------
+    test('estimateCost: คิดส่วนที่อ่านจาก cache ถูกกว่า และคืน null ถ้าไม่มีราคา', () => {
+      const prices = { m: { in: 3, out: 15 } };
+      const plain = estimateCost({ provider: 'anthropic', model: 'm', input: 1e6, output: 1e6 }, prices);
+      const cached = estimateCost({ provider: 'anthropic', model: 'm', input: 1e6, output: 1e6, cacheRead: 1e6 }, prices);
+      const custom = estimateCost({ provider: 'gemini', model: 'g', input: 2e6, output: 0, cacheRead: 1e6 }, { g: { in: 1, out: 2, cached: 0.5 } });
+      const r = x => x === null ? null : Math.round(x * 1e6) / 1e6;
+      return eq([r(plain), r(cached), r(custom), estimateCost({ provider: 'x', model: 'none', input: 5 }, prices)], [18, 15.3, 1.5, null]);
+    });
+    test('sumUsage: แยก token ของโมเดลที่ไม่มีราคา', () => {
+      const t = sumUsage([{ model: 'a', provider: 'p', calls: 1, input: 100, output: 50 }, { model: 'b', provider: 'p', calls: 2, input: 10, output: 5, cacheRead: 4 }], { a: { in: 1e6, out: 1e6 } });
+      return eq([t.calls, t.tokens, t.cacheRead, t.cost, t.unpricedTokens], [3, 165, 4, 150, 15]);
+    });
+    test('evaluateBudget: ok / warn / over และเลือกช่วงที่หนักที่สุด', () => {
+      const totals = (day, month) => ({ day: { tokens: day, cost: 0 }, month: { tokens: month, cost: 0, unpricedTokens: 0 } });
+      const b = { unit: 'tokens', daily: 1000, monthly: 10000 };
+      return eq([
+        evaluateBudget(totals(100, 1000), b).level,
+        evaluateBudget(totals(850, 1000), b).level,
+        evaluateBudget(totals(100, 10000), b).level,
+        evaluateBudget(totals(100, 10000), b).worst.period,
+        evaluateBudget(totals(5000, 5000), { unit: 'tokens', daily: 0, monthly: 0 }).level
+      ], ['ok', 'warn', 'over', 'เดือนนี้', 'ok']);
+    });
+    test('evaluateBudget: หน่วยเงินแต่ยังไม่กรอกราคา ต้องเตือน', () => evaluateBudget({ day: { tokens: 5, cost: 0 }, month: { tokens: 5, cost: 0, unpricedTokens: 5 } }, { unit: 'usd', daily: 1, monthly: 0 }).unpricedWarning === true);
+    test('countChapterCall: เกินเพดานจำนวนครั้งต่อตอนแล้วหยุด', () => {
+      const s = new AbortController().signal;
+      beginChapterUsage(s, 'b');
+      setChapterCallLimit(s, 1); // ขั้นต่ำ 60
+      let err = null;
+      try { for (let i = 0; i < 61; i++) countChapterCall(s); } catch (e) { err = e; }
+      const s2 = new AbortController().signal;
+      beginChapterUsage(s2, 'b'); setChapterCallLimit(s2, 10); // 20 + 80 = 100
+      for (let i = 0; i < 100; i++) countChapterCall(s2);
+      return err?.kind === 'budget' && getTaskInfo(s2).chapter.calls === 100;
+    });
+    test('beginTask: ผูกชื่องานกับ signal', () => { const c = beginTask('unit_test_task'); const ok = getTaskInfo(c.signal).task === 'unit_test_task'; endTask('unit_test_task', c); return ok; });
+    test('classifyModelError: 404 เรื่องโมเดล = model, 404 อื่นไม่เปลี่ยน', () => {
+      const a = classifyModelError(errorFromStatus(404, 'models/gemini-1.0-pro is not found for API version v1beta'), 'gemini-1.0-pro');
+      const b = classifyModelError(errorFromStatus(400, 'The model claude-2 has been deprecated'), 'claude-2');
+      const c = classifyModelError(errorFromStatus(404, 'Not Found'), 'x');
+      const d = classifyModelError(errorFromStatus(400, 'max_tokens: must be positive'), 'x');
+      return eq([a.kind, b.kind, c.kind, d.kind], ['model', 'model', 'bad_request', 'bad_request']);
+    });
+    test('redactSecrets: ตัดสิ่งที่เหมือน API Key ออก', () => {
+      const out = redactSecrets('key AIzaSyA1234567890abcdefXYZ and sk-ant-api03-abcdefgh and sk-proj-1234567890abcd and Bearer abcdefghijklmnop jina_abcdef123456');
+      return !/AIza|sk-ant|sk-proj|abcdefghijklmnop|jina_/.test(out) && out.split('[KEY]').length === 6;
+    });
+    test('buildTranslationSystemPrompt: เหมือนกันทุกส่วนของตอน (cache ได้) และไม่มีเนื้อหา/คลังศัพท์', () => {
+      const ctx = { bookId: 'b', title: 'T', genre: 'xianxia', sourceLang: 'zh' };
+      const s1 = buildTranslationSystemPrompt(ctx), s2 = buildTranslationSystemPrompt({ ...ctx, title: 'อื่น', author: 'ใครก็ได้' });
+      const p = buildTranslationPrompt([{ i: 0, src: '林动出手' }], ctx, { termList: '林动=หลินต้ง', isFirstChunk: true, rawChapTitle: '第一章', rawBookTitle: '武动' });
+      return s1 === s2 && !s1.includes('林动') && !s1.includes('第一章') && p.includes('林动=หลินต้ง') && p.includes('林动出手') && p.includes('第一章') &&
+        buildTranslationSystemPrompt(ctx, { noteMode: true }) !== s1;
     });
     const passed = results.filter(r => r.ok).length;
     const summary = document.getElementById('summary');

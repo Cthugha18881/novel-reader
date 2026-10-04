@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/csp.js"></script>
-  <title>NovelTranslate AI v3.0.0</title>
+  <title>NovelTranslate AI v3.1.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -147,6 +147,7 @@
       <div id="bookshelf-list" class="modal-scrollable-body" style="max-height: 400px; margin-bottom: 12px;"></div>
       <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px;">
         <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="exportBackup()" title="ดาวน์โหลดนิยาย ตอน และคลังศัพท์ทั้งหมดเป็นไฟล์ .json (ไม่รวม API Key)">⬇️ สำรองข้อมูลทั้งหมด</button>
+        <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="openUsageModal()" title="token ที่ใช้จริง เพดานค่าใช้จ่าย และบันทึกข้อผิดพลาด">📊 การใช้งาน AI</button>
         <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="triggerBackupImport()" title="นำเข้าไฟล์สำรอง .json (เลือกได้ว่าจะรวมกับของเดิมหรือแทนที่ทั้งหมด)">⬆️ นำเข้าไฟล์สำรอง</button>
         <input type="file" id="backup-file-input" accept=".json,application/json" style="display: none;" onchange="handleBackupFileSelected(this)">
       </div>
@@ -155,8 +156,65 @@
     </div>
   </div>
 
-  <!-- MODAL: IMPORT BACKUP -->
-  <div class="modal-overlay" id="backup-import-modal" style="z-index: 65;">
+  <!-- MODAL: AI USAGE & BUDGET -->
+  <div class="modal-overlay" id="usage-modal" style="z-index: 62;">
+    <div class="modal-box" style="max-width: 560px;">
+      <div class="modal-head">
+        <div class="modal-title">การใช้งาน AI</div>
+        <button class="modal-close" onclick="closeModal('usage-modal')">✕</button>
+      </div>
+      <div class="modal-scrollable-body" style="max-height: 68vh; font-size: 12px;">
+        <div style="font-size: 11px; opacity: 0.7; margin-bottom: 8px;">นับจาก token ที่ผู้ให้บริการแจ้งกลับมาจริงในเบราว์เซอร์นี้ (ยอดในหน้าเว็บผู้ให้บริการคือยอดจริงที่ถูกเรียกเก็บ)</div>
+        <div id="usage-summary" class="usage-cards"></div>
+        <div class="form-label" style="margin-top: 12px;">14 วันล่าสุด</div>
+        <div id="usage-days" class="usage-days"></div>
+
+        <div class="form-label" style="margin-top: 14px;">เพดานค่าใช้จ่าย</div>
+        <div id="usage-budget-status" style="margin-bottom: 8px; line-height: 1.6;"></div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-end;">
+          <label style="flex: 1; min-width: 110px;">หน่วย
+            <select id="budget-unit" class="form-input" onchange="updateBudgetUnitHint()">
+              <option value="tokens">จำนวน token</option>
+              <option value="usd">เงิน (USD)</option>
+            </select>
+          </label>
+          <label style="flex: 1; min-width: 100px;">ต่อวัน
+            <input type="number" min="0" id="budget-daily" class="form-input" placeholder="ไม่จำกัด">
+          </label>
+          <label style="flex: 1; min-width: 100px;">ต่อเดือน
+            <input type="number" min="0" id="budget-monthly" class="form-input" placeholder="ไม่จำกัด">
+          </label>
+          <button class="btn btn-primary" onclick="saveBudgetSettings()">บันทึกเพดาน</button>
+        </div>
+        <div id="budget-unit-hint" style="font-size: 11px; opacity: 0.65; margin-top: 4px;"></div>
+        <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">ใกล้ถึงเพดาน (80%) จะเตือน · ถึงเพดานแล้ว การแปลล่วงหน้า/แปลตอนถัดไปเบื้องหลังจะหยุด ส่วนการกดแปลเองจะถามก่อน</div>
+
+        <div class="form-label" style="margin-top: 14px;">แยกตามโมเดล (เดือนนี้)</div>
+        <div id="usage-by-model"></div>
+        <div class="form-label" style="margin-top: 12px;">แยกตามเรื่อง (เดือนนี้ 10 อันดับ)</div>
+        <div id="usage-by-book"></div>
+
+        <div class="form-label" style="margin-top: 14px;">ราคาต่อ 1 ล้าน token (USD) ใช้คำนวณเงินโดยประมาณ</div>
+        <div style="font-size: 11px; opacity: 0.65; margin-bottom: 6px;">ดูราคาล่าสุดจากหน้าเว็บผู้ให้บริการ ช่อง cache เว้นว่างได้ (Claude คิด ~10% ของราคา input, เจ้าอื่นคิด ~25%)</div>
+        <div class="usage-price-row usage-price-head"><div class="usage-price-model">โมเดล</div><div>input</div><div>output</div><div>cache</div></div>
+        <div id="usage-prices"></div>
+        <button class="btn btn-secondary" style="margin-top: 6px; padding: 3px 10px; font-size: 11px;" onclick="saveModelPricesFromForm()">บันทึกราคา</button>
+
+        <details style="margin-top: 14px;">
+          <summary style="cursor: pointer; font-weight: 600;">🧾 บันทึกข้อผิดพลาด (<span id="diag-log-count">0</span> รายการ)</summary>
+          <div style="font-size: 11px; opacity: 0.7; margin: 6px 0;">เก็บ 200 รายการล่าสุด ตัด API Key ออกแล้ว ส่งไฟล์นี้ให้ผู้ช่วยตรวจปัญหาได้</div>
+          <div id="diag-log-recent"></div>
+          <div style="display: flex; gap: 6px; margin-top: 6px;">
+            <button class="btn btn-secondary" style="padding: 3px 10px; font-size: 11px;" onclick="exportDiagnosticLog()">⬇️ ส่งออกบันทึก</button>
+            <button class="btn" style="padding: 3px 10px; font-size: 11px;" onclick="clearDiagnosticLogFromUi()">ล้างบันทึก</button>
+          </div>
+        </details>
+        <button class="btn btn-danger" style="margin-top: 12px; padding: 3px 10px; font-size: 11px;" onclick="clearUsageHistory()">ล้างสถิติการใช้งานทั้งหมด</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: IMPORT BACKUP -->  <div class="modal-overlay" id="backup-import-modal" style="z-index: 65;">
     <div class="modal-box" style="max-width: 480px;">
       <div class="modal-head">
         <div class="modal-title">นำเข้าไฟล์สำรอง</div>
@@ -718,6 +776,9 @@
         </div>
 
         <div class="form-group">
+          <button class="btn btn-secondary" style="width: 100%;" onclick="openUsageModal()">📊 การใช้งาน AI, เพดานค่าใช้จ่าย และบันทึกข้อผิดพลาด</button>
+        </div>
+        <div class="form-group">
           <button class="btn btn-secondary" style="width: 100%;" onclick="openSiteProfilesModal()">🌐 ตั้งค่าเว็บต้นฉบับ (โปรไฟล์เว็บ, Jina Key, AI ช่วยแยกเนื้อหา)</button>
         </div>
         <div class="form-group">
@@ -846,6 +907,7 @@
   <script src="js/db.js"></script>
   <script src="js/safety.js"></script>
   <script src="js/llm.js"></script>
+  <script src="js/usage.js"></script>
   <script src="js/lang.js"></script>
   <script src="js/api.js"></script>
   <script src="js/source.js"></script>

@@ -2,8 +2,9 @@
 const DB_NAME = 'NovelTranslateDB_v12';
 // v3: เพิ่ม store bookData (คู่มือเรื่อง/กฎแทนคำ/ตัวอย่างสำนวน ใช้ในขั้นถัดไป)
 // v4: เพิ่ม store meta (ข้อมูลภายในของแอพ เช่นโฟลเดอร์สำรองอัตโนมัติ ไม่รวมในไฟล์สำรอง)
+// v5: เพิ่ม store usage (สถิติ token ที่ใช้จริง แยกวัน/ผู้ให้บริการ/โมเดล/เรื่อง และค่าเฉลี่ยต่อตอน)
 // ฟิลด์ใหม่ใน record เดิมไม่ต้อง migrate เพราะทุกจุดอ่านผ่านค่า default ด้านล่าง
-const DB_VERSION = 4;
+const DB_VERSION = 5;
 let db = null;
 let inMemoryGlossaryCache = [];
 
@@ -75,6 +76,10 @@ function initDB() {
       if (!d.objectStoreNames.contains('meta')) {
         d.createObjectStore('meta', { keyPath: 'key' });
       }
+      if (!d.objectStoreNames.contains('usage')) {
+        const usageStore = d.createObjectStore('usage', { keyPath: 'id' });
+        usageStore.createIndex('month', 'month', { unique: false });
+      }
     };
     req.onsuccess = (e) => {
       db = e.target.result;
@@ -113,6 +118,57 @@ function dbSetMeta(key, value) {
     else tx.objectStore('meta').put({ key, value });
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error || new Error('บันทึกข้อมูลภายในไม่สำเร็จ'));
+  });
+}
+
+// ---------- สถิติการใช้งาน AI ----------
+/** อ่าน-แก้-เขียนเรคคอร์ดเดียวใน transaction เดียว (กันสองคำขอพร้อมกันเขียนทับกัน) */
+function dbUpdateUsage(id, updater) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    const tx = db.transaction('usage', 'readwrite');
+    const store = tx.objectStore('usage');
+    const req = store.get(id);
+    req.onsuccess = () => store.put(updater(req.result));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('บันทึกสถิติการใช้งานไม่สำเร็จ'));
+  });
+}
+
+function dbGetUsage(id) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    const req = db.transaction('usage', 'readonly').objectStore('usage').get(id);
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbGetUsageByMonth(month) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    const req = db.transaction('usage', 'readonly').objectStore('usage').index('month').getAll(month);
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbGetAllUsage() {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    const req = db.transaction('usage', 'readonly').objectStore('usage').getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbClearUsage() {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    const tx = db.transaction('usage', 'readwrite');
+    tx.objectStore('usage').clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
   });
 }
 
@@ -331,10 +387,10 @@ function dbMoveChapters(chapIds, fromBookId, toBook) {
 // ==================== BACKUP (EXPORT / IMPORT) ====================
 const BACKUP_FORMAT = 'NovelTranslateBackup';
 // v1 (แอพ v2.6): books, chapters, glossaries | v2 (แอพ v2.7+): เพิ่ม bookData
-// v3 (แอพ v3.0+): เพิ่ม settings (การตั้งค่าที่ไม่ใช่ API Key, ใส่โดย safety.js)
+// v3 (แอพ v3.0+): เพิ่ม settings (การตั้งค่าที่ไม่ใช่ API Key, ใส่โดย safety.js) และ usage (สถิติการใช้ AI, ไม่บังคับ)
 const BACKUP_VERSION = 3;
 const BACKUP_REQUIRED_STORES = ['books', 'chapters', 'glossaries'];
-const BACKUP_STORES = ['books', 'chapters', 'glossaries', 'bookData'];
+const BACKUP_STORES = ['books', 'chapters', 'glossaries', 'bookData', 'usage'];
 
 function dbExportAll() {
   return new Promise((resolve, reject) => {
@@ -461,11 +517,22 @@ function sanitizeBookDataRecord(raw) {
   return d;
 }
 
+function sanitizeUsageRecord(raw) {
+  const u = stripDangerousKeys(raw);
+  if (!isPlainRecord(u) || !isValidId(u.id)) return null;
+  for (const k of ['calls', 'input', 'output', 'cacheRead', 'cacheWrite', 'chapters']) {
+    if (k in u && !(Number.isFinite(u[k]) && u[k] >= 0)) return null;
+  }
+  if ('month' in u && !/^\d{4}-\d{2}$/.test(asText(u.month))) return null;
+  return u;
+}
+
 const BACKUP_SANITIZERS = {
   books: sanitizeBookRecord,
   chapters: sanitizeChapterRecord,
   glossaries: sanitizeGlossaryRecord,
-  bookData: sanitizeBookDataRecord
+  bookData: sanitizeBookDataRecord,
+  usage: sanitizeUsageRecord
 };
 
 // แปลงไฟล์สำรองรุ่นเก่าให้เป็นรูปแบบปัจจุบัน และตรวจทุกเรคคอร์ด (ไม่แก้ object ต้นฉบับ)

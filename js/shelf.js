@@ -70,10 +70,23 @@ function formatTokenCount(n) {
 
 function formatBatchEstimate(est, count) {
   const labels = { fast: 'เร็ว', balanced: 'สมดุล', thorough: 'ละเอียด', best: 'ดีที่สุด' };
-  return `จะแปล ${count} ตอน (โหมด "${labels[getQualityMode()]}", ตอนละประมาณ ${est.avgChars.toLocaleString()} ตัวอักษรต้นฉบับ)\n\n` +
+  const basis = est.fromHistory
+    ? `คิดจากที่ใช้จริงเฉลี่ย ${est.fromHistory} ตอนล่าสุดของเรื่องนี้`
+    : `ตอนละประมาณ ${est.avgChars.toLocaleString()} ตัวอักษรต้นฉบับ`;
+  const cfg = getActiveLlmConfig();
+  const cost = estimateCost({ provider: cfg.provider, model: cfg.mainModel, input: est.input * count, output: est.output * count });
+  return `จะแปล ${count} ตอน (โหมด "${labels[getQualityMode()]}", ${basis})\n\n` +
     `ใช้ประมาณ ${formatTokenCount(est.input * count)} input token + ${formatTokenCount(est.output * count)} output token\n` +
-    `(ตอนละ ~${formatTokenCount(est.input)} + ${formatTokenCount(est.output)})\n\n` +
-    `* เป็นค่าประมาณคร่าวๆ ใช้จริงอาจต่างไปตามโมเดลและเนื้อหา ต้องการเริ่มแปลหรือไม่?`;
+    `(ตอนละ ~${formatTokenCount(est.input)} + ${formatTokenCount(est.output)})` +
+    (cost !== null ? `\nค่าใช้จ่ายโดยประมาณ ~$${cost.toFixed(2)} (ตามราคาที่กรอกไว้ของ ${cfg.mainModel})` : '') + '\n\n' +
+    `* เป็นค่าประมาณ ใช้จริงอาจต่างไปตามโมเดลและเนื้อหา ต้องการเริ่มแปลหรือไม่?`;
+}
+
+/** ใช้ค่าเฉลี่ย token ที่ใช้จริงของเรื่องนี้ (ถ้ามีอย่างน้อย 2 ตอน) แทนการประมาณจากความยาว */
+async function estimateBatchTokens(bookId, bookChaps, lang) {
+  const est = estimateChapterTokens(bookChaps, lang);
+  const avg = await getChapterAverage(bookId, getQualityMode());
+  return avg ? { ...est, input: avg.input, output: avg.output, fromHistory: avg.chapters } : est;
 }
 
 async function startBatchTranslateForBook(bookId) {
@@ -104,7 +117,7 @@ async function startBatchTranslateForBook(bookId) {
   const knownBooks = await dbGetAllBooks();
   const ctx = makeBookContext(knownBooks.find(b => b.bookId === bookId) || { bookId });
 
-  if (count >= 3 && !confirm(formatBatchEstimate(estimateChapterTokens(bookChaps, ctx.sourceLang), count))) return;
+  if (count >= 3 && !confirm(formatBatchEstimate(await estimateBatchTokens(bookId, bookChaps, ctx.sourceLang), count))) return;
 
   // แปลล่วงหน้าเรื่องเดียวกันได้ทีละแท็บ
   const releaseBatch = await acquireLock(lockNames.batch(bookId), { ifAvailable: true });
@@ -253,7 +266,10 @@ async function startBatchTranslateForBook(bookId) {
           }
         } catch (err) {
           if (isAbortError(err)) break;
-          progressDesc.innerText = `หยุดที่ตอนที่ ${i}: ${isMissingPageError(err) ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}\n(กรุณากดปุ่ม 'แก้ URL ถัดไป' เพื่อใส่ลิงก์ใหม่)`;
+          // ปัญหาจาก AI/เพดาน/การตั้งค่า ไม่เกี่ยวกับ URL จึงไม่ต้องแนะนำให้แก้ลิงก์
+          const urlProblem = isMissingPageError(err) || !(err instanceof LLMError);
+          progressDesc.innerText = `หยุดที่ตอนที่ ${i}: ${isMissingPageError(err) ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}` +
+            (urlProblem ? `\n(กรุณากดปุ่ม 'แก้ URL ถัดไป' เพื่อใส่ลิงก์ใหม่)` : '');
           break;
         }
       } finally {
