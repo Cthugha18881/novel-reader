@@ -1,22 +1,20 @@
-// ==================== API & TRANSLATION ENGINE ====================
-let apiKeyPool = [];
-let currentApiKeyIndex = 0;
-let activeAbortController = null;
-let retryAbortRequested = false;
+// ==================== SCRAPER & TRANSLATION ENGINE ====================
+// ทุกฟังก์ชันแปลรับ BookContext ({ bookId, title, author, genre }) เป็นพารามิเตอร์
+// ห้ามอ่าน currentBookId/currentBookGenre ตรงๆ เพราะงานเบื้องหลังอาจทำงานกับเรื่องอื่นอยู่
 
-function getActiveApiKey() {
-  if (!apiKeyPool || apiKeyPool.length === 0) {
-    const singleKey = (localStorage.getItem('nov_gemini_key') || "").trim();
-    return singleKey;
-  }
-  return apiKeyPool[currentApiKeyIndex] || apiKeyPool[0];
+function makeBookContext(book = {}) {
+  return {
+    bookId: book.bookId,
+    title: book.title || '',
+    author: book.author || '',
+    genre: book.genre || 'xianxia'
+  };
 }
 
-function rotateApiKey() {
-  if (apiKeyPool && apiKeyPool.length > 1) {
-    currentApiKeyIndex = (currentApiKeyIndex + 1) % apiKeyPool.length;
-    console.log(`[KeyPool] Rotated to Key #${currentApiKeyIndex + 1} of ${apiKeyPool.length}`);
-  }
+function getCurrentBookContext() {
+  return makeBookContext({
+    bookId: currentBookId, title: currentBookTitle, author: currentAuthor, genre: currentBookGenre
+  });
 }
 
 function computeNextNumericUrl(url) {
@@ -41,6 +39,13 @@ function extractBookIdFromUrl(url) {
   if (m2) return 'book_' + m2[1];
   const encoded = btoa(encodeURIComponent(url.split('?')[0])).replace(/[^a-zA-Z0-9_-]/g, '');
   return 'book_' + encoded.substring(0, 20);
+}
+
+// เฉพาะหน้าเว็บนิยายหาไม่เจอ (ไม่นับ error จาก AI เช่น 404 model not found)
+function isMissingPageError(err) {
+  if (err instanceof LLMError) return false;
+  const msg = err?.message || '';
+  return msg === '404' || msg.includes('404') || msg.includes('ไม่พบเนื้อหา');
 }
 
 async function scrapePage(url, signal = null) {
@@ -95,7 +100,7 @@ async function scrapePage(url, signal = null) {
       throw new Error(res.status === 404 ? '404' : `ดึงหน้าเว็บไม่สำเร็จ (HTTP ${res.status})`);
     }
   } catch(e) {
-    if (e.name === 'AbortError') throw new Error("คำสั่งถูกยกเลิกแล้ว");
+    if (e.name === 'AbortError') throw new LLMError("ผู้ใช้สั่งหยุดการทำงาน", 'abort');
     throw e;
   }
 
@@ -249,21 +254,19 @@ function cleanAndParseJSON(rawStr) {
   }
 }
 
-async function bilingualCrossVerificationPass(paragraphs, modelToUse, signal = null, onStatusUpdate = null) {
-  const activeKey = getActiveApiKey();
-  const genre = currentBookGenre || "xianxia";
-  if (!activeKey || !paragraphs || paragraphs.length === 0) return paragraphs;
+async function bilingualCrossVerificationPass(paragraphs, ctx, { signal = null, onStatus = null } = {}) {
+  if (!paragraphs || paragraphs.length === 0) return paragraphs;
 
-  if (onStatusUpdate) onStatusUpdate("🔍 กำลังตรวจสอบความถูกต้องเทียบต้นฉบับสองภาษา (Bilingual Cross-Verification)...");
+  if (onStatus) onStatus("🔍 กำลังตรวจสอบความถูกต้องเทียบต้นฉบับสองภาษา (Bilingual Cross-Verification)...");
 
-  const activeTerms = await getActiveGlossaryForCurrentBook();
+  const activeTerms = await getActiveGlossaryForBook(ctx.bookId);
   const termList = Object.entries(activeTerms).map(([k, v]) => `${k}=${v.resolvedTgt}`).join(", ");
-  const genreRule = getGenreInstruction(genre);
+  const genreRule = getGenreInstruction(ctx.genre);
 
   const prompt = `คุณคือบรรณาธิการอาวุโสและผู้ตรวจสอบความถูกต้องของงานแปล (Bilingual Quality Auditor)
 หน้าที่ของคุณ: ตรวจเทียบคำแปลภาษาไทยกับภาษาจีนต้นฉบับแบบย่อหน้าต่อย่อหน้า (1 ต่อ 1) เพื่อให้ความหมายสมบูรณ์ตรงตามต้นฉบับที่สุด
 
-แนวเรื่อง: "${genre}"
+แนวเรื่อง: "${ctx.genre}"
 ${genreRule}
 
 กฎเหล็กสำคัญที่สุด (ฝ่าฝืนไม่ได้เด็ดขาด):
@@ -295,27 +298,7 @@ ${JSON.stringify(paragraphs.map(p => ({ src: p.src || "", th: p.th || "" })))}
 }`;
 
   try {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelToUse)}:generateContent`;
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      signal: signal,
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': activeKey },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { response_mime_type: "application/json" }
-      })
-    });
-
-    if (!res.ok) {
-      if (res.status === 429) rotateApiKey();
-      return paragraphs;
-    }
-
-    const data = await res.json();
-    const outText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!outText) return paragraphs;
-
-    const parsed = JSON.parse(outText);
+    const parsed = await callLLMJson(prompt, { signal, onStatus });
     const verifiedList = parsed.verified_paragraphs || [];
 
     if (Array.isArray(verifiedList) && verifiedList.length === paragraphs.length) {
@@ -333,23 +316,47 @@ ${JSON.stringify(paragraphs.map(p => ({ src: p.src || "", th: p.th || "" })))}
       });
     }
   } catch (err) {
+    if (isAbortError(err)) throw err;
     console.warn("Bilingual verification fallback:", err);
   }
   return paragraphs;
 }
 
-async function executeApiCall(rawText, modelToUse, rawChapTitle = "", rawBookTitle = "", prevSummary = "", signal = null, onStatusUpdate = null) {
-  const activeKey = getActiveApiKey();
-  const genre = currentBookGenre || "xianxia";
+async function saveUsedEntities(entities, bookId) {
+  if (!Array.isArray(entities)) return;
+  for (const ent of entities) {
+    if (typeof ent?.src !== 'string' || typeof ent?.tgt !== 'string' || !ent.src || !ent.tgt) continue;
+    const cleanSrc = cleanTermString(ent.src);
+    const cleanTgt = cleanTermString(ent.tgt);
+    const existing = inMemoryGlossaryCache.find(x => x.src === cleanSrc);
+    if (!existing) {
+      await dbSaveGlossaryItem({
+        src: cleanSrc,
+        tgt: cleanTgt,
+        category: ent.category || 'character',
+        scope: 'tagged',
+        books: [bookId],
+        count: 1,
+        overrides: {},
+        updatedAt: Date.now()
+      });
+    } else {
+      if (!Array.isArray(existing.books)) existing.books = [];
+      if (!existing.books.includes(bookId)) existing.books.push(bookId);
+      existing.count = (existing.count || 1) + 1;
+      existing.updatedAt = Date.now();
+      await dbSaveGlossaryItem(existing);
+    }
+  }
+}
 
-  if (!activeKey) throw new Error("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
-
-  const activeTerms = await getActiveGlossaryForCurrentBook();
+async function executeApiCall(rawText, ctx, { rawChapTitle = "", rawBookTitle = "", prevSummary = "", signal = null, onStatus = null } = {}) {
+  const activeTerms = await getActiveGlossaryForBook(ctx.bookId);
   const termList = Object.entries(activeTerms).map(([k,v]) => `${k}=${v.resolvedTgt}`).join(", ");
-  const genreRule = getGenreInstruction(genre);
+  const genreRule = getGenreInstruction(ctx.genre);
 
-  const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
-  const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
+  const authorCtx = ctx.author ? `ผู้แต่ง: "${ctx.author}"` : '';
+  const bookCtx = ctx.title ? `นิยายเรื่อง: "${ctx.title}"` : '';
 
   const prompt = `คุณคือนักแปลนิยายมืออาชีพ แปลเนื้อหาภาษาจีนต่อไปนี้เป็นภาษาไทยให้อ่านสนุก ไหลลื่น สละสลวย เป็นธรรมชาติ โดยคงความหมายและรูปประโยคให้ใกล้เคียงต้นฉบับที่สุด
 
@@ -367,9 +374,9 @@ ${genreRule}
 ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน้า: "${prevSummary}"` : ''}
 
 กฎการเทียบเคียงและล็อกคำศัพท์ (3-Tier Priority):
-1. Tier 1 (ตรงเรื่อง): หากเป็นชื่อตัวละครหรือสถานที่ในนิยายเรื่อง "${currentBookTitle}" ให้ใช้คำแปล/ทับศัพท์ที่ตรงกับฉบับแปลไทย
+1. Tier 1 (ตรงเรื่อง): หากเป็นชื่อตัวละครหรือสถานที่ในนิยายเรื่อง "${ctx.title}" ให้ใช้คำแปล/ทับศัพท์ที่ตรงกับฉบับแปลไทย
 2. Tier 2 (ผู้แต่ง/จักรวาลเดียวกัน): หากไม่พบในเรื่องนี้ ให้เทียบเคียงกับศัพท์ที่ใช้ในผลงานอื่นของ ${authorCtx} ในจักรวาลเดียวกัน
-3. Tier 3 (มาตรฐานแนวเรื่อง): หากเป็นคำใหม่ ให้ใช้คำแปลที่สละสลวยตามมาตรฐานวรรณกรรมนิยายแนว "${genre}"
+3. Tier 3 (มาตรฐานแนวเรื่อง): หากเป็นคำใหม่ ให้ใช้คำแปลที่สละสลวยตามมาตรฐานวรรณกรรมนิยายแนว "${ctx.genre}"
 
 กฎเหล็กเรื่องการจัดย่อหน้า สรรพนาม และโครงสร้าง (สำคัญสูงสุด):
 1. **ล็อกสรรพนามให้คงที่ 100%:** สรรพนามตัวละครต้องสอดคล้องกันตลอดทั้งบท (เช่น หากใช้ 'ข้า-เจ้า' ต้องคงไว้ตามนั้น ห้ามสลับเป็น 'ผม/ฉัน/คุณ' เด็ดขาด)
@@ -396,30 +403,8 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
   ]
 }`;
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelToUse)}:generateContent`;
-
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    signal: signal,
-    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': activeKey },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาที่ต้องแปล:\n${rawText}` }] }],
-      generationConfig: { response_mime_type: "application/json" }
-    })
-  });
-
-  const data = await res.json();
-  if (!res.ok) {
-    if (res.status === 429) rotateApiKey();
-    throw new Error(data.error?.message || `HTTP ${res.status}: ยิง API ไม่สำเร็จ`);
-  }
-
-  let outText = data.candidates?.[0]?.content?.parts?.find(part => typeof part.text === 'string')?.text;
-  if (!outText) {
-    const reason = data.candidates?.[0]?.finishReason;
-    throw new Error(reason ? `โมเดลไม่ส่งคำแปลกลับมา (${reason})` : 'โมเดลไม่ส่งคำแปลกลับมา');
-  }
-  const parsedResult = cleanAndParseJSON(outText);
+  if (onStatus) onStatus(`กำลังแปลผ่าน ${LLM_PROVIDERS[getActiveProvider()].label} (${getActiveLlmConfig().model})...`);
+  const parsedResult = await callLLMJson(`${prompt}\n\nเนื้อหาที่ต้องแปล:\n${rawText}`, { signal, onStatus });
 
   const rawParagraphs = rawText.split(/\n\s*\n+/).map(text => text.trim()).filter(Boolean);
   let paragraphs = Array.isArray(parsedResult) ? parsedResult : parsedResult?.paragraphs;
@@ -432,47 +417,17 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
     };
   }).filter(p => p.th.trim());
   if (paragraphs.length === 0) throw new Error('โมเดลไม่ส่งย่อหน้าคำแปลที่อ่านได้กลับมา');
-  let translatedChapTitle = parsedResult.translatedChapterTitle || rawChapTitle;
-  let translatedBookTitle = parsedResult.translatedBookTitle || rawBookTitle;
-  let chapterSummary = parsedResult.chapter_summary || "";
 
   paragraphs = paragraphs.map(p => ({
     th: rescueEmptyBrackets(p.th, p.src),
     src: p.src
   }));
 
-  if (Array.isArray(parsedResult?.used_entities) && parsedResult.used_entities.length > 0) {
-    for (const ent of parsedResult.used_entities) {
-      if (typeof ent?.src === 'string' && typeof ent?.tgt === 'string' && ent.src && ent.tgt) {
-        const cleanSrc = cleanTermString(ent.src);
-        const cleanTgt = cleanTermString(ent.tgt);
-        const existing = inMemoryGlossaryCache.find(x => x.src === cleanSrc);
-        if (!existing) {
-          const newItem = {
-            src: cleanSrc,
-            tgt: cleanTgt,
-            category: ent.category || 'character',
-            scope: 'tagged',
-            books: [currentBookId],
-            count: 1,
-            overrides: {},
-            updatedAt: Date.now()
-          };
-          await dbSaveGlossaryItem(newItem);
-        } else {
-          if (!Array.isArray(existing.books)) existing.books = [];
-          if (!existing.books.includes(currentBookId)) existing.books.push(currentBookId);
-          existing.count = (existing.count || 1) + 1;
-          existing.updatedAt = Date.now();
-          await dbSaveGlossaryItem(existing);
-        }
-      }
-    }
-  }
+  await saveUsedEntities(parsedResult?.used_entities, ctx.bookId);
 
   const isBilingualVerifyEnabled = localStorage.getItem('nov_enable_bilingual_verify') !== 'false';
-  if (isBilingualVerifyEnabled && paragraphs.length > 0) {
-    paragraphs = await bilingualCrossVerificationPass(paragraphs, modelToUse, signal, onStatusUpdate);
+  if (isBilingualVerifyEnabled) {
+    paragraphs = await bilingualCrossVerificationPass(paragraphs, ctx, { signal, onStatus });
   }
 
   const formattedParas = [];
@@ -480,78 +435,32 @@ ${prevSummary ? `- เหตุการณ์ในตอนก่อนหน�
     let cleanTh = item.th || "";
     cleanTh = rescueEmptyBrackets(cleanTh, item.src);
     cleanTh = cleanTh.replace(/^——\s*/g, '').replace(/(\n)——\s*/g, '$1');
-
     if (cleanTh.trim()) formattedParas.push({ th: cleanTh, src: item.src || "" });
   });
 
   return {
-    bookTitle: translatedBookTitle,
-    chapterTitle: translatedChapTitle,
-    summary: chapterSummary,
+    bookTitle: parsedResult.translatedBookTitle || rawBookTitle,
+    chapterTitle: parsedResult.translatedChapterTitle || rawChapTitle,
+    summary: parsedResult.chapter_summary || "",
     paragraphs: formattedParas
   };
 }
 
-async function translateTextWithPingPong(rawText, onStatusUpdate = null, rawChapTitle = "", rawBookTitle = "", prevSummary = "") {
-  retryAbortRequested = false;
+/**
+ * Pipeline แปล 1 บท: สกัดศัพท์ใหม่ -> แปล -> (ตรวจทาน)
+ * retry/หมุนคีย์อยู่ใน callLLM แล้ว ที่นี่จึงไม่ต้องวนซ้ำเอง
+ */
+async function translateChapter(rawText, ctx, { onStatus = null, signal = null, rawChapTitle = "", rawBookTitle = "", prevSummary = "" } = {}) {
+  if (!ctx?.bookId) throw new Error('ไม่พบข้อมูลนิยายสำหรับการแปล');
+  throwIfAborted(signal);
 
-  const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
-  const configuredRetries = parseInt(localStorage.getItem('nov_retry_limit') || "10", 10);
-  const maxRetries = Number.isFinite(configuredRetries) ? Math.min(50, Math.max(1, configuredRetries)) : 10;
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    if (retryAbortRequested) throw new Error("ผู้ใช้ยกเลิกการส่งซ้ำ");
-
-    try {
-      activeAbortController = new AbortController();
-
-      if (attempt === 1) {
-        if (onStatusUpdate) onStatusUpdate("กำลังสแกนหาชื่อเฉพาะและระดับพลังใหม่...");
-        await extractAndStoreAutoGlossary(rawText, primaryModel, activeAbortController.signal);
-      }
-
-      if (onStatusUpdate) onStatusUpdate(`กำลังแปลผ่านโมเดล ${primaryModel}...`);
-      const res = await executeApiCall(rawText, primaryModel, rawChapTitle, rawBookTitle, prevSummary, activeAbortController.signal, onStatusUpdate);
-      activeAbortController = null;
-      return res;
-    } catch (err) {
-      activeAbortController = null;
-      if (err.name === 'AbortError' || retryAbortRequested) throw new Error("ผู้ใช้สั่งหยุดการทำงาน");
-
-      const errMsg = (err.message || "").toLowerCase();
-      const isRateLimit = errMsg.includes("429") || errMsg.includes("resourceexhausted") || errMsg.includes("quota");
-      const isHighDemand = isRateLimit ||
-                           errMsg.includes("high demand") ||
-                           errMsg.includes("503") ||
-                           errMsg.includes("overloaded");
-
-      if (!isHighDemand || attempt === maxRetries || retryAbortRequested) throw err;
-
-      if (isRateLimit && apiKeyPool.length > 1) {
-        rotateApiKey();
-        if (onStatusUpdate) {
-          onStatusUpdate(`โควต้าเต็ม! สลับใช้คีย์ #${currentApiKeyIndex + 1}/${apiKeyPool.length} ทันที...`);
-        }
-        await new Promise(r => setTimeout(r, 800));
-        continue;
-      }
-
-      for (let sec = 5; sec > 0; sec--) {
-        if (retryAbortRequested) throw new Error("ผู้ใช้ยกเลิกการส่งซ้ำ");
-        if (onStatusUpdate) {
-          const keyLabel = apiKeyPool.length > 1 ? ` (คีย์ #${currentApiKeyIndex + 1}/${apiKeyPool.length})` : '';
-          onStatusUpdate(`คิวแน่น! ลองใหม่รอบที่ ${attempt}/${maxRetries}${keyLabel} ใน ${sec} วิ...`);
-        }
-        await new Promise(r => setTimeout(r, 1000));
-      }
-    }
+  if (onStatus) onStatus("กำลังสแกนหาชื่อเฉพาะและระดับพลังใหม่...");
+  try {
+    await extractAndStoreAutoGlossary(rawText, ctx, { signal, onStatus });
+  } catch (err) {
+    if (isAbortError(err)) throw err;
+    console.warn("Auto-Glossary scan skipped:", err.message);
   }
-}
 
-function abortCurrentRetry() {
-  retryAbortRequested = true;
-  if (activeAbortController) {
-    activeAbortController.abort();
-    activeAbortController = null;
-  }
+  return executeApiCall(rawText, ctx, { rawChapTitle, rawBookTitle, prevSummary, signal, onStatus });
 }

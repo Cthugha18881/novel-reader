@@ -101,13 +101,36 @@ function dbGetChaptersByBook(bookId) {
 function dbDeleteBook(bookId) {
   return new Promise((resolve, reject) => {
     if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
-    const tx = db.transaction(['books', 'chapters'], 'readwrite');
+    const tx = db.transaction(['books', 'chapters', 'glossaries'], 'readwrite');
     tx.objectStore('books').delete(bookId);
     const chapStore = tx.objectStore('chapters');
     const index = chapStore.index('bookId');
     const req = index.getAllKeys(bookId);
     req.onsuccess = () => { (req.result || []).forEach(k => chapStore.delete(k)); };
-    tx.oncomplete = () => resolve();
+
+    // ถอด bookId ออกจากคำศัพท์ที่เคยผูกไว้ ไม่ให้เหลือแท็ก "ไม่ทราบชื่อเรื่อง"
+    const glossStore = tx.objectStore('glossaries');
+    glossStore.openCursor().onsuccess = (e) => {
+      const cursor = e.target.result;
+      if (!cursor) return;
+      const item = cursor.value;
+      const hasBook = Array.isArray(item.books) && item.books.includes(bookId);
+      const hasOverride = item.overrides && Object.prototype.hasOwnProperty.call(item.overrides, bookId);
+      if (hasBook || hasOverride) {
+        if (hasBook) item.books = item.books.filter(b => b !== bookId);
+        if (hasOverride) delete item.overrides[bookId];
+        cursor.update(item);
+      }
+      cursor.continue();
+    };
+
+    tx.oncomplete = () => {
+      inMemoryGlossaryCache.forEach(item => {
+        if (Array.isArray(item.books)) item.books = item.books.filter(b => b !== bookId);
+        if (item.overrides) delete item.overrides[bookId];
+      });
+      resolve();
+    };
     tx.onerror = () => reject(tx.error || new Error('ลบหนังสือไม่สำเร็จ'));
     tx.onabort = () => reject(tx.error || new Error('ยกเลิกการลบหนังสือ'));
   });
@@ -123,6 +146,49 @@ function dbDeleteMultipleChapters(chapIds) {
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error || new Error('ลบตอนนิยายไม่สำเร็จ'));
     tx.onabort = () => reject(tx.error || new Error('ยกเลิกการลบตอนนิยาย'));
+  });
+}
+
+// ==================== BACKUP (EXPORT / IMPORT) ====================
+const BACKUP_FORMAT = 'NovelTranslateBackup';
+const BACKUP_STORES = ['books', 'chapters', 'glossaries'];
+
+function dbExportAll() {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    const tx = db.transaction(BACKUP_STORES, 'readonly');
+    const result = { format: BACKUP_FORMAT, version: 1, dbVersion: DB_VERSION, exportedAt: new Date().toISOString() };
+    BACKUP_STORES.forEach(name => {
+      const req = tx.objectStore(name).getAll();
+      req.onsuccess = () => { result[name] = req.result || []; };
+    });
+    tx.oncomplete = () => resolve(result);
+    tx.onerror = () => reject(tx.error || new Error('อ่านข้อมูลเพื่อสำรองไม่สำเร็จ'));
+  });
+}
+
+function isValidBackup(data) {
+  return !!data && data.format === BACKUP_FORMAT &&
+    BACKUP_STORES.every(name => Array.isArray(data[name]));
+}
+
+// รวมข้อมูลจากไฟล์เข้าฐานข้อมูลเดิม (key ซ้ำจะถูกเขียนทับ) ใน transaction เดียว ถ้าพังจะไม่มีอะไรถูกเขียน
+function dbImportAll(data) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    if (!isValidBackup(data)) return reject(new Error('รูปแบบไฟล์สำรองไม่ถูกต้อง'));
+    const tx = db.transaction(BACKUP_STORES, 'readwrite');
+    try {
+      data.books.filter(b => b && b.bookId).forEach(b => tx.objectStore('books').put(b));
+      data.chapters.filter(c => c && c.id && c.bookId).forEach(c => tx.objectStore('chapters').put(c));
+      data.glossaries.filter(g => g && g.src).forEach(g => tx.objectStore('glossaries').put(g));
+    } catch (err) {
+      tx.abort();
+      return reject(err);
+    }
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('นำเข้าข้อมูลไม่สำเร็จ'));
+    tx.onabort = () => reject(tx.error || new Error('ยกเลิกการนำเข้าข้อมูล'));
   });
 }
 

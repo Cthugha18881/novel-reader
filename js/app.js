@@ -4,7 +4,7 @@ let currentFontSize = 18;
 let currentUrl = "";
 let nextUrlCalculated = "";
 let isPrefetching = false;
-let prefetchAbortController = null;
+let lastPrefetchError = '';
 let currentBookId = "default_novel";
 let currentBookTitle = "NovelTranslate";
 let currentAuthor = "";
@@ -23,8 +23,8 @@ let selectedWordBuffer = "";
 let isSelectedChinese = false;
 let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 
-let chapters = [
-  {
+function createGuideChapters() {
+  return [{
     id: "guide_chap_1",
     title: "คู่มือเริ่มต้น v2.5.1",
     paragraphs: [
@@ -32,9 +32,25 @@ let chapters = [
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
     summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.5.1"
-  }
-];
+  }];
+}
+
+let chapters = createGuideChapters();
 let currentChapterIndex = 0;
+
+function resetToGuideBook() {
+  localStorage.removeItem('nov_last_book_id');
+  currentBookId = 'default_novel';
+  currentBookTitle = 'NovelTranslate';
+  currentAuthor = '';
+  currentBookGenre = 'xianxia';
+  isUserCustomTitle = false;
+  currentUrl = '';
+  nextUrlCalculated = '';
+  chapters = createGuideChapters();
+  currentChapterIndex = 0;
+  renderVirtualWindow(0, true);
+}
 
 function toggleFullscreenMode() {
   const isCurrentlyFullscreen = document.fullscreenElement || document.webkitFullscreenElement || document.body.classList.contains('is-fullscreen');
@@ -306,12 +322,17 @@ function checkAndRefreshBottomStatus() {
       </div>
     `, true);
   } else if (targetUrl) {
+    const errorHtml = lastPrefetchError ? `
+      <div style="font-size: 11px; color: #dc2626; margin-bottom: 8px;">
+        ⚠️ แปลล่วงหน้าไม่สำเร็จ: ${escapeHtml(lastPrefetchError)}
+      </div>` : '';
     updateInfiniteStatusBanner(`
       <div style="font-size: 13px; font-weight: 600; margin-bottom: 8px;">
         อ่านจบ "${escapeHtml(lastChap.title)}" แล้ว
       </div>
+      ${errorHtml}
       <button class="btn btn-primary" style="padding: 6px 14px;" onclick="triggerManualFetchNext()">
-        ⚡ แปลตอนถัดไปทันที
+        ${lastPrefetchError ? '🔁 ลองแปลตอนถัดไปอีกครั้ง' : '⚡ แปลตอนถัดไปทันที'}
       </button>
     `, true);
   } else {
@@ -339,6 +360,7 @@ function promptFixNextUrlFromBottom() {
     lastChap.nextUrl = cleanUrl;
     dbSaveChapter(lastChap);
     nextUrlCalculated = cleanUrl;
+    lastPrefetchError = '';
     triggerReadingPrefetchIfEnabled(true);
   }
 }
@@ -465,8 +487,12 @@ function hideGlobalToast() {
 }
 
 function handleImportCancel() {
-  abortCurrentRetry();
+  abortTask('import');
   closeModal('import-modal');
+}
+
+function cancelNextChapterFetch() {
+  abortTask('next');
 }
 
 async function addFromSelectionBar() {
@@ -501,22 +527,24 @@ async function retranslateSpecificChapterDirect(chapId) {
   const rawText = chapter.paragraphs.map(p => p.src || '').filter(Boolean).join('\n\n');
   if (!rawText) return alert('บทนี้ไม่มีต้นฉบับภาษาจีน จึงแปลใหม่ไม่ได้');
 
+  if (isTaskRunning('retranslate')) return alert('กำลังแปลบทอื่นใหม่อยู่ กรุณารอให้เสร็จก่อน');
+
   const books = await dbGetAllBooks();
-  const book = books.find(item => item.bookId === chapter.bookId) || {
-    bookId: currentBookId, title: currentBookTitle, author: currentAuthor, genre: currentBookGenre
-  };
-  const previous = {
-    bookId: currentBookId, title: currentBookTitle, author: currentAuthor,
-    genre: currentBookGenre, customTitle: isUserCustomTitle
-  };
-  const isActiveBook = currentBookId === book.bookId;
-  currentBookId = book.bookId;
-  currentBookTitle = book.title || currentBookTitle;
-  currentAuthor = book.author || '';
-  currentBookGenre = book.genre || 'xianxia';
+  const bookId = chapter.bookId || currentBookId;
+  const ctx = makeBookContext(books.find(item => item.bookId === bookId) || getCurrentBookContext());
+  const controller = beginTask('retranslate');
   showGlobalToast(`กำลังแปล "${chapter.title}" ใหม่...`);
   try {
-    const result = await translateTextWithPingPong(rawText, showGlobalToast, '', '', chapter.summary || '');
+    // ใช้ summary ของบทก่อนหน้าเป็นบริบท (ไม่ใช่ summary ของบทตัวเอง)
+    const bookChaps = await dbGetChaptersByBook(bookId);
+    const prevChap = bookChaps
+      .filter(c => (c.order || 0) < (chapter.order || 0))
+      .sort((a, b) => b.order - a.order)[0];
+    const result = await translateChapter(rawText, ctx, {
+      signal: controller.signal,
+      onStatus: showGlobalToast,
+      prevSummary: prevChap?.summary || ''
+    });
     chapter.paragraphs = result.paragraphs;
     chapter.summary = result.summary || chapter.summary || '';
     await dbSaveChapter(chapter);
@@ -525,45 +553,29 @@ async function retranslateSpecificChapterDirect(chapId) {
       activeCopy.paragraphs = chapter.paragraphs;
       activeCopy.summary = chapter.summary;
     }
-    if (isActiveBook) await renderVirtualWindow(currentChapterIndex);
-    await refreshShelfViewOnly(book.bookId);
+    if (currentBookId === bookId) await renderVirtualWindow(currentChapterIndex);
+    await refreshShelfViewOnly(bookId);
     alert(`แปล "${chapter.title}" ใหม่และบันทึกแล้ว`);
   } catch (err) {
-    if (err.name !== 'AbortError') alert(`แปลบทใหม่ไม่สำเร็จ: ${err.message}`);
+    if (!isAbortError(err)) alert(`แปลบทใหม่ไม่สำเร็จ: ${err.message}`);
   } finally {
+    endTask('retranslate', controller);
     hideGlobalToast();
-    if (currentBookId === book.bookId) {
-      currentBookId = previous.bookId;
-      currentBookTitle = previous.title;
-      currentAuthor = previous.author;
-      currentBookGenre = previous.genre;
-      isUserCustomTitle = previous.customTitle;
-    }
   }
 }
 
 async function findChineseForSelection() {
   const { th, src } = selectedParagraphContext;
   if (!selectedWordBuffer || !th || !src) return alert('ไม่พบย่อหน้าต้นฉบับที่สัมพันธ์กับข้อความที่เลือก');
-  const activeKey = getActiveApiKey();
-  if (!activeKey) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+  if (!hasActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
   const button = document.getElementById('reverse-pair-btn');
   const oldLabel = button.innerText;
   button.disabled = true;
   button.innerText = 'กำลังค้นหา...';
   try {
-    const model = (localStorage.getItem('nov_primary_model') || 'gemini-3.5-flash-lite').trim();
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
     const prompt = `จับคู่คำแปลไทยที่ผู้ใช้อ่านเลือกกับข้อความจีนในย่อหน้าต้นฉบับ โดยคืนเฉพาะคำหรือวลีจีนที่ตรงกันและปรากฏต่อเนื่องในต้นฉบับ ห้ามเดาคำที่ไม่มีอยู่\nข้อความที่เลือก: ${JSON.stringify(selectedWordBuffer)}\nย่อหน้าไทย: ${JSON.stringify(th)}\nต้นฉบับจีน: ${JSON.stringify(src)}\nตอบ JSON เท่านั้น: {"src":"วลีจีนที่พบ"}`;
-    const response = await fetch(endpoint, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': activeKey },
-      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { response_mime_type: 'application/json' } })
-    });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error?.message || `HTTP ${response.status}`);
-    const answer = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!answer) throw new Error('ไม่พบคำตอบจาก AI');
-    const candidate = JSON.parse(answer).src?.trim();
+    const answer = await callLLMJson(prompt, { maxRetries: 3 });
+    const candidate = (typeof answer?.src === 'string' ? answer.src : '').trim();
     if (!candidate || !src.includes(candidate)) throw new Error('ไม่พบวลีจีนที่ตรงกับต้นฉบับ');
 
     const srcEl = document.getElementById(`src-${selectedParagraphContext.uniqueKey}`);
@@ -598,15 +610,18 @@ async function findChineseForSelection() {
 }
 
 function abortAllRunningProcesses() {
-  if (isBatchRunning) batchCancelRequested = true;
-  abortCurrentRetry();
-  if (prefetchAbortController) {
-    prefetchAbortController.abort();
-    prefetchAbortController = null;
-  }
+  abortAllTasks();
   isPrefetching = false;
   document.getElementById('prefetch-badge').style.display = 'none';
   checkAndRefreshBottomStatus();
+}
+
+// งานที่ผูกกับเรื่องที่กำลังเปิดอ่าน (ไม่รวม batch ซึ่งแยก context ของตัวเองได้แล้ว)
+function abortReaderTasks() {
+  abortTask('prefetch');
+  abortTask('next');
+  isPrefetching = false;
+  document.getElementById('prefetch-badge').style.display = 'none';
 }
 
 async function deleteSelectedChapters(bookId) {
@@ -660,29 +675,11 @@ async function deleteSelectedChapters(bookId) {
 }
 
 async function loadBookFromDB(bookId, specifyChapIdOrIdx = null) {
-  if (currentBookId !== bookId && (isPrefetching || activeAbortController || isBatchRunning)) {
-    if (isBatchRunning) batchCancelRequested = true;
-    abortAllRunningProcesses();
-  }
+  if (currentBookId !== bookId) abortReaderTasks();
   const books = await dbGetAllBooks();
   const targetBook = books.find(b => b.bookId === bookId);
   if (!targetBook) {
-    localStorage.removeItem('nov_last_book_id');
-    currentBookId = 'default_novel';
-    currentBookTitle = 'NovelTranslate';
-    currentAuthor = '';
-    currentBookGenre = 'xianxia';
-    currentUrl = '';
-    nextUrlCalculated = '';
-    chapters = [{
-      id: 'guide_chap_1', title: 'คู่มือเริ่มต้น v2.5.1', summary: 'ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.5.1',
-      paragraphs: [
-        { th: 'ยินดีต้อนรับสู่ NovelTranslate AI v2.5.1', src: '欢迎来到 NovelTranslate' },
-        { th: 'ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว', src: '已完全重构为模块化架构' }
-      ]
-    }];
-    currentChapterIndex = 0;
-    renderVirtualWindow(0, true);
+    resetToGuideBook();
     return;
   }
 
@@ -691,6 +688,7 @@ async function loadBookFromDB(bookId, specifyChapIdOrIdx = null) {
   currentAuthor = targetBook.author || '';
   currentBookGenre = targetBook.genre || 'xianxia';
   isUserCustomTitle = targetBook.isUserCustomTitle || false;
+  lastPrefetchError = '';
 
   const loadedChaps = await dbGetChaptersByBook(bookId);
   if (loadedChaps.length > 0) {
@@ -739,27 +737,8 @@ async function removeBookFromShelf(e, bookId) {
   await dbDeleteBook(bookId);
   if (currentBookId === bookId) {
     const remainingBooks = await dbGetAllBooks();
-    if (remainingBooks.length) {
-      await loadBookFromDB(remainingBooks[0].bookId);
-    } else {
-      localStorage.removeItem('nov_last_book_id');
-      currentBookId = 'default_novel';
-      currentBookTitle = 'NovelTranslate';
-      currentAuthor = '';
-      currentBookGenre = 'xianxia';
-      isUserCustomTitle = false;
-      currentUrl = '';
-      nextUrlCalculated = '';
-      chapters = [{
-        id: 'guide_chap_1', title: 'คู่มือเริ่มต้น v2.5.1', summary: 'ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.5.1',
-        paragraphs: [
-          { th: 'ยินดีต้อนรับสู่ NovelTranslate AI v2.5.1', src: '欢迎来到 NovelTranslate' },
-          { th: 'ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว', src: '已完全重构为模块化架构' }
-        ]
-      }];
-      currentChapterIndex = 0;
-      renderVirtualWindow(0, true);
-    }
+    if (remainingBooks.length) await loadBookFromDB(remainingBooks[0].bookId);
+    else resetToGuideBook();
   }
   openBookshelfModal();
 }
@@ -776,21 +755,22 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
     return;
   }
 
-  if (isPrefetching) return;
+  if (isPrefetching || isTaskRunning('next')) return;
+  // หลังล้มเหลว ไม่ยิงซ้ำอัตโนมัติทุกครั้งที่เลื่อนจอ จนกว่าผู้ใช้จะกดเอง
+  if (lastPrefetchError && !isManualClick) return;
+
   isPrefetching = true;
-  prefetchAbortController = new AbortController();
-  const requestController = prefetchAbortController;
-  const requestBookId = currentBookId;
-  const requestBookAuthor = currentAuthor;
-  const requestBookGenre = currentBookGenre;
-  const requestChapterIndex = currentChapterIndex;
+  lastPrefetchError = '';
+  const controller = beginTask('prefetch');
+  const signal = controller.signal;
+  const ctx = getCurrentBookContext();
+  const requestBookId = ctx.bookId;
   checkAndRefreshBottomStatus();
 
   try {
     const bookChaps = await dbGetChaptersByBook(requestBookId);
     if (bookChaps.some(c => c.sourceUrl === targetUrl)) {
       document.getElementById('prefetch-badge').style.display = 'inline-block';
-      checkAndRefreshBottomStatus();
       return;
     }
 
@@ -800,10 +780,11 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       </div>
     `, true);
 
-    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, requestController.signal);
-    if (requestController.signal.aborted || currentBookId !== requestBookId) return;
-    const resolvedAuthor = author || requestBookAuthor;
-    if (author && currentBookId === requestBookId) currentAuthor = author;
+    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, signal);
+    if (author) {
+      ctx.author = author;
+      if (currentBookId === requestBookId) currentAuthor = author;
+    }
 
     updateInfiniteStatusBanner(`
       <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
@@ -811,20 +792,24 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       </div>
     `, true);
 
-    const prevSummary = lastChap?.summary || "";
-
-    const result = await translateTextWithPingPong(text, (msg) => {
-      updateInfiniteStatusBanner(`
-        <div style="font-size: 13px; font-weight: 500; color: #b45309;">
-          <span class="spinner-icon"></span> ${escapeHtml(msg)}
-        </div>
-      `, true);
-    }, rawChapTitle, rawBookTitle, prevSummary);
+    const result = await translateChapter(text, ctx, {
+      signal,
+      rawChapTitle,
+      rawBookTitle,
+      prevSummary: lastChap?.summary || "",
+      onStatus: (msg) => {
+        if (currentBookId !== requestBookId) return;
+        updateInfiniteStatusBanner(`
+          <div style="font-size: 13px; font-weight: 500; color: #b45309;">
+            <span class="spinner-icon"></span> ${escapeHtml(msg)}
+          </div>
+        `, true);
+      }
+    });
 
     const currentAll = await dbGetChaptersByBook(requestBookId);
     if (currentAll.some(c => c.sourceUrl === targetUrl)) {
       if (currentBookId === requestBookId) document.getElementById('prefetch-badge').style.display = 'inline-block';
-      checkAndRefreshBottomStatus();
       return;
     }
 
@@ -844,44 +829,41 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
 
     await dbSaveChapter(newChap);
 
-    const books = await dbGetAllBooks();
-    const curBook = books.find(b => b.bookId === requestBookId);
+    const curBook = (await dbGetAllBooks()).find(b => b.bookId === requestBookId);
+    let resolvedTitle = ctx.title;
     if (curBook) {
-      const resolvedTitle = curBook.isUserCustomTitle ? curBook.title : (result.bookTitle || curBook.title);
+      resolvedTitle = curBook.isUserCustomTitle ? curBook.title : (result.bookTitle || curBook.title);
       await dbSaveBook({
         ...curBook,
         title: resolvedTitle,
-        author: resolvedAuthor,
-        genre: curBook.genre || requestBookGenre,
+        author: ctx.author,
         totalChapters: maxOrder + 1,
-        lastChapterId: curBook.lastChapterId || lastChap?.id,
-        lastChapterIndex: curBook.lastChapterIndex !== undefined ? curBook.lastChapterIndex : requestChapterIndex,
-        lastChapterTitle: curBook.lastChapterTitle || lastChap?.title,
         lastUrl: targetUrl,
         updatedAt: Date.now()
       });
     }
 
     if (currentBookId === requestBookId) {
-      chapters.push(newChap);
+      if (!chapters.some(c => c.id === newChap.id)) chapters.push(newChap);
       nextUrlCalculated = nextUrl;
+      if (!isUserCustomTitle) currentBookTitle = resolvedTitle;
+      document.getElementById('prefetch-badge').style.display = 'inline-block';
+      const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
+      if (isInfinite) appendNextChapterToWindow();
     }
-    if (currentBookId === requestBookId) document.getElementById('prefetch-badge').style.display = 'inline-block';
-
-    const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
-    if (isInfinite && currentBookId === requestBookId) appendNextChapterToWindow();
   } catch (e) {
+    if (isAbortError(e)) return;
     console.warn("Reading prefetch failed:", e);
-    if (e.message && (e.message.includes('404') || e.message.includes('ไม่พบเนื้อหา'))) {
+    if (isMissingPageError(e)) {
       lastChap.nextUrl = null;
       await dbSaveChapter(lastChap);
       if (currentBookId === requestBookId) nextUrlCalculated = null;
+    } else if (currentBookId === requestBookId) {
+      lastPrefetchError = e.message || 'เกิดข้อผิดพลาดที่ไม่ทราบสาเหตุ';
     }
   } finally {
-    if (prefetchAbortController === requestController) {
-      isPrefetching = false;
-      prefetchAbortController = null;
-    }
+    endTask('prefetch', controller);
+    if (!isTaskRunning('prefetch')) isPrefetching = false;
     checkAndRefreshBottomStatus();
   }
 }
@@ -895,70 +877,74 @@ async function handleNextChapterClick() {
     return;
   }
 
-  if (nextUrlCalculated) {
-    if (isPrefetching) return;
-    retryAbortRequested = false;
-    const chapterUrl = nextUrlCalculated;
-    const btnText = document.getElementById('next-btn-text');
-    const nextBtn = document.getElementById('next-chap-btn');
-    const cancelBtn = document.getElementById('cancel-retry-btn');
+  if (!nextUrlCalculated) {
+    openImportModal();
+    return;
+  }
+  if (isPrefetching || isTaskRunning('next')) return;
 
-    btnText.innerText = "กำลังแปลตอนถัดไป...";
-    nextBtn.disabled = true;
-    cancelBtn.style.display = 'inline-flex';
+  const controller = beginTask('next');
+  const signal = controller.signal;
+  const ctx = getCurrentBookContext();
+  const chapterUrl = nextUrlCalculated;
+  const btnText = document.getElementById('next-btn-text');
+  const nextBtn = document.getElementById('next-chap-btn');
+  const cancelBtn = document.getElementById('cancel-retry-btn');
 
-    try {
-      currentUrl = chapterUrl;
-      activeAbortController = new AbortController();
-      const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(currentUrl, activeAbortController.signal);
-      activeAbortController = null;
-      if (retryAbortRequested) throw new Error('ผู้ใช้ยกเลิกการทำงาน');
-      if (author) currentAuthor = author;
+  btnText.innerText = "กำลังแปลตอนถัดไป...";
+  nextBtn.disabled = true;
+  cancelBtn.style.display = 'inline-flex';
 
-      const lastChap = chapters[chapters.length - 1];
-      const prevSummary = lastChap?.summary || "";
+  try {
+    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(chapterUrl, signal);
+    if (author) ctx.author = author;
 
-      const result = await translateTextWithPingPong(text, (msg) => {
-        btnText.innerText = msg.substring(0, 30) + "...";
-      }, rawChapTitle, rawBookTitle, prevSummary);
+    const lastChap = chapters[chapters.length - 1];
+    const result = await translateChapter(text, ctx, {
+      signal,
+      rawChapTitle,
+      rawBookTitle,
+      prevSummary: lastChap?.summary || "",
+      onStatus: (msg) => { btnText.innerText = msg.substring(0, 30) + "..."; }
+    });
 
-      const currentAll = await dbGetChaptersByBook(currentBookId);
+    const currentAll = await dbGetChaptersByBook(ctx.bookId);
+    let newChap = currentAll.find(c => c.sourceUrl === chapterUrl);
+    if (!newChap) {
       const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
-
-      const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
-
-      const newChap = {
-        id: `${currentBookId}_chap_${Date.now()}`,
-        bookId: currentBookId,
+      newChap = {
+        id: `${ctx.bookId}_chap_${Date.now()}`,
+        bookId: ctx.bookId,
         order: maxOrder + 1,
-        title: chapTitle,
+        title: result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`,
         paragraphs: result.paragraphs,
         summary: result.summary || "",
-        sourceUrl: currentUrl,
+        sourceUrl: chapterUrl,
         nextUrl: nextUrl
       };
-
       await dbSaveChapter(newChap);
-      chapters.push(newChap);
-      nextUrlCalculated = nextUrl;
-
-      currentChapterIndex = chapters.length - 1;
-      renderVirtualWindow(currentChapterIndex, true);
-      checkProactivePrefetch();
-    } catch (err) {
-      if (!retryAbortRequested) {
-        document.getElementById('import-url').value = chapterUrl || '';
-        const modalTitle = document.getElementById('import-modal-title');
-        if (modalTitle) modalTitle.innerText = "ไม่พบ URL ตอนถัดไป (กรุณาวาง URL ใหม่)";
-        openModal('import-modal');
-      }
-    } finally {
-      btnText.innerText = "ตอนถัดไป →";
-      nextBtn.disabled = false;
-      cancelBtn.style.display = 'none';
     }
-  } else {
-    openModal('import-modal');
+
+    if (currentBookId !== ctx.bookId) return;
+    if (!chapters.some(c => c.id === newChap.id)) chapters.push(newChap);
+    currentUrl = chapterUrl;
+    currentAuthor = ctx.author;
+    nextUrlCalculated = newChap.nextUrl;
+    currentChapterIndex = chapters.findIndex(c => c.id === newChap.id);
+    renderVirtualWindow(currentChapterIndex, true);
+    checkProactivePrefetch();
+  } catch (err) {
+    if (isAbortError(err)) return;
+    if (isMissingPageError(err)) {
+      openImportModal(chapterUrl, "ไม่พบหน้าตอนถัดไป (กรุณาวาง URL ที่ถูกต้อง)");
+    } else {
+      alert(`แปลตอนถัดไปไม่สำเร็จ: ${err.message}`);
+    }
+  } finally {
+    endTask('next', controller);
+    btnText.innerText = "ตอนถัดไป →";
+    nextBtn.disabled = false;
+    cancelBtn.style.display = 'none';
   }
 }
 
@@ -969,13 +955,22 @@ function prevChapter() {
   }
 }
 
+function openImportModal(prefillUrl = '', title = 'วาง URL หน้านิยาย') {
+  const modalTitle = document.getElementById('import-modal-title');
+  if (modalTitle) modalTitle.innerText = title;
+  document.getElementById('import-url').value = prefillUrl;
+  const status = document.getElementById('import-status');
+  if (status && !isTaskRunning('import')) status.style.display = 'none';
+  openModal('import-modal');
+}
+
 async function startTranslateFirst() {
   const url = document.getElementById('import-url').value.trim();
   const chosenGenre = document.getElementById('import-novel-genre').value;
   if (!url) return alert("กรุณาใส่ URL หน้านิยาย");
+  if (isTaskRunning('import')) return;
 
   const status = document.getElementById('import-status');
-  retryAbortRequested = false;
   const startBtn = document.getElementById('start-btn');
   const btnText = document.getElementById('start-btn-text');
 
@@ -986,169 +981,191 @@ async function startTranslateFirst() {
   startBtn.disabled = true;
   btnText.innerText = "กำลังทำงาน...";
 
-  const previousContext = {
-    bookId: currentBookId, title: currentBookTitle, author: currentAuthor,
-    genre: currentBookGenre, customTitle: isUserCustomTitle
-  };
-  let importCommitted = false;
-  let pendingImportBookId = null;
-  let importController = null;
+  const controller = beginTask('import');
+  const signal = controller.signal;
   try {
     const targetBookId = extractBookIdFromUrl(url);
-    pendingImportBookId = targetBookId;
-    importController = new AbortController();
-    activeAbortController = importController;
-    const booksBeforeImport = await dbGetAllBooks();
-    if (retryAbortRequested || importController.signal.aborted) throw new Error('ผู้ใช้ยกเลิกการทำงาน');
-    const existingBook = booksBeforeImport.find(b => b.bookId === targetBookId);
-
-    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(url, importController.signal);
-    if (retryAbortRequested) throw new Error('ผู้ใช้ยกเลิกการทำงาน');
-    nextUrlCalculated = nextUrl;
-    currentBookId = targetBookId;
-    currentBookTitle = existingBook?.title || rawBookTitle || 'นิยายเรื่องใหม่';
-    currentAuthor = author || existingBook?.author || '';
-    currentBookGenre = existingBook?.genre || chosenGenre;
-    isUserCustomTitle = existingBook?.isUserCustomTitle || false;
-
-    status.innerText = `พบ "${rawChapTitle}" กำลังวิเคราะห์ชื่อเฉพาะและแปลผ่าน AI...`;
-
+    const existingBook = (await dbGetAllBooks()).find(b => b.bookId === targetBookId);
     const existingChaps = await dbGetChaptersByBook(targetBookId);
+
+    // ตอนนี้เคยแปลไว้แล้ว: เปิดอ่านเลยโดยไม่ต้องเรียก AI
     const duplicateChapter = existingChaps.find(ch => ch.sourceUrl === url);
-    if (duplicateChapter) {
-      if (activeAbortController === importController) activeAbortController = null;
-      chapters = existingChaps.sort((a, b) => a.order - b.order);
-      currentBookId = targetBookId;
-      currentChapterIndex = chapters.findIndex(ch => ch.id === duplicateChapter.id);
-      currentUrl = duplicateChapter.sourceUrl || url;
-      nextUrlCalculated = chapters[chapters.length - 1]?.nextUrl || null;
-      localStorage.setItem('nov_last_book_id', targetBookId);
-      importCommitted = true;
-      renderVirtualWindow(currentChapterIndex, true);
+    if (duplicateChapter && existingBook) {
+      await loadBookFromDB(targetBookId, duplicateChapter.id);
       closeModal('import-modal');
       return;
     }
-    const maxOrder = existingChaps.reduce((max, c) => Math.max(max, c.order || 0), 0);
 
-    const prevChap = existingChaps.find(c => c.order === maxOrder);
-    const prevSummary = prevChap?.summary || "";
+    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(url, signal);
+    const ctx = makeBookContext({
+      bookId: targetBookId,
+      title: existingBook?.title || rawBookTitle || 'นิยายเรื่องใหม่',
+      author: author || existingBook?.author || '',
+      genre: existingBook?.genre || chosenGenre
+    });
 
-    if (activeAbortController === importController) activeAbortController = null;
-    const result = await translateTextWithPingPong(text, (msg) => {
-      status.style.background = '#fffbeb';
-      status.style.color = '#b45309';
-      status.innerText = msg;
-    }, rawChapTitle, rawBookTitle, prevSummary);
+    status.innerText = `พบ "${rawChapTitle}" กำลังวิเคราะห์ชื่อเฉพาะและแปลผ่าน AI...`;
 
-    let finalBookTitle = currentBookTitle;
-    let isCustom = false;
+    const prevChap = existingChaps.reduce((best, c) => (!best || (c.order || 0) > (best.order || 0)) ? c : best, null);
+    const result = await translateChapter(text, ctx, {
+      signal,
+      rawChapTitle,
+      rawBookTitle,
+      prevSummary: prevChap?.summary || "",
+      onStatus: (msg) => {
+        status.style.background = '#fffbeb';
+        status.style.color = '#b45309';
+        status.innerText = msg;
+      }
+    });
 
-    if (existingBook && existingBook.isUserCustomTitle) {
-      finalBookTitle = existingBook.title;
-      isCustom = true;
-    } else if (result.bookTitle) {
-      finalBookTitle = result.bookTitle;
-      isCustom = false;
-    }
-
-    const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
+    // อ่านข้อมูลล่าสุดอีกรอบ เผื่องานอื่นเขียนเรื่องเดียวกันระหว่างรอแปล
+    const latestChaps = await dbGetChaptersByBook(targetBookId);
+    const latestBook = (await dbGetAllBooks()).find(b => b.bookId === targetBookId);
+    const maxOrder = latestChaps.reduce((max, c) => Math.max(max, c.order || 0), 0);
+    const isCustom = !!latestBook?.isUserCustomTitle;
+    const finalBookTitle = isCustom ? latestBook.title : (result.bookTitle || ctx.title);
 
     const newChapter = {
       id: `${targetBookId}_chap_${Date.now()}`,
       bookId: targetBookId,
       order: maxOrder + 1,
-      title: chapTitle,
+      title: result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`,
       paragraphs: result.paragraphs,
       summary: result.summary || "",
       sourceUrl: url,
       nextUrl: nextUrl
     };
-
     await dbSaveChapter(newChapter);
 
-    if (currentBookId === targetBookId) {
-      chapters.push(newChapter);
-      currentChapterIndex = chapters.length - 1;
-    } else {
-      currentBookId = targetBookId;
-      chapters = [newChapter];
-      currentChapterIndex = 0;
-    }
-
-    currentBookTitle = finalBookTitle;
-    isUserCustomTitle = isCustom;
-    currentUrl = url;
-
     await dbSaveBook({
-      bookId: currentBookId,
-      title: currentBookTitle,
-      author: currentAuthor,
-      genre: currentBookGenre,
-      isUserCustomTitle: isUserCustomTitle,
+      ...(latestBook || {}),
+      bookId: targetBookId,
+      title: finalBookTitle,
+      author: ctx.author,
+      genre: ctx.genre,
+      isUserCustomTitle: isCustom,
       lastChapterId: newChapter.id,
-      lastChapterIndex: currentChapterIndex,
+      lastChapterIndex: latestChaps.length,
       lastChapterTitle: newChapter.title,
       totalChapters: maxOrder + 1,
       lastUrl: url,
       updatedAt: Date.now()
     });
-    localStorage.setItem('nov_last_book_id', currentBookId);
+    localStorage.setItem('nov_last_book_id', targetBookId);
 
-    importCommitted = true;
-    renderVirtualWindow(currentChapterIndex, true);
+    await loadBookFromDB(targetBookId, newChapter.id);
     closeModal('import-modal');
   } catch (err) {
-    if (activeAbortController === importController) activeAbortController = null;
-    if (!importCommitted && (!pendingImportBookId || currentBookId === pendingImportBookId)) {
-      currentBookId = previousContext.bookId;
-      currentBookTitle = previousContext.title;
-      currentAuthor = previousContext.author;
-      currentBookGenre = previousContext.genre;
-      isUserCustomTitle = previousContext.customTitle;
-    }
     status.style.background = '#fef2f2';
     status.style.color = '#991b1b';
-    status.innerText = "ข้อผิดพลาด: " + (err.message === '404' ? 'ไม่พบหน้านิยาย (404 Not Found)' : err.message);
+    if (isAbortError(err)) status.innerText = "ยกเลิกการแปลแล้ว";
+    else status.innerText = "ข้อผิดพลาด: " + (isMissingPageError(err) ? 'ไม่พบหน้านิยาย (404 Not Found)' : err.message);
   } finally {
+    endTask('import', controller);
     startBtn.disabled = false;
     btnText.innerText = "เริ่มแปลตอนนี้";
   }
 }
 
+// ==================== SETTINGS ====================
+// ฟอร์มตั้งค่าเก็บร่างของแต่ละ provider ไว้ สลับไปมาได้โดยค่าที่พิมพ์ไม่หาย
+let settingsFormProvider = 'gemini';
+let settingsDrafts = {};
+
+function readProviderDraftFromStorage(provider) {
+  return {
+    keys: getProviderKeys(provider).join('\n'),
+    model: getProviderModel(provider),
+    baseUrl: getProviderBaseUrl(provider)
+  };
+}
+
+function stashSettingsForm() {
+  settingsDrafts[settingsFormProvider] = {
+    keys: document.getElementById('llm-keys-area').value,
+    model: document.getElementById('llm-model-input').value.trim(),
+    baseUrl: document.getElementById('llm-baseurl-input').value.trim()
+  };
+}
+
+function getCachedModels(provider) {
+  try {
+    const cached = JSON.parse(localStorage.getItem(`nov_cached_models_${provider}`) || '[]');
+    return Array.isArray(cached) ? cached : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function populateModelSuggestions(provider, modelsList = null) {
+  const list = document.getElementById('llm-model-list');
+  const models = [...new Set([...(modelsList || getCachedModels(provider)), ...LLM_PROVIDERS[provider].suggestedModels])];
+  list.innerHTML = '';
+  models.forEach(m => {
+    const opt = document.createElement('option');
+    opt.value = m;
+    list.appendChild(opt);
+  });
+}
+
+function showSettingsForProvider(provider) {
+  settingsFormProvider = provider;
+  const meta = LLM_PROVIDERS[provider];
+  const draft = settingsDrafts[provider] || readProviderDraftFromStorage(provider);
+
+  document.getElementById('llm-keys-label').innerText = `${meta.label} API Keys (คลังคีย์หมุนเวียน)`;
+  const keysArea = document.getElementById('llm-keys-area');
+  keysArea.value = draft.keys;
+  keysArea.placeholder = `วาง API Key (1 คีย์ต่อ 1 บรรทัด)\n${meta.keyHint}\n${meta.keyHint}`;
+  const modelInput = document.getElementById('llm-model-input');
+  modelInput.value = draft.model;
+  modelInput.placeholder = meta.defaultModel || 'ชื่อโมเดล เช่น ที่ได้จากปุ่มตรวจเช็กโมเดล';
+  document.getElementById('llm-baseurl-input').value = draft.baseUrl || meta.defaultBaseUrl || '';
+  document.getElementById('llm-baseurl-group').style.display = provider === 'openai' ? 'block' : 'none';
+  document.getElementById('fetch-status-text').style.display = 'none';
+  populateModelSuggestions(provider);
+}
+
+function onProviderSelectChange() {
+  stashSettingsForm();
+  showSettingsForProvider(document.getElementById('llm-provider-select').value);
+}
+
+function openSettingsModal() {
+  settingsDrafts = {};
+  const provider = getActiveProvider();
+  document.getElementById('llm-provider-select').value = provider;
+  showSettingsForProvider(provider);
+  openModal('settings-modal');
+}
+
 async function fetchLiveModels() {
-  const activeKey = getActiveApiKey();
+  const provider = document.getElementById('llm-provider-select').value;
+  const firstKey = document.getElementById('llm-keys-area').value.split('\n').map(k => k.trim()).find(k => k.length > 5);
+  const baseUrl = document.getElementById('llm-baseurl-input').value.trim();
   const statusText = document.getElementById('fetch-status-text');
   const fetchBtn = document.getElementById('fetch-models-btn');
 
-  if (!activeKey) return alert("กรุณากรอก API Key ก่อนกดตรวจเช็กโมเดล");
+  if (!firstKey) return alert("กรุณากรอก API Key ก่อนกดตรวจเช็กโมเดล");
 
   fetchBtn.disabled = true;
   fetchBtn.innerText = "กำลังตรวจเช็ก...";
   statusText.style.display = "block";
   statusText.style.color = "#2563eb";
-  statusText.innerText = "กำลังเชื่อมต่อไปยัง Google API...";
+  statusText.innerText = `กำลังเชื่อมต่อไปยัง ${LLM_PROVIDERS[provider].label}...`;
 
   try {
-    const res = await fetch('https://generativelanguage.googleapis.com/v1beta/models', {
-      headers: { 'x-goog-api-key': activeKey }
-    });
-    const data = await res.json();
+    const availableModels = await listProviderModels(provider, firstKey, baseUrl);
+    if (availableModels.length === 0) throw new Error("ไม่พบโมเดลที่พร้อมใช้งานในบัญชีนี้");
 
-    if (!res.ok) throw new Error(data.error?.message || "ไม่สามารถดึงรายชื่อโมเดลได้");
-    if (!data.models || !Array.isArray(data.models)) throw new Error("ไม่พบข้อมูลโมเดลในบัญชีนี้");
-
-    const availableModels = data.models
-      .filter(m => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
-      .map(m => m.name.replace(/^models\//, ''))
-      .filter(name => name.toLowerCase().includes("gemini"));
-
-    if (availableModels.length === 0) throw new Error("ไม่พบโมเดล Gemini ที่พร้อมใช้งาน");
-
-    localStorage.setItem('nov_cached_models', JSON.stringify(availableModels));
-    populateModelDropdowns(availableModels);
+    localStorage.setItem(`nov_cached_models_${provider}`, JSON.stringify(availableModels));
+    populateModelSuggestions(provider, availableModels);
+    const modelInput = document.getElementById('llm-model-input');
+    if (!modelInput.value.trim()) modelInput.value = availableModels[0];
 
     statusText.style.color = "#16a34a";
-    statusText.innerText = `✓ ตรวจพบโมเดลพร้อมใช้งาน ${availableModels.length} รุ่น (อัปเดตลงตัวเลือกแล้ว)`;
+    statusText.innerText = `✓ คีย์ใช้งานได้ ตรวจพบโมเดล ${availableModels.length} รุ่น (เลือกได้จากช่องโมเดลด้านล่าง)`;
   } catch (err) {
     statusText.style.color = "#dc2626";
     statusText.innerText = "เกิดข้อผิดพลาด: " + err.message;
@@ -1158,74 +1175,36 @@ async function fetchLiveModels() {
   }
 }
 
-function populateModelDropdowns(modelsList) {
-  const primarySelect = document.getElementById('gemini-primary-model');
-  const savedPrimary = localStorage.getItem('nov_primary_model') || primarySelect.value;
-
-  primarySelect.innerHTML = "";
-  modelsList.forEach(m => {
-    const opt = document.createElement('option');
-    opt.value = m;
-    opt.innerText = m;
-    if (m === savedPrimary) opt.selected = true;
-    primarySelect.appendChild(opt);
-  });
-}
-
 function saveSettings() {
-  const keysRaw = document.getElementById('gemini-keys-area').value;
-  const parsedKeys = keysRaw.split('\n').map(k => k.trim()).filter(k => k.length > 5);
+  stashSettingsForm();
+  Object.entries(settingsDrafts).forEach(([provider, draft]) => {
+    const parsedKeys = draft.keys.split('\n').map(k => k.trim()).filter(k => k.length > 5);
+    localStorage.setItem(`nov_llm_keys_${provider}`, JSON.stringify(parsedKeys));
+    localStorage.setItem(`nov_llm_model_${provider}`, draft.model);
+    if (provider === 'openai') localStorage.setItem(`nov_llm_baseurl_${provider}`, draft.baseUrl);
+    keyIndexByProvider[provider] = 0;
+  });
+  const activeProvider = document.getElementById('llm-provider-select').value;
+  localStorage.setItem('nov_llm_provider', activeProvider);
 
-  apiKeyPool = parsedKeys;
-  currentApiKeyIndex = 0;
-
-  localStorage.setItem('nov_gemini_keys_pool', JSON.stringify(parsedKeys));
-  if (parsedKeys.length > 0) {
-    localStorage.setItem('nov_gemini_key', parsedKeys[0]);
-  } else {
-    localStorage.removeItem('nov_gemini_key');
-  }
-
-  localStorage.setItem('nov_primary_model', document.getElementById('gemini-primary-model').value);
   localStorage.setItem('nov_retry_limit', document.getElementById('retry-limit').value || "10");
+  localStorage.setItem('nov_enable_deep_ner', document.getElementById('enable-deep-ner-scan').checked ? 'true' : 'false');
+  localStorage.setItem('nov_enable_bilingual_verify', document.getElementById('enable-bilingual-verify').checked ? 'true' : 'false');
+  localStorage.setItem('nov_enable_infinite', document.getElementById('enable-infinite-scroll').checked ? 'true' : 'false');
+  localStorage.setItem('nov_enable_prefetch', document.getElementById('enable-live-prefetch').checked ? 'true' : 'false');
+  localStorage.setItem('nov_enable_auto_glossary', document.getElementById('enable-auto-glossary').checked ? 'true' : 'false');
 
-  const deepNerChk = document.getElementById('enable-deep-ner-scan');
-  localStorage.setItem('nov_enable_deep_ner', deepNerChk.checked ? 'true' : 'false');
-
-  const bilingualVerifyChk = document.getElementById('enable-bilingual-verify');
-  localStorage.setItem('nov_enable_bilingual_verify', bilingualVerifyChk.checked ? 'true' : 'false');
-
-  const infiniteChk = document.getElementById('enable-infinite-scroll');
-  localStorage.setItem('nov_enable_infinite', infiniteChk.checked ? 'true' : 'false');
-
-  const prefetchChk = document.getElementById('enable-live-prefetch');
-  localStorage.setItem('nov_enable_prefetch', prefetchChk.checked ? 'true' : 'false');
-
-  const autoGlossChk = document.getElementById('enable-auto-glossary');
-  localStorage.setItem('nov_enable_auto_glossary', autoGlossChk.checked ? 'true' : 'false');
-
+  lastPrefetchError = '';
   closeModal('settings-modal');
   renderVirtualWindow(currentChapterIndex, true);
-  alert(`บันทึกการตั้งค่าเรียบร้อยแล้ว (คลัง API Key พร้อมใช้งาน ${parsedKeys.length} ตัว)`);
+
+  const cfg = getActiveLlmConfig();
+  const warning = cfg.model ? '' : '\n⚠️ ยังไม่ได้เลือกโมเดล กรุณากด "ตรวจเช็กโมเดล" แล้วเลือกโมเดลก่อนใช้งาน';
+  alert(`บันทึกการตั้งค่าเรียบร้อยแล้ว\nใช้งาน ${LLM_PROVIDERS[cfg.provider].label} (${cfg.model || 'ยังไม่เลือกโมเดล'}) — คลัง API Key ${cfg.keys.length} ตัว${warning}`);
 }
 
 function loadSettings() {
-  try {
-    const poolRaw = localStorage.getItem('nov_gemini_keys_pool');
-    if (poolRaw) {
-      const savedPool = JSON.parse(poolRaw);
-      apiKeyPool = Array.isArray(savedPool) ? savedPool.filter(key => typeof key === 'string' && key.trim().length > 5).map(key => key.trim()) : [];
-    } else if (localStorage.getItem('nov_gemini_key')) {
-      apiKeyPool = [localStorage.getItem('nov_gemini_key').trim()];
-    }
-  } catch (e) {
-    apiKeyPool = [];
-  }
-
-  const keysArea = document.getElementById('gemini-keys-area');
-  if (keysArea) {
-    keysArea.value = (apiKeyPool || []).join('\n');
-  }
+  migrateLegacyLlmSettings();
 
   if (localStorage.getItem('nov_theme')) {
     const storedTheme = localStorage.getItem('nov_theme');
@@ -1244,33 +1223,70 @@ function loadSettings() {
     currentFontSize = Number.isFinite(storedSize) ? Math.min(28, Math.max(14, storedSize)) : 18;
   }
 
-  try {
-    const cached = JSON.parse(localStorage.getItem('nov_cached_models') || '[]');
-    if (Array.isArray(cached) && cached.length > 0) populateModelDropdowns(cached);
-  } catch(e) {}
-
-  if (localStorage.getItem('nov_primary_model')) document.getElementById('gemini-primary-model').value = localStorage.getItem('nov_primary_model');
   if (localStorage.getItem('nov_retry_limit')) document.getElementById('retry-limit').value = localStorage.getItem('nov_retry_limit');
 
-  const deepNerVal = localStorage.getItem('nov_enable_deep_ner');
   const deepNerChk = document.getElementById('enable-deep-ner-scan');
-  if (deepNerChk) deepNerChk.checked = (deepNerVal === 'true');
+  if (deepNerChk) deepNerChk.checked = (localStorage.getItem('nov_enable_deep_ner') === 'true');
 
-  const bilingualVerifyVal = localStorage.getItem('nov_enable_bilingual_verify');
   const bilingualVerifyChk = document.getElementById('enable-bilingual-verify');
-  if (bilingualVerifyChk) bilingualVerifyChk.checked = (bilingualVerifyVal !== 'false');
+  if (bilingualVerifyChk) bilingualVerifyChk.checked = (localStorage.getItem('nov_enable_bilingual_verify') !== 'false');
 
-  const prefetchVal = localStorage.getItem('nov_enable_prefetch');
   const prefetchChk = document.getElementById('enable-live-prefetch');
-  if (prefetchChk) prefetchChk.checked = (prefetchVal !== 'false');
+  if (prefetchChk) prefetchChk.checked = (localStorage.getItem('nov_enable_prefetch') !== 'false');
 
-  const infiniteVal = localStorage.getItem('nov_enable_infinite');
   const infiniteChk = document.getElementById('enable-infinite-scroll');
-  if (infiniteChk) infiniteChk.checked = (infiniteVal !== 'false');
+  if (infiniteChk) infiniteChk.checked = (localStorage.getItem('nov_enable_infinite') !== 'false');
 
-  const autoGlossVal = localStorage.getItem('nov_enable_auto_glossary');
   const autoGlossChk = document.getElementById('enable-auto-glossary');
-  if (autoGlossChk) autoGlossChk.checked = (autoGlossVal !== 'false');
+  if (autoGlossChk) autoGlossChk.checked = (localStorage.getItem('nov_enable_auto_glossary') !== 'false');
+}
+
+// ==================== BACKUP ====================
+async function exportBackup() {
+  try {
+    const data = await dbExportAll();
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `noveltranslate-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (err) {
+    alert(`สำรองข้อมูลไม่สำเร็จ: ${err.message}`);
+  }
+}
+
+function triggerBackupImport() {
+  document.getElementById('backup-file-input').click();
+}
+
+async function handleBackupFileSelected(input) {
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+
+  let data;
+  try {
+    data = JSON.parse(await file.text());
+  } catch (e) {
+    return alert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูล JSON ที่ถูกต้อง');
+  }
+  if (!isValidBackup(data)) return alert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูลของ NovelTranslate');
+
+  const msg = `พบข้อมูลในไฟล์สำรอง:\n- นิยาย ${data.books.length} เรื่อง\n- ตอน ${data.chapters.length} ตอน\n- คำศัพท์ ${data.glossaries.length} คำ\n\nข้อมูลที่มีอยู่แล้วและซ้ำกับในไฟล์จะถูกเขียนทับ ต้องการนำเข้าใช่หรือไม่?`;
+  if (!confirm(msg)) return;
+
+  try {
+    abortAllRunningProcesses();
+    await dbImportAll(data);
+    await refreshInMemoryGlossaryCache();
+    const targetBookId = localStorage.getItem('nov_last_book_id') || data.books[0]?.bookId;
+    if (targetBookId) await loadBookFromDB(targetBookId);
+    await openBookshelfModal();
+    alert('✓ นำเข้าข้อมูลสำรองเรียบร้อยแล้ว');
+  } catch (err) {
+    alert(`นำเข้าข้อมูลไม่สำเร็จ: ${err.message}`);
+  }
 }
 
 function exportTxt() {

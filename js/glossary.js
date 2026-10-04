@@ -7,11 +7,15 @@ function escapeRegExp(string) {
 }
 
 async function getActiveGlossaryForCurrentBook() {
+  return getActiveGlossaryForBook(currentBookId);
+}
+
+async function getActiveGlossaryForBook(bookId) {
   const allItems = await dbGetAllGlossaryItems();
   const activeMap = {};
   allItems.forEach(item => {
-    if (item.scope === 'global' || (Array.isArray(item.books) && item.books.includes(currentBookId))) {
-      const resolvedTgt = (item.overrides && item.overrides[currentBookId]) ? item.overrides[currentBookId] : item.tgt;
+    if (item.scope === 'global' || (Array.isArray(item.books) && item.books.includes(bookId))) {
+      const resolvedTgt = (item.overrides && item.overrides[bookId]) ? item.overrides[bookId] : item.tgt;
       const cleanTgt = cleanTermString(resolvedTgt);
       if (cleanTgt) {
         activeMap[item.src] = { ...item, resolvedTgt: cleanTgt };
@@ -89,6 +93,8 @@ function showTermPopover(e, src, tgt) {
           el.setAttribute('data-tgt', encodeURIComponent(cleanNewTgt));
         });
       }
+    } catch (err) {
+      alert(`ค้นหาคำแปลใหม่ไม่สำเร็จ: ${err.message}`);
     } finally {
       researchBtn.disabled = false;
       researchBtn.innerText = "🔄 ค้นหาใหม่";
@@ -330,10 +336,17 @@ async function batchResearchSelectedTerms() {
   const srcList = Array.from(chks).map(c => c.value);
   const countEl = document.getElementById('gloss-batch-count');
 
+  const failed = [];
   for (let i = 0; i < srcList.length; i++) {
     const src = srcList[i];
     countEl.innerText = `กำลังรีเสิร์ช (${i+1}/${count}): ${src}...`;
-    await researchGlossaryTermDirect(src);
+    try {
+      await researchGlossaryTermDirect(src);
+    } catch (err) {
+      console.warn(`Research failed for ${src}:`, err);
+      failed.push(src);
+      if (err.kind === 'auth' || err.kind === 'config') break;
+    }
     if (i < srcList.length - 1) {
       await new Promise(r => setTimeout(r, 1200));
     }
@@ -341,7 +354,8 @@ async function batchResearchSelectedTerms() {
 
   await renderGlossaryUI();
   renderVirtualWindow(currentChapterIndex);
-  alert(`✓ รีเสิร์ชคำศัพท์เสร็จสมบูรณ์ทั้ง ${count} คำ`);
+  if (failed.length) alert(`รีเสิร์ชสำเร็จ ${count - failed.length}/${count} คำ\nไม่สำเร็จ: ${failed.join(', ')}`);
+  else alert(`✓ รีเสิร์ชคำศัพท์เสร็จสมบูรณ์ทั้ง ${count} คำ`);
 }
 
 async function openBookAssignModal(src) {
@@ -535,21 +549,17 @@ async function saveEditedGlossaryTerm() {
   renderVirtualWindow(currentChapterIndex);
 }
 
-async function researchGlossaryTermDirect(src, persist = true) {
-  const activeKey = getActiveApiKey();
-  const genre = currentBookGenre || "xianxia";
-  const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
-  if (!activeKey) return null;
-
-  const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
-  const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
+async function researchGlossaryTermDirect(src, persist = true, ctx = getCurrentBookContext()) {
+  const genre = ctx.genre;
+  const authorCtx = ctx.author ? `ผู้แต่ง: "${ctx.author}"` : '';
+  const bookCtx = ctx.title ? `นิยายเรื่อง: "${ctx.title}"` : '';
 
   const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนมืออาชีพ
 ข้อมูลบริบท: ${bookCtx} ${authorCtx} แนวเรื่อง: "${genre}"
 คำศัพท์ที่ต้องวิเคราะห์: "${src}"
 
 จงสืบค้นและกำหนดคำแปลภาษาไทยตามลำดับขั้นบันได 3 ระดับ (Tiered Resolution):
-1. Tier 1 (ตรงเรื่อง): หากคำนี้เป็นชื่อตัวละคร สถานที่ หรือวิชาในเรื่อง "${currentBookTitle}" ให้ใช้คำแปล/ทับศัพท์ที่ตรงกับฉบับแปลไทยที่เผยแพร่แล้ว
+1. Tier 1 (ตรงเรื่อง): หากคำนี้เป็นชื่อตัวละคร สถานที่ หรือวิชาในเรื่อง "${ctx.title}" ให้ใช้คำแปล/ทับศัพท์ที่ตรงกับฉบับแปลไทยที่เผยแพร่แล้ว
 2. Tier 2 (ผู้แต่ง/จักรวาลเดียวกัน): หากไม่พบในเรื่องนี้ ให้เทียบเคียงกับศัพท์ที่ใช้ในผลงานอื่นของผู้แต่ง ${authorCtx} ในจักรวาลเดียวกัน
 3. Tier 3 (มาตรฐานวรรณกรรมประจำแนว): หากเป็นคำใหม่ ให้แปลอย่างสละสลวยตามมาตรฐานวรรณกรรมนิยายแนว "${genre}"
 
@@ -568,56 +578,34 @@ async function researchGlossaryTermDirect(src, persist = true) {
   "category": "character|title|location|skill|equipment|resource|realm"
 }`;
 
-  try {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(primaryModel)}:generateContent`;
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': activeKey },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { response_mime_type: "application/json" }
-      })
+  const parsed = await callLLMJson(prompt, { maxRetries: 3 });
+  if (!parsed?.tgt) throw new Error('AI ไม่ส่งคำแปลกลับมา กรุณาลองอีกครั้ง');
+
+  const cleanNewTgt = cleanTermString(parsed.tgt);
+  const items = await dbGetAllGlossaryItems();
+  const cur = items.find(x => x.src === src);
+  if (cur && persist) {
+    const oldTgt = cur.tgt;
+    cur.tgt = cleanNewTgt;
+    if (parsed.category) cur.category = parsed.category;
+    cur.updatedAt = Date.now();
+    await dbSaveGlossaryItem(cur);
+
+    if (oldTgt && oldTgt !== cleanNewTgt) {
+      await syncGlossaryTermAcrossBooks(cur, oldTgt, cleanNewTgt);
+    }
+  } else if (!cur && persist) {
+    await dbSaveGlossaryItem({
+      src: cleanTermString(src), tgt: cleanNewTgt,
+      category: parsed.category || 'character', scope: 'tagged',
+      books: [ctx.bookId], count: 1, overrides: {}, updatedAt: Date.now()
     });
-
-    if (!res.ok) {
-      if (res.status === 429) rotateApiKey();
-      return null;
-    }
-    const data = await res.json();
-    const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
-
-    if (parsed.tgt) {
-      const cleanNewTgt = cleanTermString(parsed.tgt);
-      const items = await dbGetAllGlossaryItems();
-      const cur = items.find(x => x.src === src);
-      if (cur && persist) {
-        const oldTgt = cur.tgt;
-        cur.tgt = cleanNewTgt;
-        if (parsed.category) cur.category = parsed.category;
-        cur.updatedAt = Date.now();
-        await dbSaveGlossaryItem(cur);
-
-        if (oldTgt && oldTgt !== cleanNewTgt && currentBookId) {
-          await syncGlossaryTermAcrossBooks(cur, oldTgt, cleanNewTgt);
-        }
-      } else if (!cur && persist) {
-        await dbSaveGlossaryItem({
-          src: cleanTermString(src), tgt: cleanNewTgt,
-          category: parsed.category || 'character', scope: 'tagged',
-          books: [currentBookId], count: 1, overrides: {}, updatedAt: Date.now()
-        });
-      }
-      return { tgt: cleanNewTgt, category: parsed.category };
-    }
-  } catch (err) {
-    console.warn("Direct lookup failed:", err);
   }
-  return null;
+  return { tgt: cleanNewTgt, category: parsed.category };
 }
 
 async function researchGlossaryTerm(src) {
-  const activeKey = getActiveApiKey();
-  if (!activeKey) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+  if (!hasActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
 
   const tgtEl = document.getElementById(`gloss-tgt-val-${src}`);
   const btnEl = document.getElementById(`btn-research-${src}`);
@@ -633,17 +621,18 @@ async function researchGlossaryTerm(src) {
     }
   } catch (err) {
     alert("รีเสิร์ชไม่สำเร็จ: " + err.message);
+    const items = await dbGetAllGlossaryItems();
+    const cur = items.find(x => x.src === src);
+    if (cur && tgtEl) tgtEl.innerText = cur.tgt;
   } finally {
     if (btnEl) btnEl.disabled = false;
   }
 }
 
 async function autoOrganizeGlossaryWithAI() {
-  const activeKey = getActiveApiKey();
-  const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
   const genre = currentBookGenre || "xianxia";
 
-  if (!activeKey) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
+  if (!hasActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
 
   let items = await dbGetAllGlossaryItems();
   if (items.length === 0) return alert("ไม่มีคำศัพท์ในคลัง");
@@ -671,20 +660,9 @@ ${JSON.stringify(termList)}
   ]
 }`;
 
+  showGlobalToast(`AI กำลังจัดหมวดหมู่ ${items.length} คำ...`);
   try {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(primaryModel)}:generateContent`;
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': activeKey },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { response_mime_type: "application/json" }
-      })
-    });
-
-    if (!res.ok) throw new Error("ยิง API ไม่สำเร็จ");
-    const data = await res.json();
-    const parsed = JSON.parse(data.candidates[0].content.parts[0].text);
+    const parsed = await callLLMJson(prompt, { onStatus: showGlobalToast });
 
     let updatedCount = 0;
     if (Array.isArray(parsed.classified)) {
@@ -702,6 +680,8 @@ ${JSON.stringify(termList)}
     alert(`✓ จัดระเบียบเสร็จสมบูรณ์! อัปเดตหมวดหมู่คำศัพท์ไปทั้งหมด ${updatedCount} คำ`);
   } catch (err) {
     alert("จัดหมวดหมู่อัตโนมัติไม่สำเร็จ: " + err.message);
+  } finally {
+    hideGlobalToast();
   }
 }
 
@@ -712,20 +692,20 @@ async function delGloss(src) {
   renderVirtualWindow(currentChapterIndex);
 }
 
-async function extractAndStoreAutoGlossary(rawText, modelToUse, signal = null) {
+// โยน error ออกไปให้ผู้เรียกตัดสินใจ (pipeline แปลจะข้ามไป, ปุ่มสแกนเองจะแจ้งผู้ใช้)
+async function extractAndStoreAutoGlossary(rawText, ctx, { signal = null, onStatus = null, force = false } = {}) {
   const isAutoGlossaryEnabled = localStorage.getItem('nov_enable_auto_glossary') !== 'false';
-  if (!isAutoGlossaryEnabled) return 0;
+  if (!isAutoGlossaryEnabled && !force) return 0;
 
-  const activeKey = getActiveApiKey();
-  const genre = currentBookGenre || "xianxia";
+  const genre = ctx.genre;
+  const bookId = ctx.bookId;
   const isDeepNer = localStorage.getItem('nov_enable_deep_ner') === 'true';
-  if (!activeKey) return 0;
 
   const existingItems = await dbGetAllGlossaryItems();
   const existingTerms = existingItems.map(x => x.src);
 
-  const authorCtx = currentAuthor ? `ผู้แต่ง: "${currentAuthor}"` : '';
-  const bookCtx = currentBookTitle ? `นิยายเรื่อง: "${currentBookTitle}"` : '';
+  const authorCtx = ctx.author ? `ผู้แต่ง: "${ctx.author}"` : '';
+  const bookCtx = ctx.title ? `นิยายเรื่อง: "${ctx.title}"` : '';
 
   const prompt = `คุณคือผู้เชี่ยวชาญการแปลนิยายจีนแนว "${genre}"
 บริบทเรื่อง: ${bookCtx} ${authorCtx}
@@ -756,60 +736,37 @@ ${isDeepNer ? `4. **คำประสมพิเศษและฉายา:**
   ]
 }`;
 
-  try {
-    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(modelToUse)}:generateContent`;
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      signal: signal,
-      headers: { 'Content-Type': 'application/json', 'x-goog-api-key': activeKey },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: `${prompt}\n\nเนื้อหาบท:\n${rawText}` }] }],
-        generationConfig: { response_mime_type: "application/json" }
-      })
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      const outText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-      if (outText) {
-        const parsed = JSON.parse(outText);
-        const items = parsed.newTerms || [];
-        let addedCount = 0;
-        for (const item of items) {
-          if (item.src && item.tgt) {
-            const cleanSrc = cleanTermString(item.src);
-            const cleanTgt = cleanTermString(item.tgt);
-            const existing = existingItems.find(x => x.src === cleanSrc);
-            if (!existing) {
-              const newItem = {
-                src: cleanSrc,
-                tgt: cleanTgt,
-                category: item.category || 'character',
-                scope: 'tagged',
-                books: [currentBookId],
-                count: 1,
-                overrides: {},
-                updatedAt: Date.now()
-              };
-              await dbSaveGlossaryItem(newItem);
-              existingItems.push(newItem);
-              addedCount++;
-            } else {
-              if (!Array.isArray(existing.books)) existing.books = [];
-              if (!existing.books.includes(currentBookId)) existing.books.push(currentBookId);
-              existing.count = (existing.count || 1) + 1;
-              existing.updatedAt = Date.now();
-              await dbSaveGlossaryItem(existing);
-            }
-          }
-        }
-        return addedCount;
-      }
+  const parsed = await callLLMJson(`${prompt}\n\nเนื้อหาบท:\n${rawText}`, { signal, onStatus });
+  const items = Array.isArray(parsed?.newTerms) ? parsed.newTerms : [];
+  let addedCount = 0;
+  for (const item of items) {
+    if (typeof item?.src !== 'string' || typeof item?.tgt !== 'string' || !item.src || !item.tgt) continue;
+    const cleanSrc = cleanTermString(item.src);
+    const cleanTgt = cleanTermString(item.tgt);
+    const existing = existingItems.find(x => x.src === cleanSrc);
+    if (!existing) {
+      const newItem = {
+        src: cleanSrc,
+        tgt: cleanTgt,
+        category: item.category || 'character',
+        scope: 'tagged',
+        books: [bookId],
+        count: 1,
+        overrides: {},
+        updatedAt: Date.now()
+      };
+      await dbSaveGlossaryItem(newItem);
+      existingItems.push(newItem);
+      addedCount++;
+    } else {
+      if (!Array.isArray(existing.books)) existing.books = [];
+      if (!existing.books.includes(bookId)) existing.books.push(bookId);
+      existing.count = (existing.count || 1) + 1;
+      existing.updatedAt = Date.now();
+      await dbSaveGlossaryItem(existing);
     }
-  } catch (err) {
-    console.warn("Auto-Glossary scan skipped:", err.message);
   }
-  return 0;
+  return addedCount;
 }
 
 async function scanTermsInCurrentChapter() {
@@ -818,10 +775,8 @@ async function scanTermsInCurrentChapter() {
     return alert("ไม่พบเนื้อหาในบทปัจจุบันสำหรับสแกน");
   }
 
-  const activeKey = getActiveApiKey();
-  if (!activeKey) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+  if (!hasActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
 
-  const primaryModel = (localStorage.getItem('nov_primary_model') || "gemini-3.5-flash-lite").trim();
   const btn = document.getElementById('scan-terms-btn');
   const originalText = btn.innerHTML;
 
@@ -832,7 +787,7 @@ async function scanTermsInCurrentChapter() {
   const srcText = curChap.paragraphs.map(p => p.src || "").filter(Boolean).join("\n\n");
 
   try {
-    const addedCount = await extractAndStoreAutoGlossary(srcText, primaryModel);
+    const addedCount = await extractAndStoreAutoGlossary(srcText, getCurrentBookContext(), { onStatus: showGlobalToast, force: true });
     if (addedCount > 0) {
       alert(`✓ สแกน "${curChap.title}" เสร็จสิ้น!\nพบชื่อเฉพาะใหม่ ${addedCount} คำ และบันทึกเข้าคลังคำศัพท์เรียบร้อยแล้ว\n(หากต้องการให้บทนี้เปลี่ยนคำตามศัพท์ใหม่ สามารถกดปุ่ม 🔄 ที่มุมขวาบนเพื่อแปลใหม่ได้ทันที)`);
     } else {
@@ -856,7 +811,7 @@ async function lookupManualTermTranslation() {
   const button = document.getElementById('lookup-manual-term-btn');
   const src = cleanTermString(srcInput.value);
   if (!src) return alert('กรุณาใส่คำจีนที่ต้องการค้นหา');
-  if (!getActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+  if (!hasActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
 
   button.disabled = true;
   const oldLabel = button.innerText;

@@ -1,6 +1,5 @@
 // ==================== BOOKSHELF & BATCH ENGINE ====================
 let isBatchRunning = false;
-let batchCancelRequested = false;
 let isBatchComplete = false;
 let bookSortModes = {};
 
@@ -30,8 +29,7 @@ function handleBatchActionClick() {
 
 function cancelBatchTranslate() {
   if (isBatchRunning) {
-    batchCancelRequested = true;
-    abortAllRunningProcesses();
+    abortTask('batch');
     document.getElementById('batch-progress-desc').innerText = "กำลังสั่งหยุด...";
   }
 }
@@ -58,24 +56,14 @@ async function startBatchTranslateForBook(bookId) {
     await dbSaveChapter(lastChap);
   }
 
-  const previousContext = {
-    bookId: currentBookId, title: currentBookTitle, author: currentAuthor,
-    genre: currentBookGenre, customTitle: isUserCustomTitle
-  };
+  // context ของเรื่องที่แปลล่วงหน้า แยกจากเรื่องที่ผู้ใช้กำลังอ่านอยู่โดยสมบูรณ์
   const knownBooks = await dbGetAllBooks();
-  const targetBookContext = knownBooks.find(b => b.bookId === bookId);
-  let batchAuthor = targetBookContext?.author || '';
-  const batchGenre = targetBookContext?.genre || 'xianxia';
-  currentBookId = bookId;
-  currentBookTitle = targetBookContext?.title || currentBookTitle;
-  currentAuthor = batchAuthor;
-  currentBookGenre = batchGenre;
-  isUserCustomTitle = targetBookContext?.isUserCustomTitle || false;
+  const ctx = makeBookContext(knownBooks.find(b => b.bookId === bookId) || { bookId });
 
+  const controller = beginTask('batch');
+  const signal = controller.signal;
   isBatchRunning = true;
-  batchCancelRequested = false;
   isBatchComplete = false;
-  retryAbortRequested = false;
 
   const progressBox = document.getElementById('batch-progress-box');
   const progressTitle = document.getElementById('batch-progress-title');
@@ -89,100 +77,119 @@ async function startBatchTranslateForBook(bookId) {
   actionBtn.innerText = "หยุดแปล";
 
   let successCount = 0;
+  let finishedAll = false;
 
-  for (let i = 1; i <= count; i++) {
-    if (batchCancelRequested) {
-      progressDesc.innerText = `หยุดการแปลตามคำสั่งแล้ว (แปลและบันทึกเสร็จสิ้น ${successCount} ตอน)`;
-      break;
-    }
+  try {
+    for (let i = 1; i <= count; i++) {
+      if (signal.aborted) break;
 
-    if (!targetUrl) {
-      progressDesc.innerText = `แปลครบ ${successCount} ตอนแล้ว แต่ยังไม่มี URL ของตอนถัดไป กรุณากด “แก้ URL ถัดไป”`;
-      break;
-    }
-    const urlSegment = targetUrl.substring(targetUrl.lastIndexOf('/'));
-    progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${urlSegment})`;
-
-    try {
-      activeAbortController = new AbortController();
-      const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, activeAbortController.signal);
-      activeAbortController = null;
-      if (batchCancelRequested) break;
-      if (author) batchAuthor = author;
-      if (currentBookId === bookId) currentAuthor = batchAuthor;
-
-      const prevSummary = lastChap?.summary || "";
-
-      const result = await translateTextWithPingPong(text, (msg) => {
-        progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 32)}...`;
-      }, rawChapTitle, rawBookTitle, prevSummary);
-      if (batchCancelRequested) break;
-
-      const currentAll = await dbGetChaptersByBook(bookId);
-      const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
-
-      const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
-
-      const newChap = {
-        id: `${bookId}_chap_${Date.now()}_${i}`,
-        bookId: bookId,
-        order: maxOrder + 1,
-        title: chapTitle,
-        paragraphs: result.paragraphs,
-        summary: result.summary || "",
-        sourceUrl: targetUrl,
-        nextUrl: nextUrl
-      };
-
-      await dbSaveChapter(newChap);
-      successCount++;
-      lastChap = newChap;
-
-      const books = await dbGetAllBooks();
-      const targetBook = books.find(b => b.bookId === bookId);
-
-      let finalBookTitle = currentBookTitle;
-      let customFlag = false;
-      if (targetBook) {
-        customFlag = targetBook.isUserCustomTitle || false;
-        finalBookTitle = customFlag ? targetBook.title : (result.bookTitle || targetBook.title);
+      if (!targetUrl) {
+        progressDesc.innerText = `แปลครบ ${successCount} ตอนแล้ว แต่ยังไม่มี URL ของตอนถัดไป กรุณากด “แก้ URL ถัดไป”`;
+        break;
       }
 
-      await dbSaveBook({
-        bookId: bookId,
-        title: finalBookTitle,
-        author: batchAuthor,
-        genre: targetBook?.genre || batchGenre,
-        isUserCustomTitle: customFlag,
-        lastChapterId: targetBook?.lastChapterId || (currentBookId === bookId ? chapters[currentChapterIndex]?.id : bookChaps[0]?.id),
-        lastChapterIndex: (targetBook && targetBook.lastChapterIndex !== undefined) ? targetBook.lastChapterIndex : 0,
-        lastChapterTitle: (targetBook && targetBook.lastChapterTitle) ? targetBook.lastChapterTitle : (bookChaps[0]?.title || 'ตอนที่ 1'),
-        totalChapters: maxOrder + 1,
-        lastUrl: targetUrl,
-        updatedAt: Date.now()
-      });
-
-      if (currentBookId === bookId) chapters.push(newChap);
-
-      refreshShelfViewOnly(bookId);
-      targetUrl = nextUrl;
-
-      if (i < count && !batchCancelRequested) {
-        progressDesc.innerText = `บันทึก "${chapTitle}" สำเร็จ พักระบบ 2.5 วิก่อนเริ่มบทถัดไป...`;
-        await new Promise(r => setTimeout(r, 2500));
+      // ข้ามตอนที่มีอยู่แล้ว (เช่น prefetch แปลไปก่อนแล้ว)
+      const existingAll = await dbGetChaptersByBook(bookId);
+      const alreadySaved = existingAll.find(c => c.sourceUrl === targetUrl);
+      if (alreadySaved) {
+        lastChap = alreadySaved;
+        targetUrl = alreadySaved.nextUrl;
+        successCount++;
+        if (i === count) finishedAll = true;
+        continue;
       }
-    } catch (err) {
-      progressDesc.innerText = `หยุดที่ตอนที่ ${i}: ${err.message === '404' ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}\n(กรุณากดปุ่ม 'แก้ URL ถัดไป' เพื่อใส่ลิงก์ใหม่)`;
-      break;
+
+      const urlSegment = targetUrl.substring(targetUrl.lastIndexOf('/'));
+      progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${urlSegment})`;
+
+      try {
+        const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, signal);
+        if (author) ctx.author = author;
+
+        const result = await translateChapter(text, ctx, {
+          signal,
+          rawChapTitle,
+          rawBookTitle,
+          prevSummary: lastChap?.summary || "",
+          onStatus: (msg) => { progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 60)}`; }
+        });
+
+        const currentAll = await dbGetChaptersByBook(bookId);
+        if (currentAll.some(c => c.sourceUrl === targetUrl)) {
+          // งานอื่นบันทึกตอนนี้ไปแล้วระหว่างที่เรากำลังแปล
+          lastChap = currentAll.find(c => c.sourceUrl === targetUrl);
+          targetUrl = lastChap.nextUrl;
+          successCount++;
+          if (i === count) finishedAll = true;
+          continue;
+        }
+        const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
+        const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
+
+        const newChap = {
+          id: `${bookId}_chap_${Date.now()}_${i}`,
+          bookId: bookId,
+          order: maxOrder + 1,
+          title: chapTitle,
+          paragraphs: result.paragraphs,
+          summary: result.summary || "",
+          sourceUrl: targetUrl,
+          nextUrl: nextUrl
+        };
+
+        await dbSaveChapter(newChap);
+        successCount++;
+        lastChap = newChap;
+
+        // อ่านเรคคอร์ดล่าสุดแล้วแก้เฉพาะฟิลด์ของ batch ตำแหน่งอ่านของผู้ใช้จะไม่ถูกแตะ
+        const targetBook = (await dbGetAllBooks()).find(b => b.bookId === bookId);
+        if (!targetBook) throw new Error('นิยายเรื่องนี้ถูกลบออกจากชั้นหนังสือระหว่างแปล');
+        const finalBookTitle = targetBook.isUserCustomTitle ? targetBook.title : (result.bookTitle || targetBook.title);
+        ctx.title = finalBookTitle;
+
+        await dbSaveBook({
+          ...targetBook,
+          title: finalBookTitle,
+          author: ctx.author,
+          totalChapters: maxOrder + 1,
+          lastUrl: targetUrl,
+          updatedAt: Date.now()
+        });
+
+        if (currentBookId === bookId) {
+          chapters.push(newChap);
+          nextUrlCalculated = nextUrl;
+          if (!isUserCustomTitle) currentBookTitle = finalBookTitle;
+          currentAuthor = ctx.author;
+          checkAndRefreshBottomStatus();
+        }
+
+        refreshShelfViewOnly(bookId);
+        targetUrl = nextUrl;
+        if (i === count) finishedAll = true;
+
+        if (i < count) {
+          progressDesc.innerText = `บันทึก "${chapTitle}" สำเร็จ พักระบบ 2.5 วิก่อนเริ่มบทถัดไป...`;
+          await sleepAbortable(2500, signal);
+        }
+      } catch (err) {
+        if (isAbortError(err)) break;
+        progressDesc.innerText = `หยุดที่ตอนที่ ${i}: ${isMissingPageError(err) ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}\n(กรุณากดปุ่ม 'แก้ URL ถัดไป' เพื่อใส่ลิงก์ใหม่)`;
+        break;
+      }
     }
+  } finally {
+    endTask('batch', controller);
+    isBatchRunning = false;
+    isBatchComplete = true;
   }
 
-  isBatchRunning = false;
-  isBatchComplete = true;
   actionBtn.className = 'btn btn-secondary';
   actionBtn.innerText = "ปิดการแจ้งเตือน";
 
-  if (successCount === count && !batchCancelRequested) {
+  if (signal.aborted) {
+    progressDesc.innerText = `หยุดการแปลตามคำสั่งแล้ว (แปลและบันทึกเสร็จสิ้น ${successCount} ตอน)`;
+  } else if (finishedAll) {
     progressBox.className = 'progress-box success';
     progressTitle.innerText = "✓ แปลล่วงหน้าเสร็จสมบูรณ์!";
     progressDesc.innerText = `บันทึกเนื้อหาเรียบร้อยแล้วทั้งหมด ${successCount} ตอน พร้อมให้อ่านแบบออฟไลน์`;
@@ -190,13 +197,6 @@ async function startBatchTranslateForBook(bookId) {
 
   openBookshelfModal();
   checkAndRefreshBottomStatus();
-  if (previousContext.bookId !== bookId && currentBookId === bookId) {
-    currentBookId = previousContext.bookId;
-    currentBookTitle = previousContext.title;
-    currentAuthor = previousContext.author;
-    currentBookGenre = previousContext.genre;
-    isUserCustomTitle = previousContext.customTitle;
-  }
 }
 
 function renderChaptersHtml(bookId, bookChaps, readingChapId) {
@@ -434,7 +434,10 @@ async function fixBookNextUrl(bookId) {
   if (input && input.trim()) {
     lastChap.nextUrl = input.trim();
     await dbSaveChapter(lastChap);
-    if (currentBookId === bookId) nextUrlCalculated = lastChap.nextUrl;
+    if (currentBookId === bookId) {
+      nextUrlCalculated = lastChap.nextUrl;
+      lastPrefetchError = '';
+    }
     alert("อัปเดต URL เรียบร้อยแล้ว ตอนนี้สามารถกด 'เริ่มแปลล่วงหน้า' ได้ทันที");
     checkAndRefreshBottomStatus();
   }
