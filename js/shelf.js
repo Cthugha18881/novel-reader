@@ -90,7 +90,7 @@ async function startBatchTranslateForBook(bookId) {
 
       // ข้ามตอนที่มีอยู่แล้ว (เช่น prefetch แปลไปก่อนแล้ว)
       const existingAll = await dbGetChaptersByBook(bookId);
-      const alreadySaved = existingAll.find(c => c.sourceUrl === targetUrl);
+      const alreadySaved = existingAll.find(c => sameSourceUrl(c.sourceUrl, targetUrl));
       if (alreadySaved) {
         lastChap = alreadySaved;
         targetUrl = alreadySaved.nextUrl;
@@ -115,9 +115,10 @@ async function startBatchTranslateForBook(bookId) {
         });
 
         const currentAll = await dbGetChaptersByBook(bookId);
-        if (currentAll.some(c => c.sourceUrl === targetUrl)) {
+        const savedMeanwhile = currentAll.find(c => sameSourceUrl(c.sourceUrl, targetUrl));
+        if (savedMeanwhile) {
           // งานอื่นบันทึกตอนนี้ไปแล้วระหว่างที่เรากำลังแปล
-          lastChap = currentAll.find(c => c.sourceUrl === targetUrl);
+          lastChap = savedMeanwhile;
           targetUrl = lastChap.nextUrl;
           successCount++;
           if (i === count) finishedAll = true;
@@ -126,16 +127,15 @@ async function startBatchTranslateForBook(bookId) {
         const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
         const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
 
-        const newChap = {
-          id: `${bookId}_chap_${Date.now()}_${i}`,
-          bookId: bookId,
+        const newChap = buildChapterRecord({
+          bookId,
           order: maxOrder + 1,
           title: chapTitle,
-          paragraphs: result.paragraphs,
-          summary: result.summary || "",
+          result,
           sourceUrl: targetUrl,
-          nextUrl: nextUrl
-        };
+          nextUrl,
+          idSuffix: `_${i}`
+        });
 
         await dbSaveChapter(newChap);
         successCount++;
@@ -302,6 +302,7 @@ async function openBookshelfModal() {
         </div>
         <div style="display: flex; gap: 6px; align-items: center;">
           <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="toggleSelectAllChaps(${jsArg(b.bookId)})">เลือกทั้งหมด</button>
+          <button class="btn" id="move-selected-btn-${escapeHtml(b.bookId)}" style="padding: 2px 6px; font-size: 10px; display: none;" onclick="openMoveChaptersModal(${jsArg(b.bookId)})" title="ย้ายตอนที่เลือกไปเรื่องอื่น หรือแยกออกเป็นเรื่องใหม่">↪ ย้ายไปเรื่องอื่น</button>
           <button class="btn btn-danger" id="del-selected-btn-${escapeHtml(b.bookId)}" style="padding: 2px 6px; font-size: 10px; display: none;" onclick="deleteSelectedChapters(${jsArg(b.bookId)})">ลบที่เลือก</button>
         </div>
       </div>
@@ -359,6 +360,7 @@ function toggleBookAccordion(bookId) {
 function updateSelectedDeleteBtn(bookId) {
   const chks = Array.from(document.querySelectorAll('.chap-chk:checked')).filter(c => c.dataset.bookId === bookId);
   const delBtn = document.getElementById(`del-selected-btn-${bookId}`);
+  const moveBtn = document.getElementById(`move-selected-btn-${bookId}`);
   if (delBtn) {
     if (chks.length > 0) {
       delBtn.style.display = 'inline-flex';
@@ -367,6 +369,7 @@ function updateSelectedDeleteBtn(bookId) {
       delBtn.style.display = 'none';
     }
   }
+  if (moveBtn) moveBtn.style.display = chks.length > 0 ? 'inline-flex' : 'none';
 }
 
 function toggleSelectAllChaps(bookId) {

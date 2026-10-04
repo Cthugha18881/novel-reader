@@ -520,6 +520,7 @@ async function addGlossary() {
     tgt: updateOverrideOnly ? existing.tgt : t,
     category: cat,
     scope: existing ? existing.scope : 'tagged',
+    lang: existing ? getTermLang(existing) : getCurrentBookContext().sourceLang,
     books: booksList,
     count: existing ? (existing.count || 1) + 1 : 1,
     overrides,
@@ -642,7 +643,7 @@ async function researchGlossaryTermDirect(src, persist = true, ctx = getCurrentB
   } else if (!cur && persist) {
     await dbSaveGlossaryItem({
       src: cleanTermString(src), tgt: cleanNewTgt,
-      category: category || 'character', scope: 'tagged',
+      category: category || 'character', scope: 'tagged', lang: ctx.sourceLang,
       books: [ctx.bookId], count: 1, overrides: {}, updatedAt: Date.now()
     });
   }
@@ -800,6 +801,7 @@ ${isDeepNer ? `4. **คำประสมพิเศษและฉายา:**
         tgt: cleanTgt,
         category: item.category || 'character',
         scope: 'tagged',
+        lang: ctx.sourceLang,
         books: [bookId],
         count: 1,
         overrides: {},

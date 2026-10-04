@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.6.0</title>
+  <title>NovelTranslate AI v2.7.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -150,6 +150,32 @@
     </div>
   </div>
 
+  <!-- MODAL: MOVE CHAPTERS TO ANOTHER BOOK -->
+  <div class="modal-overlay" id="move-chapters-modal" style="z-index: 65;">
+    <div class="modal-box" style="max-width: 440px;">
+      <div class="modal-head">
+        <div class="modal-title">ย้ายตอนไปเรื่องอื่น</div>
+        <button class="modal-close" onclick="closeModal('move-chapters-modal')">✕</button>
+      </div>
+      <div style="font-size: 12px; margin-bottom: 10px;">
+        ตอนที่เลือก: <b id="move-chapters-count" style="color: #2563eb;">...</b>
+        <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">ใช้แยกนิยายคนละเรื่องที่ถูกรวมไว้ด้วยกัน ตอนที่ย้ายจะต่อท้ายเรื่องปลายทางตามลำดับเดิม และคำศัพท์ของเรื่องเดิมจะใช้กับเรื่องปลายทางได้ด้วย</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="move-chapters-target">ย้ายไปที่:</label>
+        <select id="move-chapters-target" class="form-input" onchange="onMoveTargetChange()"></select>
+      </div>
+      <div class="form-group" id="move-chapters-new-group">
+        <label class="form-label" for="move-chapters-new-title">ชื่อเรื่องใหม่:</label>
+        <input type="text" id="move-chapters-new-title" class="form-input">
+      </div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
+        <button class="btn" onclick="closeModal('move-chapters-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="confirmMoveChapters()">ย้ายตอน</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: CHANGE BOOK GENRE PICKER -->
   <div class="modal-overlay" id="genre-picker-modal" style="z-index: 65;">
     <div class="modal-box" style="max-width: 420px;">
@@ -234,7 +260,14 @@
       </div>
       <div class="form-group">
         <label class="form-label">URL หน้านิยาย (เช่น 69shuba, biquge ฯลฯ)</label>
-        <input type="url" id="import-url" class="form-input" placeholder="https://www.69shuba.com/txt/88724/40717272">
+        <input type="url" id="import-url" class="form-input" placeholder="https://www.69shuba.com/txt/88724/40717272" oninput="updateImportTargetHint()">
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="import-target-book">บันทึกเข้าเรื่อง</label>
+        <select id="import-target-book" class="form-input" onchange="updateImportTargetHint()">
+          <option value="auto">อัตโนมัติ (ตรวจจาก URL ว่าเป็นเรื่องไหน)</option>
+        </select>
+        <div id="import-target-hint" style="font-size: 11px; opacity: 0.7; margin-top: 4px;"></div>
       </div>
       <div class="form-group">
         <label class="form-label">แนวเรื่อง / สไตล์สำนวนของเรื่องนี้ (Genre)</label>

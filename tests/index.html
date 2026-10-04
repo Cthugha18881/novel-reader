@@ -157,6 +157,53 @@
       return eq(r, 'off');
     });
 
+    // ---------- Phase 1: URL identity ----------
+    test('normalizeUrl: ไม่สน https/www/m./slash/hash/utm', () => {
+      const a = normalizeUrl('https://www.69shuba.com/txt/1/2/?utm_source=x#top');
+      const b = normalizeUrl('http://m.69shuba.com/txt/1/2');
+      return eq(a, b) && eq(a, '69shuba.com/txt/1/2');
+    });
+    test('normalizeUrl: query ที่มีความหมายยังต่างกัน', () => normalizeUrl('https://s.test/read.php?bid=1&cid=2') !== normalizeUrl('https://s.test/read.php?bid=1&cid=3'));
+    test('normalizeUrl: ลำดับ query ไม่มีผล', () => eq(normalizeUrl('https://s.test/r?b=1&a=2'), normalizeUrl('https://s.test/r?a=2&b=1')));
+    test('sameSourceUrl', () => sameSourceUrl('https://x.test/a/1.html', 'http://www.x.test/a/1.html') && !sameSourceUrl('https://x.test/a/1.html', 'https://x.test/a/2.html') && !sameSourceUrl('', ''));
+
+    test('bookId: 69shuba ใช้ id เดิม (เข้ากับข้อมูลเก่า)', () => eq(extractBookIdFromUrl('https://www.69shuba.com/txt/88724/40717272'), 'book_88724'));
+    test('bookId: /book/123/456.html ใช้ id เดิม', () => eq(extractBookIdFromUrl('https://www.biquge.test/book/123/456.html'), 'book_123'));
+    const sameBook = (a, b) => extractBookIdFromUrl(a) === extractBookIdFromUrl(b);
+    test('bookId: syosetu ตอนต่างกันเรื่องเดียวกัน', () => sameBook('https://ncode.syosetu.com/n1234ab/5/', 'https://ncode.syosetu.com/n1234ab/6/'));
+    test('bookId: syosetu คนละเรื่องได้คนละ id (บั๊กเดิมรวมเป็นเรื่องเดียว)', () => !sameBook('https://ncode.syosetu.com/n1234ab/5/', 'https://ncode.syosetu.com/n9999zz/5/'));
+    test('bookId: kakuyomu /works/X/episodes/Y', () => sameBook('https://kakuyomu.jp/works/111/episodes/222', 'https://kakuyomu.jp/works/111/episodes/333') && !sameBook('https://kakuyomu.jp/works/111/episodes/222', 'https://kakuyomu.jp/works/999/episodes/222'));
+    test('bookId: royalroad /fiction/X/slug/chapter/Y/slug', () => sameBook('https://www.royalroad.com/fiction/123/my-story/chapter/1/one', 'https://www.royalroad.com/fiction/123/my-story/chapter/2/two'));
+    test('bookId: query bid=', () => sameBook('https://s.test/read.php?bid=5&cid=1', 'https://s.test/read.php?bid=5&cid=2') && !sameBook('https://s.test/read.php?bid=5&cid=1', 'https://s.test/read.php?bid=6&cid=1'));
+    test('bookId: http/https และ m. ได้เรื่องเดียวกัน', () => sameBook('https://m.site.test/novel/abc/1.html', 'http://www.site.test/novel/abc/2.html'));
+    test('deriveBookKey: site.com/123.html แยกเรื่องไม่ได้ -> reliable=false', () => deriveBookKey('https://site.test/123.html').reliable === false);
+    test('bookId: URL ที่แยกเรื่องไม่ได้ ไม่รวมทุกตอนของเว็บเป็นเรื่องเดียว', () => !sameBook('https://site.test/123.html', 'https://site.test/456.html'));
+    test('findExistingBookForUrl: หาเรื่องเก่า (id รุ่นเก่า) จาก lastUrl', () => {
+      const books = [{ bookId: 'book_aHR0cHMlM0ElMkYl', title: 'เก่า', lastUrl: 'https://ncode.syosetu.com/n1234ab/9/' }];
+      return eq(findExistingBookForUrl('https://ncode.syosetu.com/n1234ab/10/', books)?.title, 'เก่า') && findExistingBookForUrl('https://ncode.syosetu.com/n0000aa/10/', books) === null;
+    });
+    test('findExistingBookForUrl: ใช้ sourceKey ที่บันทึกไว้', () => {
+      const books = [{ bookId: 'book_x', title: 'K', sourceKey: 'kakuyomu.jp/works/111' }];
+      return eq(findExistingBookForUrl('https://kakuyomu.jp/works/111/episodes/5', books)?.bookId, 'book_x');
+    });
+
+    // ---------- Phase 1: data defaults & backup ----------
+    test('normalizeChapter: ตอนเก่าได้ค่า default', () => {
+      const c = normalizeChapter({ id: 'a', bookId: 'b' });
+      return eq([c.chapterType, c.paragraphs], ['story', []]);
+    });
+    test('getBookSourceLang / getTermLang default zh', () => eq([getBookSourceLang({}), getTermLang({}), getBookSourceLang({ sourceLang: 'ja' })], ['zh', 'zh', 'ja']));
+    test('isValidBackup: รับไฟล์ v1 (ไม่มี bookData)', () => isValidBackup({ format: 'NovelTranslateBackup', version: 1, books: [], chapters: [], glossaries: [] }));
+    test('isValidBackup: ปฏิเสธไฟล์จากรุ่นที่ใหม่กว่า', () => !isValidBackup({ format: 'NovelTranslateBackup', version: 99, books: [], chapters: [], glossaries: [] }));
+    test('upgradeBackup: v1 -> v2 เติม bookData และ default ของตอน', () => {
+      const up = upgradeBackup({ format: 'NovelTranslateBackup', version: 1, books: [{ bookId: 'b' }, null], chapters: [{ id: 'c', bookId: 'b' }], glossaries: [{ src: 'x' }] });
+      return eq([up.version, up.bookData, up.books.length, up.chapters[0].chapterType], [2, [], 1, 'story']);
+    });
+    test('buildChapterRecord: มี translationMeta และ chapterType', () => {
+      const rec = buildChapterRecord({ bookId: 'b', order: 3, title: 't', result: { paragraphs: [{ th: 'ก', src: '甲' }], summary: 's' }, sourceUrl: 'u', nextUrl: 'n' });
+      return eq([rec.bookId, rec.order, rec.chapterType, rec.translationMeta.promptVersion, typeof rec.translationMeta.translatedAt], ['b', 3, 'story', PROMPT_VERSION, 'number']);
+    });
+
     const passed = results.filter(r => r.ok).length;
     const summary = document.getElementById('summary');
     summary.textContent = `ผ่าน ${passed}/${results.length}`;

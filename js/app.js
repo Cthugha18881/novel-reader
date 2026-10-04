@@ -9,6 +9,7 @@ let currentBookId = "default_novel";
 let currentBookTitle = "NovelTranslate";
 let currentAuthor = "";
 let currentBookGenre = "xianxia";
+let currentSourceLang = DEFAULT_SOURCE_LANG;
 let isUserCustomTitle = false;
 
 let bookIdForGenreEdit = null;
@@ -26,12 +27,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v2.6.0",
+    title: "คู่มือเริ่มต้น v2.7.0",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.6.0", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.7.0", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.6.0"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.7.0"
   }];
 }
 
@@ -44,6 +45,7 @@ function resetToGuideBook() {
   currentBookTitle = 'NovelTranslate';
   currentAuthor = '';
   currentBookGenre = 'xianxia';
+  currentSourceLang = DEFAULT_SOURCE_LANG;
   isUserCustomTitle = false;
   currentUrl = '';
   nextUrlCalculated = '';
@@ -594,11 +596,13 @@ async function retranslateSpecificChapterDirect(chapId) {
     });
     chapter.paragraphs = result.paragraphs;
     chapter.summary = result.summary || chapter.summary || '';
+    chapter.translationMeta = result.translationMeta;
     await dbSaveChapter(chapter);
     const activeCopy = chapters.find(item => item.id === chapId);
     if (activeCopy) {
       activeCopy.paragraphs = chapter.paragraphs;
       activeCopy.summary = chapter.summary;
+      activeCopy.translationMeta = chapter.translationMeta;
     }
     if (currentBookId === bookId) await renderVirtualWindow(currentChapterIndex);
     await refreshShelfViewOnly(bookId);
@@ -682,43 +686,113 @@ async function deleteSelectedChapters(bookId) {
 
   const idsToDelete = Array.from(chks).map(c => c.value);
   await dbDeleteMultipleChapters(idsToDelete);
-
-  const remainingChaps = await dbGetChaptersByBook(bookId);
-  remainingChaps.sort((x, y) => x.order - y.order);
-
-  const books = await dbGetAllBooks();
-  const targetBook = books.find(b => b.bookId === bookId);
-
-  if (targetBook) {
-    if (remainingChaps.length > 0) {
-      let safeActiveId = targetBook.lastChapterId;
-      if (!remainingChaps.some(c => c.id === safeActiveId)) safeActiveId = remainingChaps[0].id;
-      const safeActiveChap = remainingChaps.find(c => c.id === safeActiveId) || remainingChaps[0];
-      const safeActiveIdx = remainingChaps.indexOf(safeActiveChap);
-      const latestChap = remainingChaps[remainingChaps.length - 1];
-
-  await dbSaveBook({
-        ...targetBook,
-        totalChapters: remainingChaps.length,
-        lastChapterId: safeActiveChap.id,
-        lastChapterTitle: safeActiveChap.title,
-        lastChapterIndex: safeActiveIdx,
-        lastUrl: latestChap.sourceUrl
-      });
-    } else {
-      await dbSaveBook({
-        ...targetBook,
-        totalChapters: 0,
-        lastChapterId: '',
-        lastChapterTitle: "ไม่มีตอน",
-        lastChapterIndex: 0,
-        lastUrl: ''
-      });
-    }
-  }
+  await repairBookPointer(bookId);
 
   if (currentBookId === bookId) await loadBookFromDB(bookId);
   else refreshShelfViewOnly(bookId);
+}
+
+// หลังลบ/ย้ายตอน: ตรวจให้ตำแหน่งอ่านและจำนวนตอนของเรื่องยังชี้ไปที่ตอนที่มีอยู่จริง
+async function repairBookPointer(bookId) {
+  const remainingChaps = (await dbGetChaptersByBook(bookId)).sort((x, y) => x.order - y.order);
+  const targetBook = (await dbGetAllBooks()).find(b => b.bookId === bookId);
+  if (!targetBook) return;
+
+  if (remainingChaps.length > 0) {
+    const stillThere = remainingChaps.some(c => c.id === targetBook.lastChapterId);
+    const safeActiveChap = remainingChaps.find(c => c.id === targetBook.lastChapterId) || remainingChaps[0];
+    const latestChap = remainingChaps[remainingChaps.length - 1];
+    await dbSaveBook({
+      ...targetBook,
+      totalChapters: remainingChaps.length,
+      lastChapterId: safeActiveChap.id,
+      lastChapterTitle: safeActiveChap.title,
+      lastChapterIndex: remainingChaps.indexOf(safeActiveChap),
+      lastParaIndex: stillThere ? (targetBook.lastParaIndex || 0) : 0,
+      lastUrl: latestChap.sourceUrl
+    });
+  } else {
+    await dbSaveBook({
+      ...targetBook,
+      totalChapters: 0,
+      lastChapterId: '',
+      lastChapterTitle: "ไม่มีตอน",
+      lastChapterIndex: 0,
+      lastParaIndex: 0,
+      lastUrl: ''
+    });
+  }
+}
+
+// ==================== MOVE CHAPTERS (แยกนิยายที่ถูกรวมผิดเรื่อง) ====================
+let moveChaptersFromBookId = null;
+
+async function openMoveChaptersModal(bookId) {
+  const ids = Array.from(document.querySelectorAll('.chap-chk:checked')).filter(c => c.dataset.bookId === bookId).map(c => c.value);
+  if (ids.length === 0) return;
+  moveChaptersFromBookId = bookId;
+  const books = await dbGetAllBooks();
+  const fromBook = books.find(b => b.bookId === bookId);
+  const chaps = await dbGetChaptersByBook(bookId);
+  const firstMoved = chaps.filter(c => ids.includes(c.id)).sort((a, b) => a.order - b.order)[0];
+
+  document.getElementById('move-chapters-count').innerText = `${ids.length} ตอน จาก "${fromBook?.title || bookId}"`;
+  const select = document.getElementById('move-chapters-target');
+  select.innerHTML = `<option value="new">➕ สร้างเป็นเรื่องใหม่</option>` +
+    books.filter(b => b.bookId !== bookId).map(b => `<option value="${escapeHtml(b.bookId)}">📚 ${escapeHtml(b.title || b.bookId)}</option>`).join('');
+  document.getElementById('move-chapters-new-title').value = firstMoved ? `${fromBook?.title || 'นิยาย'} (แยกจาก ${firstMoved.title})` : '';
+  onMoveTargetChange();
+  openModal('move-chapters-modal');
+}
+
+function onMoveTargetChange() {
+  const isNew = document.getElementById('move-chapters-target').value === 'new';
+  document.getElementById('move-chapters-new-group').style.display = isNew ? 'block' : 'none';
+}
+
+async function confirmMoveChapters() {
+  const fromBookId = moveChaptersFromBookId;
+  if (!fromBookId) return;
+  const ids = Array.from(document.querySelectorAll('.chap-chk:checked')).filter(c => c.dataset.bookId === fromBookId).map(c => c.value);
+  if (ids.length === 0) return closeModal('move-chapters-modal');
+
+  const books = await dbGetAllBooks();
+  const fromBook = books.find(b => b.bookId === fromBookId);
+  const choice = document.getElementById('move-chapters-target').value;
+  let toBook;
+  if (choice === 'new') {
+    const title = document.getElementById('move-chapters-new-title').value.trim();
+    if (!title) return alert('กรุณาตั้งชื่อเรื่องใหม่');
+    const firstMoved = (await dbGetChaptersByBook(fromBookId)).filter(c => ids.includes(c.id)).sort((a, b) => a.order - b.order)[0];
+    const key = firstMoved?.sourceUrl ? deriveBookKey(firstMoved.sourceUrl) : { reliable: false };
+    toBook = {
+      bookId: 'book_' + hashString(`${title}|${Date.now()}`),
+      title,
+      isUserCustomTitle: true,
+      author: '',
+      genre: fromBook?.genre || 'xianxia',
+      sourceLang: getBookSourceLang(fromBook),
+      sourceKey: key.reliable ? key.key : undefined,
+      lastChapterIndex: 0,
+      lastParaIndex: 0
+    };
+  } else {
+    toBook = books.find(b => b.bookId === choice);
+    if (!toBook) return alert('ไม่พบเรื่องปลายทาง');
+  }
+
+  try {
+    abortAllRunningProcesses();
+    await dbMoveChapters(ids, fromBookId, toBook);
+    await repairBookPointer(fromBookId);
+    await repairBookPointer(toBook.bookId);
+    closeModal('move-chapters-modal');
+    if (currentBookId === fromBookId || currentBookId === toBook.bookId) await loadBookFromDB(currentBookId);
+    await openBookshelfModal();
+    alert(`ย้าย ${ids.length} ตอนไปที่ "${toBook.title}" เรียบร้อยแล้ว`);
+  } catch (err) {
+    alert(`ย้ายตอนไม่สำเร็จ: ${err.message}`);
+  }
 }
 
 async function loadBookFromDB(bookId, specifyChapIdOrIdx = null) {
@@ -734,6 +808,7 @@ async function loadBookFromDB(bookId, specifyChapIdOrIdx = null) {
   currentBookTitle = targetBook.title || 'นิยายเรื่องใหม่';
   currentAuthor = targetBook.author || '';
   currentBookGenre = targetBook.genre || 'xianxia';
+  currentSourceLang = getBookSourceLang(targetBook);
   isUserCustomTitle = targetBook.isUserCustomTitle || false;
   lastPrefetchError = '';
 
@@ -820,7 +895,7 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
 
   try {
     const bookChaps = await dbGetChaptersByBook(requestBookId);
-    if (bookChaps.some(c => c.sourceUrl === targetUrl)) {
+    if (bookChaps.some(c => sameSourceUrl(c.sourceUrl, targetUrl))) {
       document.getElementById('prefetch-badge').style.display = 'inline-block';
       return;
     }
@@ -859,24 +934,20 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
     });
 
     const currentAll = await dbGetChaptersByBook(requestBookId);
-    if (currentAll.some(c => c.sourceUrl === targetUrl)) {
+    if (currentAll.some(c => sameSourceUrl(c.sourceUrl, targetUrl))) {
       if (currentBookId === requestBookId) document.getElementById('prefetch-badge').style.display = 'inline-block';
       return;
     }
 
     const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
-    const chapTitle = result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`;
-
-    const newChap = {
-      id: `${requestBookId}_chap_${Date.now()}`,
+    const newChap = buildChapterRecord({
       bookId: requestBookId,
       order: maxOrder + 1,
-      title: chapTitle,
-      paragraphs: result.paragraphs,
-      summary: result.summary || "",
+      title: result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`,
+      result,
       sourceUrl: targetUrl,
-      nextUrl: nextUrl
-    };
+      nextUrl
+    });
 
     await dbSaveChapter(newChap);
 
@@ -960,19 +1031,17 @@ async function handleNextChapterClick() {
     });
 
     const currentAll = await dbGetChaptersByBook(ctx.bookId);
-    let newChap = currentAll.find(c => c.sourceUrl === chapterUrl);
+    let newChap = currentAll.find(c => sameSourceUrl(c.sourceUrl, chapterUrl));
     if (!newChap) {
       const maxOrder = currentAll.reduce((max, c) => Math.max(max, c.order || 0), 0);
-      newChap = {
-        id: `${ctx.bookId}_chap_${Date.now()}`,
+      newChap = buildChapterRecord({
         bookId: ctx.bookId,
         order: maxOrder + 1,
         title: result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`,
-        paragraphs: result.paragraphs,
-        summary: result.summary || "",
+        result,
         sourceUrl: chapterUrl,
-        nextUrl: nextUrl
-      };
+        nextUrl
+      });
       await dbSaveChapter(newChap);
     }
 
@@ -1006,13 +1075,64 @@ function prevChapter() {
   }
 }
 
-function openImportModal(prefillUrl = '', title = 'วาง URL หน้านิยาย') {
+async function refreshImportTargetOptions(preferBookId = 'auto') {
+  const select = document.getElementById('import-target-book');
+  if (!select) return;
+  const books = (await dbGetAllBooks()).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  select.innerHTML = `
+    <option value="auto">อัตโนมัติ (ตรวจจาก URL ว่าเป็นเรื่องไหน)</option>
+    <option value="new">➕ สร้างเป็นเรื่องใหม่เสมอ</option>
+    ${books.map(b => `<option value="${escapeHtml(b.bookId)}">📚 ต่อท้ายเรื่อง: ${escapeHtml(b.title || b.bookId)}</option>`).join('')}
+  `;
+  select.value = books.some(b => b.bookId === preferBookId) ? preferBookId : 'auto';
+  updateImportTargetHint();
+}
+
+async function updateImportTargetHint() {
+  const hint = document.getElementById('import-target-hint');
+  const select = document.getElementById('import-target-book');
+  const url = document.getElementById('import-url').value.trim();
+  if (!hint || !select) return;
+  const genreSelect = document.getElementById('import-novel-genre');
+  if (select.value !== 'auto') {
+    hint.innerText = '';
+    genreSelect.disabled = select.value !== 'new';
+    return;
+  }
+  if (!/^https?:\/\//i.test(url)) {
+    hint.innerText = '';
+    genreSelect.disabled = false;
+    return;
+  }
+  const match = findExistingBookForUrl(url, await dbGetAllBooks());
+  const { reliable } = deriveBookKey(url);
+  hint.innerText = match
+    ? `จะต่อท้ายเรื่อง "${match.title}" ที่มีอยู่แล้ว`
+    : (reliable ? 'จะสร้างเป็นเรื่องใหม่' : '⚠️ แยกชื่อเรื่องจาก URL นี้ไม่ได้ จะสร้างเป็นเรื่องใหม่ ถ้าเป็นตอนของเรื่องที่มีอยู่ ให้เลือกเรื่องจากรายการ');
+  genreSelect.disabled = !!match;
+}
+
+function openImportModal(prefillUrl = '', title = 'วาง URL หน้านิยาย', preferBookId = 'auto') {
   const modalTitle = document.getElementById('import-modal-title');
   if (modalTitle) modalTitle.innerText = title;
   document.getElementById('import-url').value = prefillUrl;
   const status = document.getElementById('import-status');
   if (status && !isTaskRunning('import')) status.style.display = 'none';
+  refreshImportTargetOptions(preferBookId);
   openModal('import-modal');
+}
+
+// เลือกเรื่องปลายทางของลิงก์ที่วาง ตามตัวเลือกในหน้าวางลิงก์
+function resolveImportTarget(url, choice, books) {
+  if (choice === 'new') {
+    return { bookId: 'book_' + hashString(`${normalizeUrl(url)}|${Date.now()}`), existingBook: null };
+  }
+  if (choice && choice !== 'auto') {
+    return { bookId: choice, existingBook: books.find(b => b.bookId === choice) || null };
+  }
+  const match = findExistingBookForUrl(url, books);
+  if (match) return { bookId: match.bookId, existingBook: match };
+  return { bookId: extractBookIdFromUrl(url), existingBook: null };
 }
 
 async function startTranslateFirst() {
@@ -1035,12 +1155,13 @@ async function startTranslateFirst() {
   const controller = beginTask('import');
   const signal = controller.signal;
   try {
-    const targetBookId = extractBookIdFromUrl(url);
-    const existingBook = (await dbGetAllBooks()).find(b => b.bookId === targetBookId);
+    const books = await dbGetAllBooks();
+    const choice = document.getElementById('import-target-book')?.value || 'auto';
+    const { bookId: targetBookId, existingBook } = resolveImportTarget(url, choice, books);
     const existingChaps = await dbGetChaptersByBook(targetBookId);
 
     // ตอนนี้เคยแปลไว้แล้ว: เปิดอ่านเลยโดยไม่ต้องเรียก AI
-    const duplicateChapter = existingChaps.find(ch => ch.sourceUrl === url);
+    const duplicateChapter = existingChaps.find(ch => sameSourceUrl(ch.sourceUrl, url));
     if (duplicateChapter && existingBook) {
       await loadBookFromDB(targetBookId, duplicateChapter.id);
       closeModal('import-modal');
@@ -1052,7 +1173,8 @@ async function startTranslateFirst() {
       bookId: targetBookId,
       title: existingBook?.title || rawBookTitle || 'นิยายเรื่องใหม่',
       author: author || existingBook?.author || '',
-      genre: existingBook?.genre || chosenGenre
+      genre: existingBook?.genre || chosenGenre,
+      sourceLang: existingBook?.sourceLang
     });
 
     status.innerText = `พบ "${rawChapTitle}" กำลังวิเคราะห์ชื่อเฉพาะและแปลผ่าน AI...`;
@@ -1077,24 +1199,26 @@ async function startTranslateFirst() {
     const isCustom = !!latestBook?.isUserCustomTitle;
     const finalBookTitle = isCustom ? latestBook.title : (result.bookTitle || ctx.title);
 
-    const newChapter = {
-      id: `${targetBookId}_chap_${Date.now()}`,
+    const newChapter = buildChapterRecord({
       bookId: targetBookId,
       order: maxOrder + 1,
       title: result.chapterTitle || rawChapTitle || `ตอนที่ ${maxOrder + 1}`,
-      paragraphs: result.paragraphs,
-      summary: result.summary || "",
+      result,
       sourceUrl: url,
-      nextUrl: nextUrl
-    };
+      nextUrl
+    });
     await dbSaveChapter(newChapter);
 
+    const derivedKey = deriveBookKey(url);
     await dbSaveBook({
       ...(latestBook || {}),
       bookId: targetBookId,
       title: finalBookTitle,
       author: ctx.author,
       genre: ctx.genre,
+      sourceLang: ctx.sourceLang,
+      // จำตัวตนของเรื่องจาก URL ไว้ให้ลิงก์ตอนอื่นของเรื่องเดียวกันหาเจอ
+      sourceKey: latestBook?.sourceKey || (derivedKey.reliable ? derivedKey.key : undefined),
       isUserCustomTitle: isCustom,
       lastChapterId: newChapter.id,
       lastChapterIndex: latestChaps.length,

@@ -14,13 +14,15 @@ function makeBookContext(book = {}) {
     bookId: book.bookId,
     title: book.title || '',
     author: book.author || '',
-    genre: book.genre || 'xianxia'
+    genre: book.genre || 'xianxia',
+    sourceLang: getBookSourceLang(book)
   };
 }
 
 function getCurrentBookContext() {
   return makeBookContext({
-    bookId: currentBookId, title: currentBookTitle, author: currentAuthor, genre: currentBookGenre
+    bookId: currentBookId, title: currentBookTitle, author: currentAuthor, genre: currentBookGenre,
+    sourceLang: typeof currentSourceLang !== 'undefined' ? currentSourceLang : DEFAULT_SOURCE_LANG
   });
 }
 
@@ -66,13 +68,137 @@ function computeNextNumericUrl(url) {
   return `${prefix}${paddedNextNum}${suffix}`;
 }
 
+// ---------- URL identity ----------
+const TRACKING_PARAMS = /^(utm_\w+|fbclid|gclid|ref|from|spm|share\w*)$/i;
+// query ที่มักระบุ "เรื่อง" ในเว็บแบบ read.php?bid=1&cid=2
+const BOOK_QUERY_PARAMS = ['bid', 'book', 'bookid', 'book_id', 'novel', 'novelid', 'novel_id', 'nid', 'aid', 'articleid'];
+// ช่วง path ที่บอกว่าจากตรงนี้ไปคือ "ตอน" ไม่ใช่ "เรื่อง"
+const CHAPTER_PATH_MARKERS = /^(chapter|chapters|chap|episode|episodes|ep|read|reader|viewer|c|v)$/i;
+
+/**
+ * รูปแบบมาตรฐานของ URL สำหรับเทียบว่าเป็นหน้าเดียวกัน
+ * ไม่สน http/https, www./m./wap., "/" ท้าย, #hash และพารามิเตอร์ติดตาม
+ */
+function normalizeUrl(url) {
+  if (!url) return '';
+  try {
+    const u = new URL(String(url).trim());
+    const host = u.hostname.toLowerCase().replace(/^(www|m|wap|mobile)\./, '');
+    const path = u.pathname.replace(/\/+$/, '') || '/';
+    const params = [...u.searchParams.entries()]
+      .filter(([k]) => !TRACKING_PARAMS.test(k))
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`).join('&');
+    return `${host}${path}${params ? '?' + params : ''}`;
+  } catch (e) {
+    return String(url).trim();
+  }
+}
+
+function sameSourceUrl(a, b) {
+  return !!a && !!b && normalizeUrl(a) === normalizeUrl(b);
+}
+
+function hashString(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(36);
+}
+
+function looksLikeChapterSegment(seg) {
+  return /\d/.test(seg) || /\.(s?html?|php|aspx?)$/i.test(seg) || /^(chapter|chap|ep|c)[-_]?\d+/i.test(seg);
+}
+
+/**
+ * หา "ตัวตนของเรื่อง" จาก URL ของตอน
+ * @returns {{ key: string, reliable: boolean, legacyId: string|null }}
+ *   reliable=false แปลว่าแยกส่วนของเรื่องออกจาก URL ไม่ได้ (เช่น site.com/12345.html)
+ */
+function deriveBookKey(url) {
+  let u;
+  try { u = new URL(url); } catch (e) { return { key: '', reliable: false, legacyId: null }; }
+  const host = u.hostname.toLowerCase().replace(/^(www|m|wap|mobile)\./, '');
+
+  // รูปแบบเดิมที่ใช้มาตั้งแต่ v2.5 ต้องได้ bookId เดิมเพื่อไม่ให้ชั้นหนังสือแตก
+  const legacyTxt = u.pathname.match(/txt\/(\d+)\//);
+  const legacyBook = u.pathname.match(/book\/(\d+)/);
+  const legacyId = legacyTxt ? 'book_' + legacyTxt[1] : (legacyBook ? 'book_' + legacyBook[1] : null);
+
+  for (const name of BOOK_QUERY_PARAMS) {
+    const value = [...u.searchParams.entries()].find(([k]) => k.toLowerCase() === name)?.[1];
+    if (value) return { key: `${host}?${name}=${value}`, reliable: true, legacyId };
+  }
+
+  const segments = u.pathname.split('/').filter(Boolean);
+  const markerIdx = segments.findIndex((s, i) => i > 0 && CHAPTER_PATH_MARKERS.test(s) && i < segments.length - 1);
+  let bookSegs;
+  if (markerIdx > 0) {
+    bookSegs = segments.slice(0, markerIdx);
+  } else {
+    bookSegs = segments.slice();
+    // ตัดส่วนท้ายที่เป็นตอนออก (ตัวเลข/ไฟล์ .html) อย่างน้อย 1 ส่วน
+    if (bookSegs.length && looksLikeChapterSegment(bookSegs[bookSegs.length - 1])) bookSegs.pop();
+    while (bookSegs.length && /^(chapter|chapters|episodes?|ep|read)$/i.test(bookSegs[bookSegs.length - 1])) bookSegs.pop();
+  }
+  const reliable = bookSegs.length > 0;
+  return { key: `${host}/${bookSegs.join('/')}`, reliable, legacyId };
+}
+
 function extractBookIdFromUrl(url) {
-  const m = url.match(/txt\/(\d+)\//);
-  if (m) return 'book_' + m[1];
-  const m2 = url.match(/book\/(\d+)/);
-  if (m2) return 'book_' + m2[1];
-  const encoded = btoa(encodeURIComponent(url.split('?')[0])).replace(/[^a-zA-Z0-9_-]/g, '');
-  return 'book_' + encoded.substring(0, 20);
+  const { key, reliable, legacyId } = deriveBookKey(url);
+  if (legacyId) return legacyId;
+  // แยกเรื่องจาก URL ไม่ได้: ใช้ URL ทั้งหน้าเป็นตัวตน (เป็นเรื่องใหม่) แทนการรวมทุกเรื่องของเว็บเข้าด้วยกัน
+  return 'book_' + hashString(reliable ? key : normalizeUrl(url));
+}
+
+/**
+ * เลือกเรื่องบนชั้นหนังสือที่ URL นี้ควรไปต่อท้าย (โหมดอัตโนมัติของหน้าวางลิงก์)
+ * เทียบทั้ง bookId ที่คำนวณได้ และ sourceKey/URL ล่าสุดของเรื่องเดิม (รองรับเรื่องที่สร้างจากรุ่นเก่า)
+ */
+function findExistingBookForUrl(url, books) {
+  const derived = deriveBookKey(url);
+  const candidateId = extractBookIdFromUrl(url);
+  const byId = books.find(b => b.bookId === candidateId);
+  if (byId) return byId;
+  if (!derived.reliable) return null;
+  return books.find(b => {
+    const key = b.sourceKey || (b.lastUrl ? deriveBookKey(b.lastUrl) : null);
+    const keyStr = typeof key === 'string' ? key : (key?.reliable ? key.key : '');
+    return keyStr && keyStr === derived.key;
+  }) || null;
+}
+
+// ---------- Chapter records ----------
+// เพิ่มเลขนี้ทุกครั้งที่เปลี่ยน prompt แปลอย่างมีนัยสำคัญ เพื่อให้รู้ว่าตอนไหนแปลด้วย prompt รุ่นเก่า
+const PROMPT_VERSION = '2.6';
+
+function buildTranslationMeta() {
+  const cfg = getActiveLlmConfig();
+  return {
+    provider: cfg.provider,
+    model: cfg.model,
+    verifyMode: getVerifyMode(),
+    promptVersion: PROMPT_VERSION,
+    translatedAt: Date.now()
+  };
+}
+
+function buildChapterRecord({ bookId, order, title, result, sourceUrl = '', nextUrl = null, idSuffix = '' }) {
+  return {
+    id: `${bookId}_chap_${Date.now()}${idSuffix}`,
+    bookId,
+    order,
+    title,
+    chapterType: result.chapterType || 'story',
+    paragraphs: result.paragraphs,
+    summary: result.summary || '',
+    sourceUrl,
+    nextUrl,
+    translationMeta: result.translationMeta || buildTranslationMeta()
+  };
 }
 
 // เฉพาะหน้าเว็บนิยายหาไม่เจอ (ไม่นับ error จาก AI เช่น 404 model not found)
@@ -477,7 +603,7 @@ ${JSON.stringify(chunk)}
   return result;
 }
 
-async function saveUsedEntities(entities, bookId) {
+async function saveUsedEntities(entities, bookId, lang = DEFAULT_SOURCE_LANG) {
   if (!Array.isArray(entities)) return;
   for (const ent of entities) {
     if (typeof ent?.src !== 'string' || typeof ent?.tgt !== 'string' || !ent.src || !ent.tgt) continue;
@@ -490,6 +616,7 @@ async function saveUsedEntities(entities, bookId) {
         tgt: cleanTgt,
         category: TERM_CATEGORIES.includes(ent.category) ? ent.category : 'character',
         scope: 'tagged',
+        lang,
         books: [bookId],
         count: 1,
         overrides: {},
@@ -666,7 +793,7 @@ async function executeApiCall(rawText, ctx, { rawChapTitle = "", rawBookTitle = 
     src: it.src
   }));
 
-  await saveUsedEntities(entities, ctx.bookId);
+  await saveUsedEntities(entities, ctx.bookId, ctx.sourceLang);
 
   paragraphs = await bilingualCrossVerificationPass(paragraphs, ctx, { signal, onStatus });
   paragraphs = paragraphs.map(p => ({ th: cleanThaiOutput(p.th, p.src) || p.th, src: p.src }));
@@ -676,7 +803,9 @@ async function executeApiCall(rawText, ctx, { rawChapTitle = "", rawBookTitle = 
     chapterTitle: chapterTitle || rawChapTitle,
     summary: summaries.join(' ').slice(0, 600),
     paragraphs,
-    missingCount: stillMissing
+    missingCount: stillMissing,
+    chapterType: 'story',
+    translationMeta: buildTranslationMeta()
   };
 }
 
