@@ -44,6 +44,22 @@ async function checkBookForNewChapters(bookId, signal = null) {
   }
 
   const last = chaps[chaps.length - 1];
+  // ตอนสุดท้ายตอนที่อ่าน เคยเป็นตอนล่าสุดของเว็บ จึงยังไม่มีลิงก์ตอนถัดไป:
+  // ดึงหน้าของตอนนั้นอีกครั้ง ถ้าตอนนี้มีลิงก์ตอนถัดไปแล้ว (ไม่ใช่การเดาจากเลข) แปลว่ามีตอนใหม่
+  if (!last.nextUrl && last.sourceUrl && !isPendingChapter(last)) {
+    try {
+      const again = await scrapePage(last.sourceUrl, signal, { bookId, allowAi: false });
+      if (again.nextUrl && again.nextUrlSource !== 'guess') {
+        last.nextUrl = again.nextUrl;
+        await dbSaveChapter(last);
+        const mem = chapters.find(c => c.id === last.id);
+        if (mem) mem.nextUrl = again.nextUrl;
+        if (mem && currentBookId === bookId && chapters[chapters.length - 1] === mem) nextUrlCalculated = again.nextUrl;
+      }
+    } catch (err) {
+      if (isAbortError(err)) throw err;
+    }
+  }
   // ตอนสุดท้ายเป็นตอนที่รอแปลแต่ยังไม่รู้ลิงก์ตอนถัดไป (เช่นมาจากไฟล์) จะรู้ต่อเมื่อแปลตอนนั้นแล้ว
   if (!last.nextUrl) {
     return { mode: 'none', count: 0, reason: isPendingChapter(last) ? 'ยังมีตอนที่รอแปลอยู่ (จะรู้ลิงก์ตอนถัดไปหลังแปล)' : 'ไม่มีลิงก์ตอนถัดไปของตอนล่าสุด (ลองตั้งสารบัญของเรื่องนี้)' };
@@ -91,7 +107,9 @@ async function queueNewChapters(bookId, result) {
       paragraphs: splitSourceParagraphs(result.page.text).map(src => ({ th: '', src })),
       summary: '',
       sourceUrl: result.url,
-      nextUrl: result.page.nextUrl || null
+      nextUrl: result.page.nextUrl || null,
+      // ตอนที่ต้องซื้อ: ต้นฉบับที่เก็บไว้เป็นแค่ตัวอย่าง ตอนแปลจะบันทึกเป็นตอนที่ล็อกแทน
+      ...(result.page.lockInfo ? { pendingLockInfo: result.page.lockInfo } : {})
     }];
   }
   if (!records.length) return 0;

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/csp.js"></script>
-  <title>NovelTranslate AI v3.2.0</title>
+  <title>NovelTranslate AI v3.2.1</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -319,6 +319,22 @@
     </div>
   </div>
 
+  <!-- MODAL: PASTE FULL CHAPTER (ตอนที่ต้องซื้อ) -->
+  <div class="modal-overlay" id="paste-chapter-modal" style="z-index: 65;">
+    <div class="modal-box" style="max-width: 560px;">
+      <div class="modal-head">
+        <div class="modal-title">วางเนื้อหาเต็มของตอน</div>
+        <button class="modal-close" onclick="closeModal('paste-chapter-modal')">✕</button>
+      </div>
+      <div style="font-size: 12px; margin-bottom: 6px;">ตอน: <b id="paste-chapter-title">...</b></div>
+      <div style="font-size: 11px; opacity: 0.7; margin-bottom: 8px; line-height: 1.5;">คัดลอกเนื้อหาต้นฉบับของตอนนี้จากเว็บหรือแอพของเว็บ (ที่คุณมีสิทธิ์อ่าน) มาวาง ระบบจะใช้แทนข้อความตัวอย่างแล้วแปลให้ ลำดับตอนและลิงก์เดิมยังเหมือนเดิม</div>
+      <textarea id="paste-chapter-text" class="form-input" rows="10" style="resize: vertical; font-size: 13px;"></textarea>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px;">
+        <button class="btn" onclick="closeModal('paste-chapter-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="savePastedChapter()">ใช้เนื้อหานี้และแปล</button>
+      </div>
+    </div>
+  </div>
   <!-- MODAL: EDIT PARAGRAPH TRANSLATION -->
   <div class="modal-overlay" id="edit-para-modal" style="z-index: 65;">
     <div class="modal-box" style="max-width: 520px;">

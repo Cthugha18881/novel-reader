@@ -141,6 +141,7 @@ async function startBatchTranslateForBook(bookId) {
 
   let successCount = 0;
   let finishedAll = false;
+  let stoppedByLock = false;
 
   try {
     for (let i = 1; i <= count; i++) {
@@ -195,13 +196,14 @@ async function startBatchTranslateForBook(bookId) {
         progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${urlSegment})`;
 
         try {
-          const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, signal, { bookId });
+          const { text, nextUrl, rawChapTitle, rawBookTitle, author, lockInfo } = await scrapePage(targetUrl, signal, { bookId });
           if (author) ctx.author = author;
 
           const result = await translateChapter(text, ctx, {
             signal,
             rawChapTitle,
             rawBookTitle,
+            lockInfo,
             prevChapter: findPrevStoryChapter(existingAll),
             onStatus: (msg) => { progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 60)}`; }
           });
@@ -258,6 +260,13 @@ async function startBatchTranslateForBook(bookId) {
 
           refreshShelfViewOnly(bookId);
           targetUrl = nextUrl;
+
+          // ตอนที่ต้องซื้อ/อ่านต่อในแอพ: ตอนถัดจากนี้มักล็อกต่อกัน หยุดไว้ก่อน ไม่ดึงหน้าเว็บต่อเปล่าๆ
+          if (result.lockInfo) {
+            progressDesc.innerText = `หยุดที่ "${chapTitle}": ${describeLockInfo(result.lockInfo).short}\n(บันทึกตอนนี้ไว้แล้วโดยไม่แปลตัวอย่าง ดูรายละเอียดได้ในหน้าอ่าน)`;
+            stoppedByLock = true;
+            break;
+          }
           if (i === count) finishedAll = true;
 
           if (i < count) {
@@ -286,7 +295,9 @@ async function startBatchTranslateForBook(bookId) {
   actionBtn.className = 'btn btn-secondary';
   actionBtn.innerText = "ปิดการแจ้งเตือน";
 
-  if (signal.aborted) {
+  if (stoppedByLock) {
+    progressTitle.innerText = '🔒 หยุดที่ตอนที่ต้องซื้อ / อ่านต่อในแอพ';
+  } else if (signal.aborted) {
     progressDesc.innerText = `หยุดการแปลตามคำสั่งแล้ว (แปลและบันทึกเสร็จสิ้น ${successCount} ตอน)`;
   } else if (finishedAll) {
     progressBox.className = 'progress-box success';

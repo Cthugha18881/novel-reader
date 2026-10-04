@@ -27,12 +27,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v3.2.0",
+    title: "คู่มือเริ่มต้น v3.2.1",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.2.0", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.2.1", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.2.0"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.2.1"
   }];
 }
 
@@ -137,17 +137,97 @@ const CHAPTER_TYPE_LABELS = {
 function buildPlaceholderNoticeHtml(chap) {
   const srcHtml = chap.paragraphs.map(p => `<p>${escapeHtml(p.src || '')}</p>`).join('');
   const locked = chap.placeholderReason === 'locked';
-  const heading = locked ? '🔒 ตอนนี้ต้องซื้อหรือเข้าสู่ระบบที่เว็บต้นทางก่อนจึงจะอ่านได้' : '🛡️ ตอนนี้ยังเป็นเนื้อหากันก๊อป (ข้อความหลอก)';
+  const lockText = describeLockInfo(chap.lockInfo);
+  const heading = locked ? lockText.heading : '🛡️ ตอนนี้ยังเป็นเนื้อหากันก๊อป (ข้อความหลอก)';
   const detail = locked
-    ? 'หน้าเว็บมีแค่ตัวอย่างสั้นๆ ระบบจึงไม่แปลข้อความตัวอย่าง ถ้าคุณมีสิทธิ์อ่านตอนนี้ ให้คัดลอกเนื้อหามาวางที่ "วางข้อความ/ไฟล์" แทน'
+    ? `${escapeHtml(chap.lockInfo ? lockText.short : 'หน้าเว็บมีแค่ตัวอย่างสั้นๆ')} ระบบจึงไม่แปลข้อความตัวอย่าง (ประหยัดโควตา และไม่ให้ตัวอย่างไปปนบริบทของเรื่อง)
+      <div style="margin-top: 6px;"><b>ทำไมซื้อแล้วก็ยังได้แค่ตัวอย่าง:</b> แอพนี้ดึงหน้าเว็บผ่าน r.jina.ai ซึ่งเปิดหน้าเว็บในฐานะผู้อ่านที่ไม่ได้ล็อกอิน จึงไม่เห็นตอนที่คุณซื้อหรือปลดล็อกไว้ในบัญชีของคุณ
+      ถ้าคุณมีสิทธิ์อ่านตอนนี้ ให้คัดลอกเนื้อหาเต็มจากเว็บหรือแอพของเว็บมาวางด้วยปุ่มด้านล่าง</div>`
     : 'ผู้เขียนมักเปลี่ยนเป็นเนื้อหาจริงภายหลัง ระบบจึงยังไม่แปลเพื่อประหยัดโควตา และไม่ใช้ตอนนี้ต่อบริบทของเรื่อง';
+  const hasSrc = chap.paragraphs.some(p => p.src);
   return `
     <div class="placeholder-notice">
-      <div style="font-weight: 600; margin-bottom: 4px;">${heading}</div>
-      <div style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">${detail}</div>
-      ${chap.sourceUrl ? `<button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="refetchChapterFromSource(${jsArg(chap.id)})">🔄 ดึงเนื้อหาจริงจากหน้าเว็บใหม่</button>` : ''}
+      <div style="font-weight: 600; margin-bottom: 4px;">${escapeHtml(heading)}</div>
+      <div style="font-size: 12px; opacity: 0.85; margin-bottom: 10px; line-height: 1.6;">${detail}</div>
+      <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+        ${locked ? `<button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="openPasteChapterModal(${jsArg(chap.id)})">📋 วางเนื้อหาเต็มเอง</button>` : ''}
+        ${chap.sourceUrl ? `<button class="btn${locked ? '' : ' btn-primary'}" style="padding: 5px 12px; font-size: 12px;" onclick="refetchChapterFromSource(${jsArg(chap.id)})">🔄 ดึงจากหน้าเว็บใหม่</button>` : ''}
+        ${locked && hasSrc ? `<button class="btn" style="padding: 5px 12px; font-size: 12px;" onclick="translateLockedPreview(${jsArg(chap.id)})" title="แปลข้อความตัวอย่างที่ได้มา (เนื้อหาไม่ครบ)">แปลเฉพาะตัวอย่าง</button>` : ''}
+      </div>
       <details style="margin-top: 10px; font-size: 12px;"><summary style="cursor: pointer; opacity: 0.7;">ดูข้อความต้นฉบับที่ดึงมา</summary><div class="para-src" style="display: block;">${srcHtml}</div></details>
     </div>`;
+}
+
+// ---------- ตอนที่ต้องซื้อ: วางเนื้อหาเอง / แปลเฉพาะตัวอย่าง ----------
+let pasteChapterId = null;
+
+async function openPasteChapterModal(chapId) {
+  const chapter = await findChapterAnywhere(chapId);
+  if (!chapter) return alert('ไม่พบตอนนี้');
+  pasteChapterId = chapId;
+  document.getElementById('paste-chapter-title').innerText = chapter.title || '';
+  document.getElementById('paste-chapter-text').value = '';
+  openModal('paste-chapter-modal');
+}
+
+/** ใช้เนื้อหาที่ผู้ใช้วางเป็นต้นฉบับของตอนนี้ (คง id/ลำดับ/URL เดิม) แล้วแปล */
+async function savePastedChapter() {
+  const text = document.getElementById('paste-chapter-text').value;
+  if (!text.trim()) return alert('กรุณาวางเนื้อหาของตอนนี้ก่อน');
+  if (text.length > IMPORT_LIMITS.pasteChars) return alert('ข้อความยาวเกินไป');
+  const chapter = await findChapterAnywhere(pasteChapterId);
+  if (!chapter) return alert('ไม่พบตอนนี้');
+  chapter.paragraphs = splitSourceParagraphs(text).map(src => ({ th: '', src }));
+  chapter.status = 'pending';
+  chapter.chapterType = 'story';
+  chapter.sourceNote = 'pasted';
+  delete chapter.placeholderReason;
+  delete chapter.lockInfo;
+  delete chapter.pendingLockInfo;
+  await dbSaveChapter(chapter);
+  closeModal('paste-chapter-modal');
+  if (currentBookId === chapter.bookId) await renderVirtualWindow(currentChapterIndex);
+  await translatePendingChapterNow(chapter.id);
+}
+
+/** แปลข้อความตัวอย่างของตอนที่ต้องซื้อ และติดป้ายว่าเป็นแค่ตัวอย่าง */
+async function translateLockedPreview(chapId) {
+  const chapter = await findChapterAnywhere(chapId);
+  if (!chapter) return alert('ไม่พบตอนนี้');
+  if (!confirm('แปลเฉพาะข้อความตัวอย่างที่ได้มา (เนื้อหาไม่ครบ) ใช่หรือไม่?')) return;
+  if (isTaskRunning('retranslate')) return alert('กำลังแปลบทอื่นอยู่ กรุณารอให้เสร็จก่อน');
+  const lockInfo = chapter.lockInfo || null;
+  const books = await dbGetAllBooks();
+  const ctx = makeBookContext(books.find(b => b.bookId === chapter.bookId) || getCurrentBookContext());
+  const controller = beginTask('retranslate');
+  showGlobalToast(`กำลังแปลตัวอย่างของ "${chapter.title}"...`);
+  try {
+    const rawText = chapter.paragraphs.map(p => p.src || '').filter(Boolean).join('\n\n');
+    const bookChaps = await dbGetChaptersByBook(chapter.bookId);
+    const result = await translateChapter(rawText, ctx, {
+      signal: controller.signal, onStatus: showGlobalToast, rawChapTitle: chapter.title,
+      prevChapter: findPrevStoryChapter(bookChaps, chapter.order ?? 0)
+    });
+    // ตัวอย่างไม่ครบตอน: ไม่ใช้สรุปของตอนนี้เป็นบริบทของตอนถัดไป
+    result.summary = '';
+    result.previewOnly = true;
+    await applyTranslationToChapter(chapter, result, { updateTitle: false });
+    if (lockInfo) {
+      chapter.lockInfo = lockInfo;
+      await dbSaveChapter(chapter);
+      if (currentBookId === chapter.bookId) await renderVirtualWindow(currentChapterIndex);
+    }
+  } catch (err) {
+    if (!isAbortError(err)) alert(`แปลไม่สำเร็จ: ${err.message}`);
+  } finally {
+    endTask('retranslate', controller);
+    hideGlobalToast();
+  }
+}
+
+function buildPreviewOnlyBannerHtml(chap) {
+  return `<div class="preview-only-banner">⚠️ แปลจากข้อความตัวอย่างเท่านั้น เนื้อหาไม่ครบตอน${chap.lockInfo ? ` — ${escapeHtml(describeLockInfo(chap.lockInfo).short)}` : ''}
+    <button class="btn" style="padding: 2px 8px; font-size: 11px; margin-left: 6px;" onclick="openPasteChapterModal(${jsArg(chap.id)})">📋 วางเนื้อหาเต็ม</button></div>`;
 }
 
 function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
@@ -161,6 +241,7 @@ function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
   } else if (chapterType === 'placeholder') {
     parasHtml = buildPlaceholderNoticeHtml(chap);
   } else {
+    if (chap.previewOnly) parasHtml += buildPreviewOnlyBannerHtml(chap);
     chap.paragraphs.forEach((p, pIdx) => {
       const kind = p.kind || 'story';
       if (kind === 'site_junk') {
@@ -195,7 +276,8 @@ function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
     }
   }
 
-  const typeBadge = chapterType !== 'story' ? `<span class="chapter-type-badge type-${chapterType}">${CHAPTER_TYPE_LABELS[chapterType] || chapterType}</span>` : '';
+  const typeLabel = chapterType === 'placeholder' && chap.placeholderReason === 'locked' ? '🔒 ตอนที่ต้องซื้อ' : (CHAPTER_TYPE_LABELS[chapterType] || chapterType);
+  const typeBadge = chapterType !== 'story' ? `<span class="chapter-type-badge type-${chapterType}">${typeLabel}</span>` : '';
   return `
       <div class="chapter-block chapter-type-${chapterType}" id="chapter-block-${chapIdx}" data-index="${chapIdx}" data-id="${escapeHtml(chap.id)}">
       <div class="chapter-block-divider">
@@ -501,10 +583,10 @@ function checkAndRefreshBottomStatus() {
   } else {
     updateInfiniteStatusBanner(`
       <div style="font-size: 13px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">
-        ⚠️ ไม่พบ URL ของตอนถัดไป (เลข URL อาจกระโดดข้าม)
+        ⚠️ ไม่พบลิงก์ของตอนถัดไป
       </div>
       <div style="font-size: 11px; opacity: 0.75; margin-bottom: 10px;">
-        กรุณาก๊อปปี้ URL ตอนถัดไปจากหน้าเว็บจริงมาวางเพื่อแปลต่อ
+        ตอนนี้อาจเป็นตอนล่าสุดของเว็บ (กด 🔔 เช็กตอนใหม่ ที่ชั้นหนังสือภายหลัง) หรือเลข URL กระโดดข้าม ถ้ารู้ลิงก์ตอนถัดไป วางเพื่อแปลต่อได้เลย
       </div>
       <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="promptFixNextUrlFromBottom()">
         🔗 วาง URL ตอนถัดไป
@@ -751,7 +833,11 @@ async function retranslateSpecificChapterDirect(chapId) {
       prevChapter: findPrevStoryChapter(bookChaps, chapter.order ?? 0)
     });
     if (keepEdits) result.paragraphs = mergeUserEdits(chapter.paragraphs, result.paragraphs);
+    // แปลใหม่จากข้อความตัวอย่างเดิม: ยังเป็นแค่ตัวอย่าง คงป้ายและข้อมูลการล็อกไว้
+    const keptLock = chapter.previewOnly ? chapter.lockInfo : null;
+    if (chapter.previewOnly) { result.previewOnly = true; result.summary = ''; }
     await applyTranslationToChapter(chapter, result, { updateTitle: false });
+    if (keptLock) { chapter.lockInfo = keptLock; await dbSaveChapter(chapter); }
     alert(`แปล "${chapter.title}" ใหม่และบันทึกแล้ว${keepEdits ? ` (เก็บย่อหน้าที่แก้เองไว้ ${editedCount} ย่อหน้า)` : ''}`);
   } catch (err) {
     if (!isAbortError(err)) alert(`แปลบทใหม่ไม่สำเร็จ: ${err.message}`);
@@ -786,6 +872,11 @@ async function applyTranslationToChapter(chapter, result, { updateTitle = false,
   chapter.chapterType = result.chapterType || 'story';
   if (result.placeholderReason) chapter.placeholderReason = result.placeholderReason;
   else delete chapter.placeholderReason;
+  if (result.lockInfo) chapter.lockInfo = result.lockInfo;
+  else delete chapter.lockInfo;
+  delete chapter.pendingLockInfo;
+  if (result.previewOnly) chapter.previewOnly = true;
+  else delete chapter.previewOnly;
   delete chapter.status;
   chapter.translationMeta = result.translationMeta;
   if (updateTitle && result.chapterTitle) chapter.title = result.chapterTitle;
@@ -825,6 +916,8 @@ async function translatePendingChapterUnlocked(chapter, ctx, { signal = null, on
   let rawText = chapter.paragraphs.map(p => p.src || '').filter(Boolean).join('\n\n');
   let rawChapTitle = chapter.title;
   let nextUrl;
+  // ต้นฉบับที่เก็บไว้ตอนเช็กตอนใหม่ อาจเป็นแค่ตัวอย่างของตอนที่ต้องซื้อ
+  let lockInfo = chapter.pendingLockInfo || null;
   if (!rawText && chapter.sourceUrl) {
     if (onStatus) onStatus(`กำลังดึงเนื้อหา "${chapter.title}"...`);
     const scraped = await scrapePage(chapter.sourceUrl, signal, { bookId: chapter.bookId });
@@ -832,11 +925,12 @@ async function translatePendingChapterUnlocked(chapter, ctx, { signal = null, on
     rawChapTitle = scraped.rawChapTitle || rawChapTitle;
     if (scraped.nextUrlSource !== 'guess') nextUrl = scraped.nextUrl;
     if (scraped.author) ctx.author = scraped.author;
+    lockInfo = scraped.lockInfo || null;
   }
   if (!rawText) throw new Error('ตอนนี้ไม่มีเนื้อหาต้นฉบับ');
   const bookChaps = await dbGetChaptersByBook(chapter.bookId);
   const result = await translateChapter(rawText, ctx, {
-    signal, onStatus, rawChapTitle,
+    signal, onStatus, rawChapTitle, lockInfo,
     prevChapter: findPrevStoryChapter(bookChaps, chapter.order ?? 0)
   });
   await applyTranslationToChapter(chapter, result, { updateTitle: true, nextUrl });
@@ -902,6 +996,10 @@ async function refetchChapterFromSource(chapId) {
   showGlobalToast('กำลังดึงเนื้อหาจากหน้าเว็บต้นฉบับใหม่...');
   try {
     const scraped = await scrapePage(chapter.sourceUrl, controller.signal, { bookId: chapter.bookId });
+    if (scraped.lockInfo) {
+      alert(`หน้าเว็บยังให้อ่านได้แค่ตัวอย่าง (${describeLockInfo(scraped.lockInfo).short})`);
+      return;
+    }
     if (classifyChapterByRules(scraped.rawChapTitle, scraped.text).type === 'placeholder') {
       alert('หน้าเว็บยังเป็นเนื้อหากันก๊อปอยู่ ผู้เขียนอาจยังไม่ได้อัปเดตเนื้อหาจริง ลองใหม่ภายหลังนะครับ');
       return;
@@ -1238,7 +1336,7 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       </div>
     `, true);
 
-    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, signal, { bookId: requestBookId });
+    const { text, nextUrl, rawChapTitle, rawBookTitle, author, lockInfo } = await scrapePage(targetUrl, signal, { bookId: requestBookId });
     if (author) {
       ctx.author = author;
       if (currentBookId === requestBookId) currentAuthor = author;
@@ -1254,6 +1352,7 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       signal,
       rawChapTitle,
       rawBookTitle,
+      lockInfo,
       prevChapter: findPrevStoryChapter(chapters),
       onStatus: (msg) => {
         if (currentBookId !== requestBookId) return;
@@ -1325,13 +1424,14 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
 
 // ดึงและแปลตอนจาก URL แล้วบันทึกต่อท้ายเรื่อง (ถ้ามีงานอื่นบันทึกตอนนี้ไประหว่างแปล ใช้ของเดิม)
 async function translateAndSaveNextChapter(ctx, chapterUrl, signal, onStatus) {
-  const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(chapterUrl, signal, { bookId: ctx.bookId });
+  const { text, nextUrl, rawChapTitle, rawBookTitle, author, lockInfo } = await scrapePage(chapterUrl, signal, { bookId: ctx.bookId });
   if (author) ctx.author = author;
 
   const result = await translateChapter(text, ctx, {
     signal,
     rawChapTitle,
     rawBookTitle,
+    lockInfo,
     prevChapter: findPrevStoryChapter(chapters),
     onStatus
   });
@@ -1663,7 +1763,7 @@ async function startTranslateFirst() {
       return;
     }
 
-    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(url, signal, { bookId: targetBookId });
+    const { text, nextUrl, rawChapTitle, rawBookTitle, author, lockInfo } = await scrapePage(url, signal, { bookId: targetBookId });
     // ภาษาต้นฉบับ: เรื่องเดิมใช้ค่าที่บันทึกไว้, เรื่องใหม่ใช้ที่ผู้ใช้เลือกหรือตรวจจากเนื้อหา
     const chosenLang = document.getElementById('import-source-lang')?.value || 'auto';
     const sourceLang = existingBook?.sourceLang
@@ -1685,6 +1785,7 @@ async function startTranslateFirst() {
       signal,
       rawChapTitle,
       rawBookTitle,
+      lockInfo,
       prevChapter: prevChap,
       onStatus: (msg) => {
         status.style.background = '#fffbeb';

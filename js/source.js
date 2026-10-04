@@ -15,14 +15,16 @@ function normalizeNavText(text) {
 //   contentSelector / titleSelector / removeSelector / nextSelector: แยกเนื้อหาจาก HTML ด้วย CSS selector
 //   jinaTarget: ให้ r.jina.ai อ่านเฉพาะส่วนนี้ของหน้า (X-Target-Selector) ใช้กับเว็บที่โหลดเนื้อหาด้วย JavaScript
 //   jinaWait: รอจนส่วนนี้ปรากฏก่อนอ่าน (X-Wait-For-Selector) | noCache: ไม่ใช้ผลที่ r.jina.ai เก็บไว้ (X-No-Cache)
-//   nextMode: 'auto' (หาลิงก์ตอนถัดไป) | 'increment' (เพิ่มเลขตอนท้าย URL เช่น chapter-1 -> chapter-2)
+//   nextMode: 'auto' (หาลิงก์ตอนถัดไป ถ้าไม่เจอเดาจากเลข URL) | 'link' (หาลิงก์เท่านั้น ไม่เดา) | 'increment' (เพิ่มเลขตอนท้าย URL เช่น chapter-1 -> chapter-2)
+//   lockPattern: regex ที่เจอใน HTML ของหน้า = ตอนนี้ต้องซื้อ/อ่านได้แค่ตัวอย่าง | unlockPattern: regex ที่แปลว่าผู้อ่านมีสิทธิ์แล้ว
 const BUILTIN_SITE_PROFILES = [
   { host: 'ncode.syosetu.com', contentSelector: '.js-novel-text, .p-novel__body, #novel_honbun', titleSelector: '.p-novel__title, .novel_subtitle', removeSelector: '', nextSelector: '' },
   { host: 'kakuyomu.jp', contentSelector: '.widget-episodeBody', titleSelector: '.widget-episodeTitle', removeSelector: '', nextSelector: '' },
   { host: 'royalroad.com', contentSelector: '.chapter-content', titleSelector: 'h1', removeSelector: '', nextSelector: '' },
   // webnovel: ให้ r.jina.ai อ่านเฉพาะเนื้อหา (ไม่งั้นได้ชื่อเรื่อง/ผู้แต่ง/กล่องของขวัญปนมา)
   // ลิงก์ตอนถัดไปไม่อยู่ในเนื้อหา แต่อยู่ใน <link rel="next"> ของ HTML ซึ่งระบบหาให้เอง (ใช้คำขอเพิ่ม 1 ครั้งต่อตอน)
-  { host: 'webnovel.com', contentSelector: '', titleSelector: '', removeSelector: '', nextSelector: '', jinaTarget: '.cha-words' },
+  // ตอนที่ต้องซื้อ/อ่านต่อในแอพ: HTML มี "vipStatus":2 "price":15 และ "download Webnovel app to continue" ส่วน "isAuth":1 = ผู้อ่านมีสิทธิ์แล้ว
+  { host: 'webnovel.com', contentSelector: '', titleSelector: '', removeSelector: '', nextSelector: '', jinaTarget: '.cha-words', nextMode: 'link', lockPattern: '"vipStatus"\\s*:\\s*[1-9]|download Webnovel app to continue', unlockPattern: '"isAuth"\\s*:\\s*1' },
   // wtr-lab: เนื้อหาโหลดด้วย JavaScript และหน้าเว็บมี iframe โฆษณาที่ทำให้ r.jina.ai อ่านผิดหน้า จึงต้องระบุส่วนที่จะอ่าน
   { host: 'wtr-lab.com', contentSelector: '', titleSelector: '', removeSelector: '', nextSelector: '', jinaTarget: '.reader-container', jinaWait: '.chapter-wrap p', noCache: true, nextMode: 'increment' }
 ];
@@ -54,7 +56,12 @@ function getSiteProfiles() {
   const removed = new Set(getRemovedBuiltinHosts());
   const hosts = new Set(saved.map(p => p.host));
   const added = BUILTIN_SITE_PROFILES.filter(p => !hosts.has(p.host) && !removed.has(p.host)).map(p => ({ ...p, builtin: true }));
-  return [...saved, ...added];
+  // โปรไฟล์ตั้งต้นที่บันทึกไว้จากรุ่นก่อน: เติมฟิลด์ใหม่ที่ยังไม่มี (ค่าที่ผู้ใช้แก้หรือลบเป็นค่าว่างไว้ไม่ถูกแตะ)
+  const upgraded = saved.map(p => {
+    const def = p.builtin ? BUILTIN_SITE_PROFILES.find(b => b.host === p.host) : null;
+    return def ? { ...def, ...p } : p;
+  });
+  return [...upgraded, ...added];
 }
 
 function saveSiteProfiles(profiles) {
@@ -79,6 +86,45 @@ function getProfileJinaHeaders(profile) {
   }
   if (profile.noCache) h['X-No-Cache'] = 'true';
   return h;
+}
+
+// ---------- ตอนที่ต้องซื้อ / อ่านได้แค่ตัวอย่าง ----------
+/**
+ * ตรวจจาก HTML (หรือ markdown เต็มหน้า) ตาม lockPattern ของโปรไฟล์
+ * คืน null ถ้าอ่านได้ปกติ หรือ { kind: 'app_only' | 'paid', price, site }
+ * kind app_only = เว็บให้อ่านต่อเฉพาะในแอพของเว็บ, paid = ต้องซื้อ/ใช้เหรียญ/เป็นสมาชิก
+ */
+function detectLockedPage(content, profile) {
+  if (!content || !profile?.lockPattern) return null;
+  let lockRe;
+  try { lockRe = new RegExp(profile.lockPattern, 'i'); } catch (e) { return null; }
+  if (!lockRe.test(content)) return null;
+  if (profile.unlockPattern) {
+    try { if (new RegExp(profile.unlockPattern, 'i').test(content)) return null; } catch (e) { /* pattern ผิดรูปแบบ */ }
+  }
+  const appOnly = /download\s+[\w ]{0,30}app\s+to\s+continue|continue\s+(reading\s+)?(in|on)\s+the\s+app|อ่านต่อ(ได้)?ในแอ(ป|พ)|下载\s*APP|アプリで続き|앱에서\s*계속/i.test(content);
+  const priceMatch = content.match(/"price"\s*:\s*(\d+)/);
+  const price = priceMatch && Number(priceMatch[1]) > 0 ? Number(priceMatch[1]) : null;
+  return { kind: appOnly ? 'app_only' : 'paid', price, site: profile.host || '' };
+}
+
+/** ข้อความอธิบายว่าทำไมอ่านฉบับเต็มไม่ได้ ตามข้อมูลที่ตรวจพบจากหน้าเว็บ */
+function describeLockInfo(info) {
+  const site = info?.site || 'เว็บต้นทาง';
+  const price = info?.price ? ` (ราคา ${info.price} เหรียญ)` : '';
+  if (info?.kind === 'app_only') {
+    return {
+      short: `${site} ให้อ่านตอนนี้บนเว็บได้แค่ช่วงแรก ส่วนที่เหลืออ่านได้ในแอพของ ${site} เท่านั้น${price}`,
+      heading: `🔒 อ่านฉบับเต็มไม่ได้: ${site} ให้อ่านต่อเฉพาะในแอพของเว็บ`
+    };
+  }
+  if (info?.kind === 'paid') {
+    return {
+      short: `ตอนนี้ต้องซื้อหรือปลดล็อกที่ ${site} ก่อน${price} หน้าเว็บจึงมีแค่ตัวอย่าง`,
+      heading: `🔒 อ่านฉบับเต็มไม่ได้: ต้องซื้อตอนนี้ที่ ${site}${price}`
+    };
+  }
+  return { short: 'ตอนนี้ต้องซื้อหรือเข้าสู่ระบบที่เว็บต้นทางก่อน', heading: '🔒 ตอนนี้ต้องซื้อหรือเข้าสู่ระบบที่เว็บต้นทางก่อนจึงจะอ่านได้' };
 }
 
 // ---------- สุขภาพของโปรไฟล์: เตือนเมื่อ selector หาเนื้อหาไม่เจอติดกันหลายครั้ง (เว็บอาจเปลี่ยนหน้าตา) ----------
@@ -822,14 +868,17 @@ function renderSiteProfiles() {
         ${field(idx, 'nextSelector', 'selector ลิงก์ตอนถัดไป', 'เช่น a.next')}
         ${field(idx, 'removeSelector', 'selector ส่วนที่ตัดทิ้ง', 'เช่น .ads, script, .comments', true)}
       </div>
-      <details style="font-size:11px; margin-top:4px;" ${p.jinaTarget || p.jinaWait || p.noCache || p.nextMode === 'increment' ? 'open' : ''}>
+      <details style="font-size:11px; margin-top:4px;" ${p.jinaTarget || p.jinaWait || p.noCache || (p.nextMode && p.nextMode !== 'auto') || p.lockPattern ? 'open' : ''}>
         <summary style="cursor:pointer; opacity:0.75;">ตัวเลือกขั้นสูง (เว็บที่โหลดเนื้อหาด้วย JavaScript / เลขตอนใน URL)</summary>
         <div class="bible-char-grid" style="margin-top:4px;">
           ${field(idx, 'jinaTarget', 'ให้ r.jina.ai อ่านเฉพาะส่วน', 'เช่น .reader-container')}
           ${field(idx, 'jinaWait', 'รอจนส่วนนี้โหลดเสร็จ', 'เช่น .chapter p')}
+          ${field(idx, 'lockPattern', 'ข้อความ/regex ใน HTML ที่แปลว่าต้องซื้อ', 'เช่น unlock this chapter')}
+          ${field(idx, 'unlockPattern', 'ข้อความ/regex ที่แปลว่าอ่านได้แล้ว', 'ไม่บังคับ')}
           <label>ตอนถัดไป
             <select onchange="siteProfilesDraft[${idx}].nextMode = this.value">
-              <option value="auto" ${p.nextMode !== 'increment' ? 'selected' : ''}>หาลิงก์ในหน้า (อัตโนมัติ)</option>
+              <option value="auto" ${!p.nextMode || p.nextMode === 'auto' ? 'selected' : ''}>หาลิงก์ในหน้า (ไม่เจอจะเดาจากเลข URL)</option>
+              <option value="link" ${p.nextMode === 'link' ? 'selected' : ''}>หาลิงก์ในหน้าเท่านั้น (ไม่เดา)</option>
               <option value="increment" ${p.nextMode === 'increment' ? 'selected' : ''}>เพิ่มเลขตอนท้าย URL</option>
             </select>
           </label>
@@ -851,7 +900,7 @@ function resetSiteProfiles() {
 }
 
 // ---------- นำเข้า/ส่งออกโปรไฟล์ (แชร์ให้คนอื่นได้) ----------
-const PROFILE_TEXT_FIELDS = ['host', 'contentSelector', 'titleSelector', 'nextSelector', 'removeSelector', 'jinaTarget', 'jinaWait'];
+const PROFILE_TEXT_FIELDS = ['host', 'contentSelector', 'titleSelector', 'nextSelector', 'removeSelector', 'jinaTarget', 'jinaWait', 'lockPattern', 'unlockPattern'];
 
 /** ตรวจโปรไฟล์จากไฟล์: เก็บเฉพาะฟิลด์ที่รู้จัก เป็นข้อความสั้นๆ และมีโดเมนที่ถูกต้อง */
 function sanitizeSiteProfile(raw) {
@@ -861,7 +910,7 @@ function sanitizeSiteProfile(raw) {
   p.host = (p.host || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^(www|m)\./, '').replace(/\/.*$/, '');
   if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(p.host)) return null;
   p.noCache = raw.noCache === true;
-  p.nextMode = raw.nextMode === 'increment' ? 'increment' : 'auto';
+  p.nextMode = ['increment', 'link'].includes(raw.nextMode) ? raw.nextMode : 'auto';
   p.enabled = raw.enabled !== false;
   return p;
 }
@@ -953,6 +1002,7 @@ async function testSiteProfile() {
       <div>✓ ดึงได้ด้วย: <b>${escapeHtml(viaLabel)}</b>${page.profileFailed ? ' <span style="color:#dc2626;">(selector ของโปรไฟล์หาเนื้อหาไม่เจอ)</span>' : ''}</div>
       <div>ชื่อตอน: <b>${escapeHtml(page.rawChapTitle)}</b> · ${page.text.length.toLocaleString()} ตัวอักษร · ${page.pageCount || 1} หน้า · ภาษาที่ตรวจพบ: ${escapeHtml(getLangName(detectSourceLang(page.text) || 'other'))}</div>
       <div>ตอนถัดไป (${escapeHtml(sourceLabel)}): <span style="word-break:break-all;">${escapeHtml(page.nextUrl || '-')}</span></div>
+      ${page.lockInfo ? `<div style="color:#b45309;">🔒 ตรวจพบว่าเป็นตอนที่ต้องซื้อ/อ่านต่อในแอพ: ${escapeHtml(describeLockInfo(page.lockInfo).short)}</div>` : ''}
       <div class="para-src" style="display:block; max-height:140px; overflow:auto;">${escapeHtml(page.text.slice(0, 600))}${page.text.length > 600 ? '…' : ''}</div>`;
   } catch (err) {
     box.innerHTML = `<span style="color:#dc2626;">✗ ${escapeHtml(describeScrapeError(err))}</span>`;

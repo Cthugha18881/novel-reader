@@ -640,6 +640,33 @@
       setNewChapterState('b3', { count: 0, checkedAt: Date.now(), mode: 'toc' });
       return newChapterBadgeHtml('b1').includes('3 ตอนใหม่') && newChapterBadgeHtml('b2').includes('มีตอนใหม่') && newChapterBadgeHtml('b3').includes('ยังไม่มีตอนใหม่') && newChapterBadgeHtml('zz') === '';
     }));
+    // ---------- Round 2 step 3: locked chapters ----------
+    const WN = BUILTIN_SITE_PROFILES.find(p => p.host === 'webnovel.com');
+    test('detectLockedPage: webnovel ตอนที่ต้องอ่านต่อในแอพ / ตอนฟรี / ตอนที่ซื้อแล้ว', () => {
+      const locked = '"nextChapterId":"-1","vipStatus":2,"price":15,"originalPrice":0 ... "isAuth":0 ... <p>This is the end of Part One, and download Webnovel app to continue:</p>';
+      const free = '"vipStatus":0,"price":0,"isAuth":0';
+      const bought = '"vipStatus":2,"price":15,"isAuth":1';
+      return eq([detectLockedPage(locked, WN), detectLockedPage(free, WN), detectLockedPage(bought, WN), detectLockedPage(locked, null)],
+        [{ kind: 'app_only', price: 15, site: 'webnovel.com' }, null, null, null]);
+    });
+    test('detectLockedPage: ต้องซื้อ (ไม่ใช่อ่านในแอพ) และ pattern ผิดรูปแบบไม่พัง', () =>
+      eq(detectLockedPage('"vipStatus":1,"price":8', WN), { kind: 'paid', price: 8, site: 'webnovel.com' }) && detectLockedPage('x', { lockPattern: '([' }) === null);
+    test('describeLockInfo: บอกเหตุผลและราคา', () => {
+      const a = describeLockInfo({ kind: 'app_only', price: 15, site: 'webnovel.com' });
+      const b = describeLockInfo({ kind: 'paid', price: 8, site: 'x.com' });
+      return a.short.includes('แอพ') && a.short.includes('15') && b.heading.includes('ต้องซื้อ') && b.short.includes('8 เหรียญ') && describeLockInfo(null).short.length > 0;
+    });
+    test('getSiteProfiles: โปรไฟล์ตั้งต้นที่บันทึกไว้จากรุ่นก่อน ได้ฟิลด์ใหม่ (lockPattern) โดยค่าที่แก้เองไม่ถูกทับ', () => withStorage(['nov_site_profiles', 'nov_site_profiles_removed'], () => {
+      localStorage.setItem('nov_site_profiles', JSON.stringify([{ host: 'webnovel.com', jinaTarget: '.mine', contentSelector: '', builtin: true }, { host: 'my.site', contentSelector: '#c' }]));
+      const wn = getSiteProfiles().find(p => p.host === 'webnovel.com');
+      const mine = getSiteProfiles().find(p => p.host === 'my.site');
+      return wn.jinaTarget === '.mine' && wn.lockPattern === WN.lockPattern && !('lockPattern' in mine);
+    }));
+    test('buildPlaceholderResult: เก็บข้อมูลการล็อกไว้กับตอน', () => {
+      const r = buildPlaceholderResult(['预览'], '第1章', '书', 'locked', { kind: 'paid', price: 3, site: 's' });
+      const rec = buildChapterRecord({ bookId: 'b', order: 1, title: 't', result: r, sourceUrl: 'u', nextUrl: null });
+      return r.chapterType === 'placeholder' && eq(rec.lockInfo, { kind: 'paid', price: 3, site: 's' }) && rec.placeholderReason === 'locked';
+    });
     const passed = results.filter(r => r.ok).length;
     const summary = document.getElementById('summary');
     summary.textContent = `ผ่าน ${passed}/${results.length}`;

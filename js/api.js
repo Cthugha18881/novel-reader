@@ -255,6 +255,7 @@ function buildChapterRecord({ bookId, order, title, result, sourceUrl = '', next
     sourceUrl,
     nextUrl,
     ...(result.placeholderReason ? { placeholderReason: result.placeholderReason } : {}),
+    ...(result.lockInfo ? { lockInfo: result.lockInfo } : {}),
     translationMeta: result.translationMeta || buildTranslationMeta()
   };
 }
@@ -368,19 +369,20 @@ async function fetchJinaMarkdown(url, signal, profile = null) {
 const htmlNavMisses = new Map();
 const HTML_NAV_MAX_MISSES = 2;
 
+/** หาตอนถัดไปจาก HTML ของหน้า คืน { url, html } (html ใช้ตรวจตอนที่ต้องซื้อต่อได้ ไม่ต้องดึงซ้ำ) */
 async function findNextViaHtml(url, signal, profile) {
   const host = hostOf(url);
-  if ((htmlNavMisses.get(host) || 0) >= HTML_NAV_MAX_MISSES) return null;
+  if ((htmlNavMisses.get(host) || 0) >= HTML_NAV_MAX_MISSES) return { url: null, html: null };
   try {
     const html = await fetchJinaHtml(url, signal, profile);
     const nav = findNextInHtml(new DOMParser().parseFromString(html, 'text/html'), url, profile);
     const found = nav && (nav.kind === 'chapter' || !isContinuationPage(url, nav.url)) ? nav.url : null;
     htmlNavMisses.set(host, found ? 0 : (htmlNavMisses.get(host) || 0) + 1);
-    return found;
+    return { url: found, html };
   } catch (e) {
     if (isAbortError(e)) throw e;
     htmlNavMisses.set(host, (htmlNavMisses.get(host) || 0) + 1);
-    return null;
+    return { url: null, html: null };
   }
 }
 
@@ -459,7 +461,7 @@ async function scrapeGeneric(url, signal, profile = null, { allowAi = true } = {
     }
   }
 
-  return { text, nextUrl, nextUrlSource, pageCount: textParts.length, rawChapTitle, rawBookTitle: first.rawBookTitle, author: first.author, via };
+  return { text, nextUrl, nextUrlSource, pageCount: textParts.length, rawChapTitle, rawBookTitle: first.rawBookTitle, author: first.author, via, rawMarkdown: firstMd };
 }
 
 const AI_EXTRACT_THRESHOLD = 300;
@@ -524,14 +526,32 @@ async function scrapePageInner(url, signal = null, { bookId = null, allowAi = tr
     page.nextUrl = computeNextNumericUrl(url);
     page.nextUrlSource = page.nextUrl ? 'increment' : null;
   }
+  let pageHtml = null;
   if (!page.nextUrl) {
-    const htmlNext = await findNextViaHtml(url, signal, profile);
-    if (htmlNext) {
-      page.nextUrl = htmlNext;
+    const htmlNav = await findNextViaHtml(url, signal, profile);
+    pageHtml = htmlNav.html;
+    if (htmlNav.url) {
+      page.nextUrl = htmlNav.url;
       page.nextUrlSource = 'html';
     }
   }
-  if (!page.nextUrl) {
+
+  // ตอนที่ต้องซื้อ/อ่านต่อในแอพ (ตาม lockPattern ของโปรไฟล์): ตรวจจาก HTML เต็มหน้า
+  // เพราะเนื้อหาที่ดึงมา (เช่นเฉพาะ .cha-words) เป็นแค่ตัวอย่าง ไม่มีข้อความบอกว่าถูกล็อก
+  let lockInfo = null;
+  if (profile?.lockPattern) {
+    if (!pageHtml && !profile.jinaTarget && page.rawMarkdown) {
+      lockInfo = detectLockedPage(page.rawMarkdown, profile);
+    } else {
+      if (!pageHtml) {
+        try { pageHtml = await fetchJinaHtml(url, signal, profile); } catch (e) { if (isAbortError(e)) throw e; }
+      }
+      lockInfo = detectLockedPage(pageHtml, profile);
+    }
+  }
+  delete page.rawMarkdown;
+  // nextMode 'link' = เว็บที่เลขใน URL ไม่ได้เรียงตามตอน (เช่น webnovel) ไม่เดาจากเลข
+  if (!page.nextUrl && profile?.nextMode !== 'link') {
     page.nextUrl = computeNextNumericUrl(url);
     page.nextUrlSource = 'guess';
   }
@@ -541,7 +561,8 @@ async function scrapePageInner(url, signal = null, { bookId = null, allowAi = tr
     rawChapTitle: page.rawChapTitle || "บทนิยาย",
     rawBookTitle: page.rawBookTitle || "",
     author: page.author || "",
-    profileFailed
+    profileFailed,
+    lockInfo
   };
 }
 
@@ -1427,7 +1448,7 @@ async function executeApiCall(rawText, ctx, {
 }
 
 /** ตอนกันก๊อป/ตอนที่ล็อกไว้: ไม่เรียก AI เก็บต้นฉบับไว้รอดึงเนื้อหาจริงภายหลัง */
-function buildPlaceholderResult(sourceParas, rawChapTitle, rawBookTitle, reason = 'placeholder-keyword') {
+function buildPlaceholderResult(sourceParas, rawChapTitle, rawBookTitle, reason = 'placeholder-keyword', lockInfo = null) {
   return {
     bookTitle: rawBookTitle,
     chapterTitle: rawChapTitle || (reason === 'locked' ? 'ตอนที่ล็อกไว้' : 'ตอนกันก๊อป'),
@@ -1436,6 +1457,7 @@ function buildPlaceholderResult(sourceParas, rawChapTitle, rawBookTitle, reason 
     missingCount: 0,
     chapterType: 'placeholder',
     placeholderReason: reason,
+    ...(lockInfo ? { lockInfo } : {}),
     translationMeta: { ...buildTranslationMeta(), skipped: 'placeholder' }
   };
 }
@@ -1453,7 +1475,7 @@ function buildChapterTail(chapter, maxParas = 4, maxChars = 500) {
  * -> ตรวจทาน -> (โหมด best) เกลา + ตรวจความหมาย -> แก้อักษรจีนที่หลงเหลือ -> ทำความสะอาด
  * @param {object} [options.prevChapter] ตอนเนื้อเรื่องก่อนหน้า (ใช้ทั้งสรุปและท้ายตอนเป็นบริบท)
  */
-async function translateChapter(rawText, ctx, { onStatus = null, signal = null, rawChapTitle = "", rawBookTitle = "", prevSummary = "", prevChapter = null } = {}) {
+async function translateChapter(rawText, ctx, { onStatus = null, signal = null, rawChapTitle = "", rawBookTitle = "", prevSummary = "", prevChapter = null, lockInfo = null } = {}) {
   if (!ctx?.bookId) throw new Error('ไม่พบข้อมูลนิยายสำหรับการแปล');
   throwIfAborted(signal);
   // ใช้ signal เป็นตัวผูกสถิติการใช้งานกับเรื่อง/ตอนนี้ (usage.js) จึงต้องมีเสมอ
@@ -1461,6 +1483,11 @@ async function translateChapter(rawText, ctx, { onStatus = null, signal = null, 
   beginChapterUsage(signal, ctx.bookId);
 
   const sourceParas = splitSourceParagraphs(rawText);
+  // เว็บบอกว่าตอนนี้ต้องซื้อ/อ่านต่อในแอพ (ตรวจตอนดึงหน้าเว็บ): ไม่แปลข้อความตัวอย่าง
+  if (lockInfo) {
+    if (onStatus) onStatus('ตอนนี้ต้องซื้อหรืออ่านต่อในแอพของเว็บ ได้มาแค่ตัวอย่าง จึงข้ามการแปลไว้ก่อน');
+    return buildPlaceholderResult(sourceParas, rawChapTitle, rawBookTitle, 'locked', lockInfo);
+  }
   const chapterRule = classifyChapterByRules(rawChapTitle, rawText);
   if (chapterRule.type === 'placeholder') {
     if (onStatus) onStatus(chapterRule.reason === 'locked' ? 'ตรวจพบตอนที่ต้องซื้อ/ล็อกอินก่อนอ่าน ข้ามการแปลไว้ก่อน' : 'ตรวจพบตอนกันก๊อป (เนื้อหาหลอก) ข้ามการแปลไว้ก่อน');
