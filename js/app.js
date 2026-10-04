@@ -27,12 +27,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v2.8.0",
+    title: "คู่มือเริ่มต้น v2.9.0",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.8.0", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v2.9.0", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.8.0"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v2.9.0"
   }];
 }
 
@@ -136,10 +136,15 @@ const CHAPTER_TYPE_LABELS = {
 
 function buildPlaceholderNoticeHtml(chap) {
   const srcHtml = chap.paragraphs.map(p => `<p>${escapeHtml(p.src || '')}</p>`).join('');
+  const locked = chap.placeholderReason === 'locked';
+  const heading = locked ? '🔒 ตอนนี้ต้องซื้อหรือเข้าสู่ระบบที่เว็บต้นทางก่อนจึงจะอ่านได้' : '🛡️ ตอนนี้ยังเป็นเนื้อหากันก๊อป (ข้อความหลอก)';
+  const detail = locked
+    ? 'หน้าเว็บมีแค่ตัวอย่างสั้นๆ ระบบจึงไม่แปลข้อความตัวอย่าง ถ้าคุณมีสิทธิ์อ่านตอนนี้ ให้คัดลอกเนื้อหามาวางที่ "วางข้อความ/ไฟล์" แทน'
+    : 'ผู้เขียนมักเปลี่ยนเป็นเนื้อหาจริงภายหลัง ระบบจึงยังไม่แปลเพื่อประหยัดโควตา และไม่ใช้ตอนนี้ต่อบริบทของเรื่อง';
   return `
     <div class="placeholder-notice">
-      <div style="font-weight: 600; margin-bottom: 4px;">🛡️ ตอนนี้ยังเป็นเนื้อหากันก๊อป (ข้อความหลอก)</div>
-      <div style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">ผู้เขียนมักเปลี่ยนเป็นเนื้อหาจริงภายหลัง ระบบจึงยังไม่แปลเพื่อประหยัดโควตา และไม่ใช้ตอนนี้ต่อบริบทของเรื่อง</div>
+      <div style="font-weight: 600; margin-bottom: 4px;">${heading}</div>
+      <div style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">${detail}</div>
       ${chap.sourceUrl ? `<button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="refetchChapterFromSource(${jsArg(chap.id)})">🔄 ดึงเนื้อหาจริงจากหน้าเว็บใหม่</button>` : ''}
       <details style="margin-top: 10px; font-size: 12px;"><summary style="cursor: pointer; opacity: 0.7;">ดูข้อความต้นฉบับที่ดึงมา</summary><div class="para-src" style="display: block;">${srcHtml}</div></details>
     </div>`;
@@ -151,7 +156,9 @@ function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
   let parasHtml = '';
   let junkCount = 0;
 
-  if (chapterType === 'placeholder') {
+  if (chap.status === 'pending') {
+    parasHtml = buildPendingNoticeHtml(chap);
+  } else if (chapterType === 'placeholder') {
     parasHtml = buildPlaceholderNoticeHtml(chap);
   } else {
     chap.paragraphs.forEach((p, pIdx) => {
@@ -622,13 +629,15 @@ function setupSelectionMonitor() {
 
     if (text && text.length >= 1 && text.length <= 40) {
       selectedWordBuffer = text;
-      isSelectedChinese = /[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uD840-\uD87F][\uDC00-\uDFFF]?/.test(text);
+      // \u0E02\u0E49\u0E2D\u0E04\u0E27\u0E32\u0E21\u0E17\u0E35\u0E48\u0E40\u0E25\u0E37\u0E2D\u0E01\u0E40\u0E1B\u0E47\u0E19\u0E20\u0E32\u0E29\u0E32\u0E15\u0E49\u0E19\u0E09\u0E1A\u0E31\u0E1A (\u0E08\u0E35\u0E19/\u0E0D\u0E35\u0E48\u0E1B\u0E38\u0E48\u0E19/\u0E40\u0E01\u0E32\u0E2B\u0E25\u0E35 \u0E2B\u0E23\u0E37\u0E2D\u0E20\u0E32\u0E29\u0E32\u0E25\u0E30\u0E15\u0E34\u0E19\u0E43\u0E19\u0E40\u0E23\u0E37\u0E48\u0E2D\u0E07\u0E17\u0E35\u0E48\u0E15\u0E49\u0E19\u0E09\u0E1A\u0E31\u0E1A\u0E40\u0E1B\u0E47\u0E19\u0E20\u0E32\u0E29\u0E32\u0E2D\u0E31\u0E07\u0E01\u0E24\u0E29)
+      isSelectedChinese = looksLikeSourceText(text) ||
+        (['en', 'other'].includes(currentSourceLang) && /[A-Za-z]/.test(text) && !/[\u0E00-\u0E7F]/.test(text));
 
       const tag = document.getElementById('sel-tag-label');
       const preview = document.getElementById('sel-preview-text');
       const pairBtn = document.getElementById('reverse-pair-btn');
 
-      tag.innerText = isSelectedChinese ? "คำจีนที่เลือก:" : "คำไทยที่เลือก:";
+      tag.innerText = isSelectedChinese ? "คำต้นฉบับที่เลือก:" : "คำไทยที่เลือก:";
       preview.innerText = text;
 
       let paraThEl = sel.anchorNode;
@@ -706,10 +715,11 @@ async function retranslateSpecificChapterDirect(chapId) {
     }
   }
   if (!chapter || !Array.isArray(chapter.paragraphs)) return alert('ไม่พบบทนี้ในฐานข้อมูล');
+  if (chapter.status === 'pending') return translatePendingChapterNow(chapId);
   // ตอนกันก๊อป: เนื้อหาจริงอาจถูกเปลี่ยนที่หน้าเว็บแล้ว ต้องดึงใหม่ ไม่ใช่แปลข้อความหลอกเดิม
   if (chapter.chapterType === 'placeholder' && chapter.sourceUrl) return refetchChapterFromSource(chapId);
   const rawText = chapter.paragraphs.map(p => p.src || '').filter(Boolean).join('\n\n');
-  if (!rawText) return alert('บทนี้ไม่มีต้นฉบับภาษาจีน จึงแปลใหม่ไม่ได้');
+  if (!rawText) return alert('บทนี้ไม่มีข้อความต้นฉบับ จึงแปลใหม่ไม่ได้');
 
   if (isTaskRunning('retranslate')) return alert('กำลังแปลบทอื่นใหม่อยู่ กรุณารอให้เสร็จก่อน');
 
@@ -767,6 +777,9 @@ async function applyTranslationToChapter(chapter, result, { updateTitle = false,
   chapter.paragraphs = result.paragraphs;
   chapter.summary = result.summary || '';
   chapter.chapterType = result.chapterType || 'story';
+  if (result.placeholderReason) chapter.placeholderReason = result.placeholderReason;
+  else delete chapter.placeholderReason;
+  delete chapter.status;
   chapter.translationMeta = result.translationMeta;
   if (updateTitle && result.chapterTitle) chapter.title = result.chapterTitle;
   if (nextUrl) chapter.nextUrl = nextUrl;
@@ -779,6 +792,73 @@ async function applyTranslationToChapter(chapter, result, { updateTitle = false,
     await renderVirtualWindow(currentChapterIndex);
   }
   await refreshShelfViewOnly(chapter.bookId);
+}
+
+// ==================== PENDING CHAPTERS (ตอนที่รอแปล) ====================
+/**
+ * แปลตอนที่รอแปล: มาจากการวางข้อความ/ไฟล์ (มีต้นฉบับแล้ว) หรือจากสารบัญ (มีแค่ URL ต้องดึงก่อน)
+ * ใช้ร่วมกันทั้งปุ่ม "แปลตอนนี้" และการแปลล่วงหน้าหลายตอน
+ */
+async function translatePendingChapterCore(chapter, ctx, { signal = null, onStatus = null } = {}) {
+  let rawText = chapter.paragraphs.map(p => p.src || '').filter(Boolean).join('\n\n');
+  let rawChapTitle = chapter.title;
+  let nextUrl;
+  if (!rawText && chapter.sourceUrl) {
+    if (onStatus) onStatus(`กำลังดึงเนื้อหา "${chapter.title}"...`);
+    const scraped = await scrapePage(chapter.sourceUrl, signal, { bookId: chapter.bookId });
+    rawText = scraped.text;
+    rawChapTitle = scraped.rawChapTitle || rawChapTitle;
+    if (scraped.nextUrlSource !== 'guess') nextUrl = scraped.nextUrl;
+    if (scraped.author) ctx.author = scraped.author;
+  }
+  if (!rawText) throw new Error('ตอนนี้ไม่มีเนื้อหาต้นฉบับ');
+  const bookChaps = await dbGetChaptersByBook(chapter.bookId);
+  const result = await translateChapter(rawText, ctx, {
+    signal, onStatus, rawChapTitle,
+    prevChapter: findPrevStoryChapter(bookChaps, chapter.order ?? 0)
+  });
+  await applyTranslationToChapter(chapter, result, { updateTitle: true, nextUrl });
+  return result;
+}
+
+async function findChapterAnywhere(chapId) {
+  let chapter = chapters.find(ch => ch.id === chapId);
+  if (chapter) return chapter;
+  for (const book of await dbGetAllBooks()) {
+    chapter = (await dbGetChaptersByBook(book.bookId)).find(ch => ch.id === chapId);
+    if (chapter) return chapter;
+  }
+  return null;
+}
+
+async function translatePendingChapterNow(chapId) {
+  const chapter = await findChapterAnywhere(chapId);
+  if (!chapter) return alert('ไม่พบตอนนี้');
+  if (isTaskRunning('retranslate')) return alert('กำลังแปลบทอื่นอยู่ กรุณารอให้เสร็จก่อน');
+  const books = await dbGetAllBooks();
+  const ctx = makeBookContext(books.find(b => b.bookId === chapter.bookId) || getCurrentBookContext());
+  const controller = beginTask('retranslate');
+  showGlobalToast(`กำลังแปล "${chapter.title}"...`);
+  try {
+    await translatePendingChapterCore(chapter, ctx, { signal: controller.signal, onStatus: showGlobalToast });
+  } catch (err) {
+    if (!isAbortError(err)) alert(`แปลไม่สำเร็จ: ${describeScrapeError(err)}`);
+  } finally {
+    endTask('retranslate', controller);
+    hideGlobalToast();
+  }
+}
+
+function buildPendingNoticeHtml(chap) {
+  const srcCount = chap.paragraphs.filter(p => p.src).length;
+  const preview = chap.paragraphs.slice(0, 30).map(p => `<p>${escapeHtml(p.src || '')}</p>`).join('');
+  return `
+    <div class="placeholder-notice">
+      <div style="font-weight: 600; margin-bottom: 4px;">⏳ ตอนนี้ยังไม่ได้แปล</div>
+      <div style="font-size: 12px; opacity: 0.8; margin-bottom: 10px;">${srcCount ? `มีต้นฉบับ ${srcCount} ย่อหน้ารอแปล` : 'จะดึงเนื้อหาจากหน้าเว็บตอนเริ่มแปล'} — แปลทีละหลายตอนได้ที่ชั้นหนังสือ (⚡ เริ่มแปลล่วงหน้า)</div>
+      <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="translatePendingChapterNow(${jsArg(chap.id)})">⚡ แปลตอนนี้เลย</button>
+      ${srcCount ? `<details style="margin-top: 10px; font-size: 12px;"><summary style="cursor: pointer; opacity: 0.7;">ดูต้นฉบับ</summary><div class="para-src" style="display: block;">${preview}</div></details>` : ''}
+    </div>`;
 }
 
 /** ดึงเนื้อหาจากหน้าเว็บต้นฉบับใหม่แล้วแปล (ใช้กับตอนกันก๊อปที่ผู้เขียนเปลี่ยนเป็นเนื้อหาจริงแล้ว) */
@@ -798,7 +878,7 @@ async function refetchChapterFromSource(chapId) {
   const controller = beginTask('retranslate');
   showGlobalToast('กำลังดึงเนื้อหาจากหน้าเว็บต้นฉบับใหม่...');
   try {
-    const scraped = await scrapePage(chapter.sourceUrl, controller.signal);
+    const scraped = await scrapePage(chapter.sourceUrl, controller.signal, { bookId: chapter.bookId });
     if (classifyChapterByRules(scraped.rawChapTitle, scraped.text).type === 'placeholder') {
       alert('หน้าเว็บยังเป็นเนื้อหากันก๊อปอยู่ ผู้เขียนอาจยังไม่ได้อัปเดตเนื้อหาจริง ลองใหม่ภายหลังนะครับ');
       return;
@@ -814,7 +894,7 @@ async function refetchChapterFromSource(chapId) {
     await applyTranslationToChapter(chapter, result, { updateTitle: true, nextUrl: scraped.nextUrlSource === 'link' ? scraped.nextUrl : undefined });
     alert(`ดึงและแปล "${chapter.title}" เรียบร้อยแล้ว`);
   } catch (err) {
-    if (!isAbortError(err)) alert(`ดึงเนื้อหาใหม่ไม่สำเร็จ: ${isMissingPageError(err) ? 'ไม่พบหน้าเว็บ' : err.message}`);
+    if (!isAbortError(err)) alert(`ดึงเนื้อหาใหม่ไม่สำเร็จ: ${describeScrapeError(err)}`);
   } finally {
     endTask('retranslate', controller);
     hideGlobalToast();
@@ -835,19 +915,19 @@ async function findChineseForSelection() {
     const neighbours = [pIdx - 1, pIdx + 1]
       .map(i => ({ i, src: chapters[chapIdx]?.paragraphs[i]?.src || '' }))
       .filter(n => n.src && (chapters[chapIdx].paragraphs[n.i].kind || 'story') !== 'site_junk');
-    const prompt = `จับคู่คำแปลไทยที่ผู้ใช้อ่านเลือกกับข้อความจีนในต้นฉบับ โดยคืนเฉพาะคำหรือวลีจีนที่ตรงกันและปรากฏต่อเนื่องในต้นฉบับ ห้ามเดาคำที่ไม่มีอยู่
+    const prompt = `จับคู่คำแปลไทยที่ผู้ใช้อ่านเลือกกับข้อความในต้นฉบับภาษา${getLangName(currentSourceLang)} โดยคืนเฉพาะคำหรือวลีต้นฉบับที่ตรงกันและปรากฏต่อเนื่องในต้นฉบับ ห้ามเดาคำที่ไม่มีอยู่
 ค้นในต้นฉบับย่อหน้าหลักก่อน ถ้าไม่พบจึงค้นในย่อหน้าข้างเคียง
 ข้อความที่เลือก: ${JSON.stringify(selectedWordBuffer)}
 ย่อหน้าไทย: ${JSON.stringify(th)}
-ต้นฉบับจีนย่อหน้าหลัก: ${JSON.stringify(src)}
+ต้นฉบับย่อหน้าหลัก: ${JSON.stringify(src)}
 ${neighbours.length ? `ต้นฉบับย่อหน้าข้างเคียง: ${JSON.stringify(neighbours.map(n => n.src))}` : ''}
-ตอบ JSON เท่านั้น: {"src":"วลีจีนที่พบ"}`;
+ตอบ JSON เท่านั้น: {"src":"วลีต้นฉบับที่พบ"}`;
     const answer = await callLLMJson(prompt, { maxRetries: 3, schema: SCHEMAS.findSource, role: 'aux' });
     const candidate = (typeof answer?.src === 'string' ? answer.src : '').trim();
     const foundIn = candidate && src.includes(candidate)
       ? pIdx
       : neighbours.find(n => candidate && n.src.includes(candidate))?.i;
-    if (foundIn === undefined) throw new Error('ไม่พบวลีจีนที่ตรงกับต้นฉบับ');
+    if (foundIn === undefined) throw new Error('ไม่พบวลีที่ตรงกับต้นฉบับ');
 
     const srcEl = document.getElementById(`src-${chapIdx}-${foundIn}`);
     if (srcEl) {
@@ -873,7 +953,7 @@ ${neighbours.length ? `ต้นฉบับย่อหน้าข้างเ
     document.getElementById('gloss-tgt').value = selectedWordBuffer;
     document.getElementById('gloss-cat').focus();
   } catch (err) {
-    alert(`ค้นหาคำจีนไม่สำเร็จ: ${err.message}`);
+    alert(`ค้นหาคำต้นฉบับไม่สำเร็จ: ${err.message}`);
   } finally {
     button.disabled = false;
     button.innerText = oldLabel;
@@ -1126,7 +1206,7 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       </div>
     `, true);
 
-    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, signal);
+    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, signal, { bookId: requestBookId });
     if (author) {
       ctx.author = author;
       if (currentBookId === requestBookId) currentAuthor = author;
@@ -1238,7 +1318,7 @@ async function handleNextChapterClick() {
   cancelBtn.style.display = 'inline-flex';
 
   try {
-    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(chapterUrl, signal);
+    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(chapterUrl, signal, { bookId: ctx.bookId });
     if (author) ctx.author = author;
 
     const lastChap = chapters[chapters.length - 1];
@@ -1319,6 +1399,11 @@ async function updateImportTargetHint() {
     genreSelect.disabled = select.value !== 'new';
     return;
   }
+  if (importMode === 'text') {
+    hint.innerText = 'จะสร้างเป็นเรื่องใหม่ (เลือกเรื่องจากรายการ ถ้าต้องการต่อท้ายเรื่องที่มีอยู่)';
+    genreSelect.disabled = false;
+    return;
+  }
   if (!/^https?:\/\//i.test(url)) {
     hint.innerText = '';
     genreSelect.disabled = false;
@@ -1338,8 +1423,143 @@ function openImportModal(prefillUrl = '', title = 'วาง URL หน้าน
   document.getElementById('import-url').value = prefillUrl;
   const status = document.getElementById('import-status');
   if (status && !isTaskRunning('import')) status.style.display = 'none';
+  if (prefillUrl) switchImportTab('url');
   refreshImportTargetOptions(preferBookId);
   openModal('import-modal');
+}
+
+// ==================== IMPORT FROM TEXT / FILE ====================
+let importMode = 'url';
+let importTextParsed = null;
+
+function switchImportTab(mode) {
+  importMode = mode;
+  document.querySelectorAll('.import-tab-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+  document.getElementById('import-panel-url').style.display = mode === 'url' ? 'block' : 'none';
+  document.getElementById('import-panel-text').style.display = mode === 'text' ? 'block' : 'none';
+  document.getElementById('start-btn-text').innerText = mode === 'url' ? 'เริ่มแปลตอนนี้' : 'นำเข้าเป็นตอนที่รอแปล';
+  updateImportTargetHint();
+}
+
+async function handleImportFile(input) {
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  const status = document.getElementById('import-text-preview');
+  status.innerHTML = '<span class="spinner-icon"></span> กำลังอ่านไฟล์...';
+  try {
+    const buffer = await file.arrayBuffer();
+    const baseName = file.name.replace(/\.[^.]+$/, '');
+    if (/\.epub$/i.test(file.name)) {
+      const epub = await parseEpubFile(buffer);
+      importTextParsed = { bookTitle: epub.bookTitle || baseName, chapters: epub.chapters };
+      document.getElementById('import-text-area').value = '';
+    } else {
+      const text = decodeTextBuffer(buffer);
+      document.getElementById('import-text-area').value = text;
+      importTextParsed = { bookTitle: baseName, chapters: splitTextIntoChapters(text) };
+    }
+    if (!document.getElementById('import-text-title').value.trim()) document.getElementById('import-text-title').value = importTextParsed.bookTitle;
+    renderImportTextPreview();
+  } catch (err) {
+    importTextParsed = null;
+    status.innerHTML = `<span style="color:#dc2626;">อ่านไฟล์ไม่สำเร็จ: ${escapeHtml(err.message)}</span>`;
+  }
+}
+
+function previewImportText() {
+  const text = document.getElementById('import-text-area').value;
+  if (!text.trim()) {
+    importTextParsed = null;
+    document.getElementById('import-text-preview').innerHTML = '';
+    return;
+  }
+  importTextParsed = { bookTitle: document.getElementById('import-text-title').value.trim(), chapters: splitTextIntoChapters(text) };
+  renderImportTextPreview();
+}
+
+function renderImportTextPreview() {
+  const box = document.getElementById('import-text-preview');
+  const list = importTextParsed?.chapters || [];
+  if (!list.length) {
+    box.innerHTML = '<span style="color:#dc2626;">ไม่พบเนื้อหาในข้อความ/ไฟล์นี้</span>';
+    return;
+  }
+  const total = list.reduce((n, ch) => n + ch.paragraphs.join('').length, 0);
+  const sample = list.length <= 6 ? list : [...list.slice(0, 3), null, ...list.slice(-2)];
+  const lang = detectSourceLang(list.slice(0, 3).map(ch => ch.paragraphs.join('\n')).join('\n'));
+  box.innerHTML = `
+    <div>พบ <b>${list.length}</b> ตอน · ${total.toLocaleString()} ตัวอักษร${lang ? ` · ภาษาที่ตรวจพบ: <b>${escapeHtml(getLangName(lang))}</b>` : ''}</div>
+    <ol style="padding-left:20px; margin-top:4px;">${sample.map((ch, i) => ch
+      ? `<li value="${list.indexOf(ch) + 1}">${escapeHtml(ch.title)} <span style="opacity:0.6;">(${ch.paragraphs.join('').length.toLocaleString()} ตัวอักษร)</span></li>`
+      : '<li style="list-style:none; opacity:0.6;">…</li>').join('')}</ol>`;
+}
+
+/** นำเข้าข้อความ/ไฟล์เป็น "ตอนที่รอแปล" (ยังไม่ใช้โควตา AI จนกว่าจะสั่งแปล) */
+async function importTextChapters() {
+  if (!importTextParsed) previewImportText();
+  const list = importTextParsed?.chapters || [];
+  if (!list.length) return alert('กรุณาวางข้อความหรือเลือกไฟล์ก่อน');
+
+  const books = await dbGetAllBooks();
+  const choice = document.getElementById('import-target-book')?.value || 'auto';
+  const existingBook = (choice !== 'auto' && choice !== 'new') ? books.find(b => b.bookId === choice) : null;
+  const userTitle = document.getElementById('import-text-title').value.trim();
+  const bookId = existingBook?.bookId || 'book_' + hashString(`${userTitle}|text|${Date.now()}`);
+  const chosenLang = document.getElementById('import-source-lang')?.value || 'auto';
+  const sourceLang = existingBook ? getBookSourceLang(existingBook)
+    : (chosenLang !== 'auto' ? chosenLang : (detectSourceLang(list.slice(0, 3).map(ch => ch.paragraphs.join('\n')).join('\n')) || DEFAULT_SOURCE_LANG));
+
+  const existingChaps = existingBook ? await dbGetChaptersByBook(bookId) : [];
+  let order = existingChaps.reduce((m, c) => Math.max(m, c.order || 0), 0);
+  const now = Date.now();
+  const records = list.map((ch, k) => ({
+    id: `${bookId}_chap_${now}_f${k}`,
+    bookId,
+    order: ++order,
+    title: ch.title,
+    chapterType: 'story',
+    status: 'pending',
+    paragraphs: ch.paragraphs.map(src => ({ th: '', src })),
+    summary: '',
+    sourceUrl: '',
+    nextUrl: null
+  }));
+
+  if (!existingBook) {
+    await dbSaveBook({
+      bookId,
+      title: userTitle || importTextParsed.bookTitle || 'นิยายจากไฟล์',
+      isUserCustomTitle: !!userTitle,
+      author: '',
+      genre: document.getElementById('import-novel-genre').value,
+      sourceLang: normalizeLang(sourceLang),
+      lastChapterId: records[0].id,
+      lastChapterIndex: 0,
+      lastChapterTitle: records[0].title,
+      lastParaIndex: 0,
+      totalChapters: records.length,
+      lastUrl: '',
+      updatedAt: Date.now()
+    });
+  }
+  await dbSaveChapters(records);
+  await loadBookFromDB(bookId, records[0].id);
+  closeModal('import-modal');
+  importTextParsed = null;
+  document.getElementById('import-text-area').value = '';
+  document.getElementById('import-text-title').value = '';
+  document.getElementById('import-text-preview').innerHTML = '';
+
+  if (document.getElementById('import-text-translate-first').checked) {
+    await translatePendingChapterNow(records[0].id);
+  } else {
+    alert(`นำเข้า ${records.length} ตอนแล้ว (ยังไม่แปล)\nกด "⚡ แปลตอนนี้เลย" ในหน้าอ่าน หรือ "⚡ เริ่มแปลล่วงหน้า" ที่ชั้นหนังสือเพื่อแปลทีละหลายตอน`);
+  }
+}
+
+function handleImportStart() {
+  return importMode === 'text' ? importTextChapters() : startTranslateFirst();
 }
 
 // เลือกเรื่องปลายทางของลิงก์ที่วาง ตามตัวเลือกในหน้าวางลิงก์
@@ -1388,14 +1608,20 @@ async function startTranslateFirst() {
       return;
     }
 
-    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(url, signal);
+    const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(url, signal, { bookId: targetBookId });
+    // ภาษาต้นฉบับ: เรื่องเดิมใช้ค่าที่บันทึกไว้, เรื่องใหม่ใช้ที่ผู้ใช้เลือกหรือตรวจจากเนื้อหา
+    const chosenLang = document.getElementById('import-source-lang')?.value || 'auto';
+    const sourceLang = existingBook?.sourceLang
+      || (chosenLang !== 'auto' ? chosenLang : (detectSourceLang(text) || DEFAULT_SOURCE_LANG));
     const ctx = makeBookContext({
       bookId: targetBookId,
       title: existingBook?.title || rawBookTitle || 'นิยายเรื่องใหม่',
       author: author || existingBook?.author || '',
       genre: existingBook?.genre || chosenGenre,
-      sourceLang: existingBook?.sourceLang
+      sourceLang
     });
+    // ให้ตัวกรองคำศัพท์รู้ภาษาของเรื่องใหม่ตั้งแต่ตอนแรก
+    if (!existingBook) bookLangCache.set(targetBookId, normalizeLang(sourceLang));
 
     status.innerText = `พบ "${rawChapTitle}" กำลังวิเคราะห์ชื่อเฉพาะและแปลผ่าน AI...`;
 
@@ -1455,7 +1681,10 @@ async function startTranslateFirst() {
     status.style.background = '#fef2f2';
     status.style.color = '#991b1b';
     if (isAbortError(err)) status.innerText = "ยกเลิกการแปลแล้ว";
-    else status.innerText = "ข้อผิดพลาด: " + (isMissingPageError(err) ? 'ไม่พบหน้านิยาย (404 Not Found)' : err.message);
+    // แยก "หน้าเว็บไม่มีอยู่" ออกจาก "ดึงหน้าได้แต่หาเนื้อหาไม่เจอ" เพื่อให้ผู้ใช้รู้ว่าต้องแก้ตรงไหน
+    else if (err.message === '404') status.innerText = 'ข้อผิดพลาด: ไม่พบหน้านิยาย (404 Not Found)';
+    else if (err.message.includes('ไม่พบเนื้อหา')) status.innerText = 'ข้อผิดพลาด: ดึงหน้าเว็บได้แต่หาเนื้อหานิยายไม่เจอ ลองตั้งค่าโปรไฟล์ของเว็บนี้ที่ ตั้งค่า → 🌐 ตั้งค่าเว็บต้นฉบับ หรือคัดลอกเนื้อหามาวางที่แท็บ "วางข้อความ / ไฟล์"';
+    else status.innerText = "ข้อผิดพลาด: " + err.message;
   } finally {
     endTask('import', controller);
     startBtn.disabled = false;
@@ -1589,6 +1818,7 @@ function saveSettings() {
   localStorage.setItem('nov_retry_limit', document.getElementById('retry-limit').value || "10");
   localStorage.setItem('nov_enable_deep_ner', document.getElementById('enable-deep-ner-scan').checked ? 'true' : 'false');
   localStorage.setItem('nov_quality_mode', document.getElementById('quality-mode-select').value);
+  localStorage.setItem('nov_llm_fallback_provider', document.getElementById('llm-fallback-provider').value);
   localStorage.setItem('nov_enable_infinite', document.getElementById('enable-infinite-scroll').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_prefetch', document.getElementById('enable-live-prefetch').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_auto_glossary', document.getElementById('enable-auto-glossary').checked ? 'true' : 'false');
@@ -1633,6 +1863,8 @@ function loadSettings() {
 
   const qualitySelect = document.getElementById('quality-mode-select');
   if (qualitySelect) qualitySelect.value = getQualityMode();
+  const fallbackSelect = document.getElementById('llm-fallback-provider');
+  if (fallbackSelect) fallbackSelect.value = getFallbackProvider();
 
   const prefetchChk = document.getElementById('enable-live-prefetch');
   if (prefetchChk) prefetchChk.checked = (localStorage.getItem('nov_enable_prefetch') !== 'false');

@@ -134,9 +134,18 @@ function getProviderAuxModel(provider) {
   return (localStorage.getItem(`nov_llm_aux_model_${provider}`) || '').trim();
 }
 
-/** @param {'main'|'aux'} role งานแปล/เกลาใช้ main, งานตรวจและสกัดข้อมูลใช้ aux */
-function getActiveLlmConfig(role = 'main') {
-  const provider = getActiveProvider();
+/** ผู้ให้บริการสำรองเมื่อ AI หลักปฏิเสธเนื้อหา (ว่าง = ไม่ใช้) */
+function getFallbackProvider() {
+  const p = localStorage.getItem('nov_llm_fallback_provider');
+  return LLM_PROVIDERS[p] ? p : '';
+}
+
+/**
+ * @param {'main'|'aux'} role งานแปล/เกลาใช้ main, งานตรวจและสกัดข้อมูลใช้ aux
+ * @param {string} [providerOverride] ใช้ผู้ให้บริการอื่นแทนตัวหลัก (ใช้ตอนส่งต่อให้ผู้ให้บริการสำรอง)
+ */
+function getActiveLlmConfig(role = 'main', providerOverride = '') {
+  const provider = LLM_PROVIDERS[providerOverride] ? providerOverride : getActiveProvider();
   const mainModel = getProviderModel(provider);
   const auxModel = getProviderAuxModel(provider);
   return {
@@ -382,8 +391,22 @@ const PROVIDER_CALLERS = {
  * เรียก AI ตาม provider ที่ตั้งค่าไว้ พร้อม retry/หมุนคีย์/ยกเลิก
  * @returns {Promise<string>} ข้อความดิบจากโมเดล
  */
-async function callLLM(prompt, { json = true, schema = null, signal = null, onStatus = null, maxRetries = getRetryLimit(), role = 'main' } = {}) {
-  const cfg = getActiveLlmConfig(role);
+async function callLLM(prompt, options = {}) {
+  try {
+    return await callLLMWithProvider(prompt, options);
+  } catch (err) {
+    // AI ปฏิเสธเนื้อหา (เช่นฉากรุนแรง): ส่งต่อให้ผู้ให้บริการสำรองที่ตั้งไว้ 1 ครั้ง
+    const fallback = getFallbackProvider();
+    if (err?.kind !== 'blocked' || options.providerOverride || !fallback || fallback === getActiveProvider()) throw err;
+    const fbCfg = getActiveLlmConfig(options.role || 'main', fallback);
+    if (fbCfg.keys.length === 0 || !fbCfg.model) throw err;
+    if (options.onStatus) options.onStatus(`${LLM_PROVIDERS[getActiveProvider()].label} ปฏิเสธเนื้อหา กำลังส่งต่อให้ ${LLM_PROVIDERS[fallback].label}...`);
+    return callLLMWithProvider(prompt, { ...options, providerOverride: fallback });
+  }
+}
+
+async function callLLMWithProvider(prompt, { json = true, schema = null, signal = null, onStatus = null, maxRetries = getRetryLimit(), role = 'main', providerOverride = '' } = {}) {
+  const cfg = getActiveLlmConfig(role, providerOverride);
   if (cfg.keys.length === 0) throw new LLMError(`กรุณาใส่ API Key ของ ${LLM_PROVIDERS[cfg.provider].label} ในเมนู 'ตั้งค่า' ก่อน`, 'config');
   if (!cfg.model) throw new LLMError("กรุณาเลือกโมเดลในเมนู 'ตั้งค่า' ก่อน", 'config');
 

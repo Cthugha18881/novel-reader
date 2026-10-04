@@ -34,7 +34,7 @@ function downloadBlob(blob, filename) {
  */
 function prepareChaptersForExport(chaps, includeNotes = false) {
   return chaps
-    .filter(ch => ch.chapterType !== 'placeholder' && (includeNotes || ch.chapterType !== 'author_note'))
+    .filter(ch => ch.status !== 'pending' && ch.chapterType !== 'placeholder' && (includeNotes || ch.chapterType !== 'author_note'))
     .map(ch => ({
       ...ch,
       paragraphs: (ch.paragraphs || []).filter(p => {

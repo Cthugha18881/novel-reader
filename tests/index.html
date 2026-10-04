@@ -23,10 +23,13 @@
   </script>
   <script src="../js/db.js"></script>
   <script src="../js/llm.js"></script>
+  <script src="../js/lang.js"></script>
   <script src="../js/api.js"></script>
+  <script src="../js/source.js"></script>
   <script src="../js/cleanup.js"></script>
   <script src="../js/glossary.js"></script>
   <script src="../js/bible.js"></script>
+  <script src="../js/shelf.js"></script>
   <script src="../js/export.js"></script>
   <script>
     const results = [];
@@ -328,6 +331,96 @@
       return eq(buildChapterTail(ch, 4), 'หนึ่ง / สอง');
     });
     test('SCHEMAS ใหม่ strict ครบ (polish/fidelity/preScan/characters)', () => ['polish', 'fidelity', 'preScan', 'characters'].every(k => SCHEMAS[k] && SCHEMAS[k].additionalProperties === false));
+
+    // ---------- Phase 4a: languages ----------
+    test('detectSourceLang: จีน/ญี่ปุ่น/เกาหลี/อังกฤษ', () => eq([
+      detectSourceLang('林动走进了大殿，抬头看了看四周的人群。他深吸一口气。'),
+      detectSourceLang('俺は魔王を倒すために旅に出た。仲間たちと一緒に森を進む。'),
+      detectSourceLang('나는 헌터가 되기 위해 게이트로 들어갔다. 몬스터가 나타났다.'),
+      detectSourceLang('He walked into the hall and looked around at the crowd of people.')
+    ], ['zh', 'ja', 'ko', 'en']));
+    test('detectSourceLang: ญี่ปุ่นที่คันจิเยอะยังเป็นญี่ปุ่น', () => eq(detectSourceLang('魔王城の最上階で勇者は剣を抜いた。王国騎士団長が叫ぶ。'), 'ja'));
+    test('getLeftoverRegex: ญี่ปุ่นจับคานะ, อังกฤษไม่ตรวจ', () => getLeftoverRegex('ja').test('เขาพูดว่า ありがとう') && getLeftoverRegex('en') === null && getLeftoverRegex('ko').test('안녕'));
+    test('findSuspiciousParagraphs: เกณฑ์ความยาวตามภาษา (อังกฤษ)', () => {
+      const p = [{ src: 'He walked slowly into the great hall of kings.', th: 'เขาเดินเข้าโถงราชันย์ช้าๆ' }];
+      return eq([findSuspiciousParagraphs(p, {}, 'en'), findSuspiciousParagraphs(p, {}, 'zh')], [[], [0]]);
+    });
+    test('looksLikeSourceText: คานะ/ฮันกึล/ฮั่นจื่อ', () => looksLikeSourceText('ありがとう') && looksLikeSourceText('안녕') && looksLikeSourceText('林') && !looksLikeSourceText('สวัสดี'));
+    test('classify: ประกาศภาษาญี่ปุ่น/ตอนพิเศษเกาหลี/เลขตอนหลายภาษา', () => eq([
+      classifyChapterByRules('活動報告', '短い').type, classifyChapterByRules('외전 1', '본문').type,
+      hasNumberedTitle('第12話 旅立ち'), hasNumberedTitle('12화'), hasNumberedTitle('Chapter 5')
+    ], ['author_note', 'side_story', true, true, true]));
+    test('classify: ตอนที่ต้องซื้อ = placeholder/locked', () => eq(classifyChapterByRules('第50章', '本章为VIP章节，请订阅本章后阅读。'), { type: 'placeholder', confidence: 'high', reason: 'locked' }));
+    test('labelParagraphs: A/N ท้ายตอนภาษาอังกฤษ', () => {
+      const paras = Array.from({ length: 10 }, (_, i) => `Story line ${i}.`).concat(['A/N: Thanks for reading!', 'See you next week.']);
+      return eq(labelParagraphsByRules(paras).slice(-2), ['author_note', 'author_note']);
+    });
+
+    // ---------- Phase 4b: sources ----------
+    test('extractNavLinks: ตอนถัดไปหลายภาษา', () => eq([
+      extractNavLinks('[次へ >>](/n1/6/)', 'https://s.test/n1/5/').nextChapter,
+      extractNavLinks('[다음화](/ep/6)', 'https://s.test/ep/5').nextChapter,
+      extractNavLinks('[ตอนต่อไป](/c/6)', 'https://s.test/c/5').nextChapter,
+      extractNavLinks('[Next Chapter →](/c/6)', 'https://s.test/c/5').nextChapter
+    ], ['https://s.test/n1/6/', 'https://s.test/ep/6', 'https://s.test/c/6', 'https://s.test/c/6']));
+    const docOf = (html) => new DOMParser().parseFromString(html, 'text/html');
+    test('findNextInHtml: selector ของโปรไฟล์ > ข้อความลิงก์ > rel=next', () => eq([
+      findNextInHtml(docOf('<a class="nx" href="/c/9">→</a><a href="/c/6">下一章</a>'), 'https://s.test/c/5', { nextSelector: 'a.nx' })?.url,
+      findNextInHtml(docOf('<a href="/c/4">上一章</a><a href="/c/6">下一章</a>'), 'https://s.test/c/5')?.url,
+      findNextInHtml(docOf('<head><link rel="next" href="/c/6"></head><a href="/x">foo</a>'), 'https://s.test/c/5')?.url,
+      findNextInHtml(docOf('<a href="/c/5_2">下一页</a>'), 'https://s.test/c/5')?.kind
+    ], ['https://s.test/c/9', 'https://s.test/c/6', 'https://s.test/c/6', 'page']));
+    test('parseHtmlWithProfile: ย่อหน้าจาก <p>/<br>, ตัดส่วนที่ไม่ต้องการ, ตัดตัวอ่าน ruby', () => {
+      const html = '<h1>第1話</h1><div id="c"><p>一行目<ruby>漢字<rt>かんじ</rt></ruby></p><p>二行目</p>三行目<br>四行目<div class="ad">广告</div></div>';
+      const r = parseHtmlWithProfile(html, 'https://s.test/1', { contentSelector: '#c', removeSelector: '.ad' });
+      return eq([r.paragraphs, r.rawChapTitle], [['一行目漢字', '二行目', '三行目', '四行目'], '第1話']);
+    });
+
+    test('htmlElementToParagraphs: เอกสาร XHTML (EPUB) แยกย่อหน้าถูก', () => {
+      const doc = new DOMParser().parseFromString('<html xmlns="http://www.w3.org/1999/xhtml"><body><p>One.</p><p>Two.</p></body></html>', 'application/xhtml+xml');
+      return eq(htmlElementToParagraphs(doc.querySelector('body')), ['One.', 'Two.']);
+    });
+    test('pickChapterLinks: ตัดลิงก์แบ่งหน้าสารบัญ (index_2.html) แต่เก็บตอนที่ชื่อเป็นตัวเลขล้วน', () => {
+      const L = (t, u) => ({ title: t, url: 'https://s.test' + u });
+      const links = [L('1', '/b/9/1.html'), L('2', '/b/9/2.html'), L('3', '/b/9/3.html'), L('下一页', '/b/9/index_2.html'), L('4', '/b/9/index_3.html')];
+      return eq(pickChapterLinks(links, 'https://s.test/b/9/').map(l => l.title), ['1', '2', '3']);
+    });
+
+    // ---------- Phase 4c: TOC ----------
+    test('pickChapterLinks: กลุ่มตอนที่ใหญ่ที่สุด, ตัดลิงก์อื่น, ลิงก์ซ้ำเก็บตำแหน่งสุดท้าย', () => {
+      const L = (t, u) => ({ title: t, url: 'https://s.test' + u });
+      const links = [L('首页', '/'), L('最新 第10章', '/book/7/10.html'), L('最新 第9章', '/book/7/9.html'),
+        ...Array.from({ length: 10 }, (_, i) => L(`第${i + 1}章`, `/book/7/${i + 1}.html`)), L('排行', '/top/1.html'), L('别的书', '/book/8/1.html')];
+      return eq(pickChapterLinks(links, 'https://s.test/book/7/').map(l => l.title), Array.from({ length: 10 }, (_, i) => `第${i + 1}章`));
+    });
+    test('looksDescending: สารบัญเรียงใหม่ไปเก่า', () => looksDescending([5, 4, 3, 2, 1].map(n => ({ title: `第${n}章`, url: '' }))) && !looksDescending([1, 2, 3].map(n => ({ title: `第${n}章`, url: '' }))));
+
+    // ---------- Phase 4d: text import ----------
+    test('splitTextIntoChapters: หัวตอนจีน/ญี่ปุ่น/เกาหลี/อังกฤษ', () => eq([
+      splitTextIntoChapters('第1章 开始\n第一段\n第二段\n第2章 继续\n第三段').map(c => [c.title, c.paragraphs.length]),
+      splitTextIntoChapters('第1話 旅\n本文\n第2話 森\n本文').length,
+      splitTextIntoChapters('1화 시작\n본문\n2화 계속\n본문').length,
+      splitTextIntoChapters('Chapter 1\nText.\nChapter 2\nMore.').length
+    ], [[['第1章 开始', 2], ['第2章 继续', 1]], 2, 2, 2]));
+    test('splitTextIntoChapters: ไม่มีหัวตอน = ตอนเดียว', () => eq(splitTextIntoChapters('一段\n二段', 'X').map(c => [c.title, c.paragraphs.length]), [['X', 2]]));
+    test('textToParagraphs: รวมบรรทัดที่ตัดตามความกว้าง (ภาษาอังกฤษ)', () => eq(textToParagraphs('He walked into\nthe hall and\nsat down.\n\nShe looked at\nhim quietly.'), ['He walked into the hall and sat down.', 'She looked at him quietly.']));
+    test('decodeTextBuffer: UTF-8, BOM, GBK', () => {
+      const utf8 = new TextEncoder().encode('中文测试');
+      const bom = new Uint8Array([0xEF, 0xBB, 0xBF, ...utf8]);
+      const gbk = new Uint8Array([0xD6, 0xD0, 0xCE, 0xC4, 0xB2, 0xE2, 0xCA, 0xD4]);
+      return eq([decodeTextBuffer(utf8.buffer), decodeTextBuffer(bom.buffer), decodeTextBuffer(gbk.buffer)], ['中文测试', '中文测试', '中文测试']);
+    });
+    test('isStoryChapter: ตอนที่รอแปลไม่นับเป็นบริบท', () => !isStoryChapter({ status: 'pending' }) && isStoryChapter({}) && isPendingChapter({ status: 'pending' }));
+
+    // ---------- Phase 4e: stability ----------
+    test('estimateChapterTokens: โหมดที่ละเอียดกว่าใช้ token มากกว่า', () => {
+      const keep = localStorage.getItem('nov_quality_mode');
+      const chs = [{ paragraphs: [{ src: '字'.repeat(3000) }] }];
+      const est = ['fast', 'balanced', 'thorough', 'best'].map(m => { localStorage.setItem('nov_quality_mode', m); const e = estimateChapterTokens(chs, 'zh'); return e.input + e.output; });
+      keep === null ? localStorage.removeItem('nov_quality_mode') : localStorage.setItem('nov_quality_mode', keep);
+      return est[0] < est[1] && est[1] < est[2] && est[2] < est[3];
+    });
+    test('getActiveLlmConfig: override ผู้ให้บริการ', () => getActiveLlmConfig('main', 'anthropic').provider === 'anthropic' && getActiveLlmConfig('main', 'bogus').provider === getActiveProvider());
 
     const passed = results.filter(r => r.ok).length;
     const summary = document.getElementById('summary');

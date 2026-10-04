@@ -82,12 +82,22 @@ function initDB() {
   });
 }
 
+// ภาษาต้นฉบับของแต่ละเรื่อง (ใช้กรองคำศัพท์แบบสากลให้ตรงภาษา โดยไม่ต้องอ่านฐานข้อมูลทุกครั้งที่แสดงผล)
+const bookLangCache = new Map();
+
+function getCachedBookLang(bookId) {
+  return bookLangCache.get(bookId) || DEFAULT_SOURCE_LANG;
+}
+
 function dbSaveBook(book) {
   return new Promise((resolve, reject) => {
     if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
     const tx = db.transaction('books', 'readwrite');
     tx.objectStore('books').put(book);
-    tx.oncomplete = () => resolve();
+    tx.oncomplete = () => {
+      if (book?.bookId) bookLangCache.set(book.bookId, getBookSourceLang(book));
+      resolve();
+    };
     tx.onerror = () => reject(tx.error || new Error('บันทึกหนังสือไม่สำเร็จ'));
     tx.onabort = () => reject(tx.error || new Error('ยกเลิกการบันทึกหนังสือ'));
   });
@@ -104,12 +114,30 @@ function dbSaveChapter(chapter) {
   });
 }
 
+/** บันทึกหลายตอนใน transaction เดียว (ใช้ตอนนำเข้าไฟล์/สารบัญที่มีหลายร้อยตอน) */
+function dbSaveChapters(list) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    if (!list?.length) return resolve();
+    const tx = db.transaction('chapters', 'readwrite');
+    const store = tx.objectStore('chapters');
+    list.forEach(ch => store.put(ch));
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error || new Error('บันทึกตอนนิยายไม่สำเร็จ'));
+    tx.onabort = () => reject(tx.error || new Error('ยกเลิกการบันทึกตอนนิยาย'));
+  });
+}
+
 function dbGetAllBooks() {
   return new Promise((resolve, reject) => {
     if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
     const tx = db.transaction('books', 'readonly');
     const req = tx.objectStore('books').getAll();
-    req.onsuccess = () => resolve(req.result || []);
+    req.onsuccess = () => {
+      const books = req.result || [];
+      books.forEach(b => bookLangCache.set(b.bookId, getBookSourceLang(b)));
+      resolve(books);
+    };
     req.onerror = () => reject(req.error || new Error('อ่านรายชื่อหนังสือไม่สำเร็จ'));
   });
 }

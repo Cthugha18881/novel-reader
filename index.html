@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>NovelTranslate AI v2.8.0</title>
+  <title>NovelTranslate AI v2.9.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -226,6 +226,87 @@
     </div>
   </div>
 
+  <!-- MODAL: TABLE OF CONTENTS (สารบัญ) -->
+  <div class="modal-overlay" id="toc-modal" style="z-index: 60;">
+    <div class="modal-box" style="max-width: 520px;">
+      <div class="modal-head">
+        <div>
+          <div class="modal-title">สารบัญของเรื่อง</div>
+          <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">เรื่อง: <b id="toc-book-title">...</b></div>
+        </div>
+        <button class="modal-close" onclick="closeModal('toc-modal')">✕</button>
+      </div>
+      <div style="font-size: 11px; opacity: 0.75; margin-bottom: 8px; line-height: 1.5;">
+        เมื่อมีสารบัญ ระบบจะหา "ตอนถัดไป" จากสารบัญก่อน (แม่นกว่าการเดาจากเลข URL) และเรียงตอน/เติมตอนที่ขาดได้
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="toc-url-input">ลิงก์หน้าสารบัญ (หน้ารายชื่อตอนทั้งหมด)</label>
+        <div style="display: flex; gap: 6px;">
+          <input type="url" id="toc-url-input" class="form-input" placeholder="https://...">
+          <button class="btn btn-primary" style="white-space: nowrap;" onclick="fetchTocForModal()">ดึงสารบัญ</button>
+        </div>
+        <label style="display: flex; gap: 6px; align-items: center; font-size: 11px; margin-top: 6px; cursor: pointer;">
+          <input type="checkbox" id="toc-reverse-chk" onchange="toggleTocReverse()" style="accent-color: #2563eb;"> กลับลำดับ (ถ้าสารบัญเรียงจากตอนใหม่ไปเก่า และระบบตรวจไม่เจอ)
+        </label>
+      </div>
+      <div id="toc-summary" style="margin-bottom: 10px;"></div>
+      <div id="toc-saved-actions" style="display: none; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;">
+        <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="reorderChaptersByToc(tocEditingBookId)">↕ เรียงตอนตามสารบัญ</button>
+        <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="queueMissingTocEntries()">➕ เพิ่มตอนที่ขาดเป็นคิวรอแปล</button>
+        <button class="btn btn-danger" style="padding: 3px 8px; font-size: 11px;" onclick="removeBookToc()">ลบสารบัญ</button>
+      </div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end;">
+        <button class="btn" onclick="closeModal('toc-modal')">ปิด</button>
+        <button class="btn btn-primary" id="toc-save-btn" onclick="saveTocFromModal()" disabled>บันทึกสารบัญ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: SITE PROFILES (ตั้งค่าเว็บต้นฉบับ) -->
+  <div class="modal-overlay" id="site-profiles-modal" style="z-index: 60;">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title">ตั้งค่าเว็บต้นฉบับ</div>
+        <button class="modal-close" onclick="closeModal('site-profiles-modal')">✕</button>
+      </div>
+      <div class="modal-scrollable-body" style="max-height: 60vh;">
+        <div class="form-group">
+          <label class="form-label" for="jina-key-input">Jina Reader API Key (ไม่บังคับ)</label>
+          <input type="password" id="jina-key-input" class="form-input" placeholder="jina_..." autocomplete="off" style="font-family: monospace; font-size: 12px;">
+          <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">ตัวดึงหน้าเว็บ (r.jina.ai) แบบไม่ใส่คีย์จำกัดจำนวนครั้งต่อนาที ถ้าแปลล่วงหน้าหลายตอนแล้วโดนบล็อก ให้สมัครคีย์ฟรีที่ jina.ai มาใส่</div>
+        </div>
+        <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; margin-bottom: 12px;">
+          <input type="checkbox" id="ai-extract-chk" style="accent-color: #2563eb; margin-top: 2px;">
+          <div>
+            <span style="font-weight: 600;">ให้ AI ช่วยแยกเนื้อหา เมื่อดึงจากเว็บที่ไม่รู้จักได้ไม่ดี</span>
+            <div style="font-size: 11px; opacity: 0.65;">ใช้เฉพาะเมื่อเนื้อหาที่ดึงได้สั้นผิดปกติ ใช้โมเดลงานรอง และส่งแค่บรรทัดแบบย่อ (ประหยัด token)</div>
+          </div>
+        </label>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+          <b style="font-size: 12px;">โปรไฟล์เว็บ (CSS selector)</b>
+          <span style="display: flex; gap: 6px;">
+            <button class="btn btn-primary" style="padding: 2px 8px; font-size: 11px;" onclick="addSiteProfile()">+ เพิ่ม</button>
+            <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="resetSiteProfiles()">คืนค่าเริ่มต้น</button>
+          </span>
+        </div>
+        <div style="font-size: 11px; opacity: 0.65; margin-bottom: 8px;">ระบุตำแหน่งเนื้อหาของเว็บที่ตัวดึงแบบกลางดึงได้ไม่ดี ถ้า selector หาเนื้อหาไม่เจอ ระบบจะกลับไปใช้ตัวดึงแบบกลางให้อัตโนมัติ (ค่าเริ่มต้นของเว็บยอดนิยมอาจต้องปรับถ้าเว็บเปลี่ยนหน้าตา)</div>
+        <div id="site-profiles-list"></div>
+        <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 10px;">
+          <label class="form-label" for="site-test-url">🧪 ทดสอบดึงหน้าเว็บ (ใช้ค่าในฟอร์มนี้)</label>
+          <div style="display: flex; gap: 6px;">
+            <input type="url" id="site-test-url" class="form-input" placeholder="ลิงก์หน้าตอนที่ต้องการทดสอบ">
+            <button class="btn btn-secondary" style="white-space: nowrap;" onclick="testSiteProfile()">ทดสอบ</button>
+          </div>
+          <div id="site-test-result" style="font-size: 12px; margin-top: 8px; line-height: 1.6;"></div>
+        </div>
+      </div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px; flex-shrink: 0;">
+        <button class="btn" onclick="closeModal('site-profiles-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveSiteProfilesModal()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL: MOVE CHAPTERS TO ANOTHER BOOK -->
   <div class="modal-overlay" id="move-chapters-modal" style="z-index: 65;">
     <div class="modal-box" style="max-width: 440px;">
@@ -256,7 +337,7 @@
   <div class="modal-overlay" id="genre-picker-modal" style="z-index: 65;">
     <div class="modal-box" style="max-width: 420px;">
       <div class="modal-head">
-        <div class="modal-title">เลือกแนวเรื่อง / สไตล์สำนวน</div>
+        <div class="modal-title">แนวเรื่องและภาษาต้นฉบับ</div>
         <button class="modal-close" onclick="closeModal('genre-picker-modal')">✕</button>
       </div>
       <div style="font-size: 12px; margin-bottom: 8px;">
@@ -275,6 +356,18 @@
           <option value="urban_life">สังคมเมือง / ธุรกิจ / แพทย์ / รวยเงียบ</option>
           <option value="modern_romance">โรแมนติก / ดราม่า / ชีวิตประจำวัน</option>
           <option value="fanfic">แฟนฟิค / อนิเมะ / ข้ามโลกมัลติเวิร์ส</option>
+          <option value="light_novel">ไลท์โนเวลญี่ปุ่น / ต่างโลก / โรงเรียน</option>
+          <option value="kr_fantasy">เว็บโนเวลเกาหลี / ฮันเตอร์ / ดันเจี้ยนเกต</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label" for="genre-picker-lang">ภาษาต้นฉบับของเรื่องนี้:</label>
+        <select id="genre-picker-lang" class="form-input">
+          <option value="zh">จีน</option>
+          <option value="ja">ญี่ปุ่น</option>
+          <option value="ko">เกาหลี</option>
+          <option value="en">อังกฤษ</option>
+          <option value="other">ภาษาอื่น</option>
         </select>
       </div>
       <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
@@ -334,9 +427,36 @@
         <div class="modal-title" id="import-modal-title">วาง URL หน้านิยาย</div>
         <button class="modal-close" onclick="closeModal('import-modal')">✕</button>
       </div>
-      <div class="form-group">
-        <label class="form-label">URL หน้านิยาย (เช่น 69shuba, biquge ฯลฯ)</label>
-        <input type="url" id="import-url" class="form-input" placeholder="https://www.69shuba.com/txt/88724/40717272" oninput="updateImportTargetHint()">
+      <div class="gloss-category-tabs" style="margin-bottom: 10px;">
+        <button class="cat-tab-btn import-tab-btn active" data-mode="url" onclick="switchImportTab('url')">🔗 วางลิงก์</button>
+        <button class="cat-tab-btn import-tab-btn" data-mode="text" onclick="switchImportTab('text')">📄 วางข้อความ / ไฟล์ (.txt, .epub)</button>
+      </div>
+      <div id="import-panel-url">
+        <div class="form-group">
+          <label class="form-label">URL หน้านิยาย (จีน ญี่ปุ่น เกาหลี อังกฤษ ฯลฯ)</label>
+          <input type="url" id="import-url" class="form-input" placeholder="https://www.69shuba.com/txt/88724/40717272" oninput="updateImportTargetHint()">
+          <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">เว็บที่ดึงได้ไม่ดี ปรับได้ที่ ตั้งค่า → 🌐 ตั้งค่าเว็บต้นฉบับ</div>
+        </div>
+      </div>
+      <div id="import-panel-text" style="display: none;">
+        <div class="form-group">
+          <label class="form-label" for="import-text-title">ชื่อเรื่อง (ไม่บังคับ)</label>
+          <input type="text" id="import-text-title" class="form-input" placeholder="ถ้าเว้นว่าง จะใช้ชื่อไฟล์">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="import-text-area">วางเนื้อหา (แยกตอนอัตโนมัติจากหัวตอน เช่น 第1章, 第1話, 1화, Chapter 1)</label>
+          <textarea id="import-text-area" class="form-input" rows="6" style="resize: vertical; font-size: 12px;" oninput="clearTimeout(window.__importPreviewTimer); window.__importPreviewTimer = setTimeout(previewImportText, 400)"></textarea>
+          <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap;">
+            <label class="btn" style="padding: 3px 10px; font-size: 11px; cursor: pointer;">📂 เลือกไฟล์ .txt / .epub
+              <input type="file" id="import-file" accept=".txt,.epub,text/plain,application/epub+zip" style="display: none;" onchange="handleImportFile(this)">
+            </label>
+            <span style="font-size: 11px; opacity: 0.65;">ไฟล์ .txt ภาษาจีนแบบ GBK/Big5 ระบบจะเดา encoding ให้</span>
+          </div>
+          <div id="import-text-preview" style="font-size: 12px; margin-top: 8px;"></div>
+          <label style="display: flex; gap: 6px; align-items: center; font-size: 12px; margin-top: 8px; cursor: pointer;">
+            <input type="checkbox" id="import-text-translate-first" checked style="accent-color: #2563eb;"> แปลตอนแรกทันทีหลังนำเข้า
+          </label>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label" for="import-target-book">บันทึกเข้าเรื่อง</label>
@@ -346,6 +466,15 @@
         <div id="import-target-hint" style="font-size: 11px; opacity: 0.7; margin-top: 4px;"></div>
       </div>
       <div class="form-group">
+        <label class="form-label" for="import-source-lang">ภาษาต้นฉบับ</label>
+        <select id="import-source-lang" class="form-input" style="margin-bottom: 10px;">
+          <option value="auto" selected>ตรวจอัตโนมัติจากเนื้อหา</option>
+          <option value="zh">จีน</option>
+          <option value="ja">ญี่ปุ่น</option>
+          <option value="ko">เกาหลี</option>
+          <option value="en">อังกฤษ</option>
+          <option value="other">ภาษาอื่น</option>
+        </select>
         <label class="form-label">แนวเรื่อง / สไตล์สำนวนของเรื่องนี้ (Genre)</label>
         <select id="import-novel-genre" class="form-input">
           <option value="xianxia" selected>เซียนเซีย / เทพเซียนบำเพ็ญเพียรเต๋า</option>
@@ -358,13 +487,15 @@
           <option value="urban_life">สังคมเมือง / ธุรกิจ / แพทย์ / รวยเงียบ</option>
           <option value="modern_romance">โรแมนติก / ดราม่า / ชีวิตประจำวัน</option>
           <option value="fanfic">แฟนฟิค / อนิเมะ / ข้ามโลกมัลติเวิร์ส</option>
+          <option value="light_novel">ไลท์โนเวลญี่ปุ่น / ต่างโลก / โรงเรียน</option>
+          <option value="kr_fantasy">เว็บโนเวลเกาหลี / ฮันเตอร์ / ดันเจี้ยนเกต</option>
         </select>
         <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">*ระบบจะจำแนวเรื่องนี้ไว้ใช้กับเรื่องนี้ตลอดไป และสามารถเปลี่ยนได้ที่ชั้นหนังสือ</div>
       </div>
       <div class="status-msg" id="import-status"></div>
       <div style="display: flex; gap: 8px; margin-top: 14px;">
         <button class="btn" style="flex: 1;" onclick="handleImportCancel()">ยกเลิก</button>
-        <button class="btn btn-primary" style="flex: 2;" id="start-btn" onclick="startTranslateFirst()">
+        <button class="btn btn-primary" style="flex: 2;" id="start-btn" onclick="handleImportStart()">
           <span id="start-btn-text">เริ่มแปลตอนนี้</span>
         </button>
       </div>
@@ -529,6 +660,22 @@
         </div>
 
         <div class="form-group">
+          <label class="form-label" for="llm-fallback-provider">ผู้ให้บริการสำรองเมื่อ AI ปฏิเสธเนื้อหา</label>
+          <select id="llm-fallback-provider" class="form-input">
+            <option value="">ไม่ใช้</option>
+            <option value="gemini">Google Gemini</option>
+            <option value="anthropic">Anthropic Claude</option>
+            <option value="openai">OpenAI / OpenAI-compatible</option>
+          </select>
+          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
+            * เช่นฉากต่อสู้รุนแรงที่ AI ตัวหลักไม่ยอมแปล จะส่งต่อให้ผู้ให้บริการนี้ (ต้องใส่คีย์และเลือกโมเดลของผู้ให้บริการนั้นไว้แล้ว)
+          </div>
+        </div>
+
+        <div class="form-group">
+          <button class="btn btn-secondary" style="width: 100%;" onclick="openSiteProfilesModal()">🌐 ตั้งค่าเว็บต้นฉบับ (โปรไฟล์เว็บ, Jina Key, AI ช่วยแยกเนื้อหา)</button>
+        </div>
+        <div class="form-group">
           <label class="form-label">ลิมิตส่งซ้ำเมื่อเซิร์ฟเวอร์หนาแน่น (รอบ)</label>
           <input type="number" id="retry-limit" class="form-input" min="1" max="50" value="10" placeholder="10">
         </div>
@@ -611,7 +758,9 @@
   <!-- SCRIPTS ORDERED DEPENDENCIES -->
   <script src="js/db.js"></script>
   <script src="js/llm.js"></script>
+  <script src="js/lang.js"></script>
   <script src="js/api.js"></script>
+  <script src="js/source.js"></script>
   <script src="js/cleanup.js"></script>
   <script src="js/glossary.js"></script>
   <script src="js/bible.js"></script>

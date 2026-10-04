@@ -15,6 +15,8 @@ function getGenreThaiName(g) {
     case 'urban_life': return 'สังคมเมือง';
     case 'modern_romance': return 'โรแมนติก';
     case 'fanfic': return 'แฟนฟิค';
+    case 'light_novel': return 'ไลท์โนเวล';
+    case 'kr_fantasy': return 'เว็บโนเวลเกาหลี';
     default: return 'วรรณกรรมทั่วไป';
   }
 }
@@ -34,6 +36,46 @@ function cancelBatchTranslate() {
   }
 }
 
+// ---------- Token estimate ----------
+// ค่าประมาณคร่าวๆ ต่อ 1 ตัวอักษรต้นฉบับ (input) และ token ของคำแปลไทย (output)
+const TOKENS_PER_SRC_CHAR = { zh: 1.1, ja: 1.1, ko: 0.9, en: 0.3, other: 0.6 };
+const OUTPUT_TOKENS_PER_SRC_CHAR = { zh: 1.6, ja: 1.3, ko: 1.2, en: 0.45, other: 0.9 };
+const PROMPT_OVERHEAD_TOKENS = 2500;
+
+/** token ที่ใช้ต่อ 1 ตอนตามโหมดคุณภาพ จากความยาวเฉลี่ยของตอนล่าสุดในเรื่องนี้ */
+function estimateChapterTokens(bookChaps, lang) {
+  const sample = bookChaps.filter(c => c.paragraphs?.some(p => p.src)).slice(-3);
+  const avgChars = sample.length
+    ? sample.reduce((n, c) => n + c.paragraphs.reduce((m, p) => m + (p.src || '').length, 0), 0) / sample.length
+    : 3000;
+  const code = normalizeLang(lang);
+  const src = avgChars * TOKENS_PER_SRC_CHAR[code];
+  const out = avgChars * OUTPUT_TOKENS_PER_SRC_CHAR[code];
+  // สแกนก่อนแปล + แปล (ทุกโหมด)
+  let input = (src + 1500) + (src + PROMPT_OVERHEAD_TOKENS);
+  let output = 600 + out;
+  const mode = getQualityMode();
+  if (mode === 'balanced') { input += 0.3 * (src + out) + 1000; output += 0.3 * out; }
+  if (mode === 'thorough') { input += src + out + 1000; output += out; }
+  if (mode === 'best') {
+    input += 0.3 * (src + out) + 1000 + (src + out + 1500) + (src + 2 * out + 800);
+    output += 0.3 * out + out + 400;
+  }
+  return { input: Math.round(input), output: Math.round(output), avgChars: Math.round(avgChars) };
+}
+
+function formatTokenCount(n) {
+  return n >= 1e6 ? (n / 1e6).toFixed(1) + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'K' : String(n);
+}
+
+function formatBatchEstimate(est, count) {
+  const labels = { fast: 'เร็ว', balanced: 'สมดุล', thorough: 'ละเอียด', best: 'ดีที่สุด' };
+  return `จะแปล ${count} ตอน (โหมด "${labels[getQualityMode()]}", ตอนละประมาณ ${est.avgChars.toLocaleString()} ตัวอักษรต้นฉบับ)\n\n` +
+    `ใช้ประมาณ ${formatTokenCount(est.input * count)} input token + ${formatTokenCount(est.output * count)} output token\n` +
+    `(ตอนละ ~${formatTokenCount(est.input)} + ${formatTokenCount(est.output)})\n\n` +
+    `* เป็นค่าประมาณคร่าวๆ ใช้จริงอาจต่างไปตามโมเดลและเนื้อหา ต้องการเริ่มแปลหรือไม่?`;
+}
+
 async function startBatchTranslateForBook(bookId) {
   if (isBatchRunning) return alert("กำลังมีกระบวนการแปลล่วงหน้าทำงานอยู่ กรุณารอหรือกดยกเลิกก่อน");
 
@@ -47,8 +89,10 @@ async function startBatchTranslateForBook(bookId) {
 
   let lastChap = bookChaps[bookChaps.length - 1];
   let targetUrl = lastChap.nextUrl;
+  // ตอนที่รอแปล (จากการวางข้อความ/ไฟล์ หรือสร้างจากสารบัญ) แปลก่อนตามลำดับ แล้วค่อยไล่ตอนถัดไปจาก URL
+  const pendingQueue = bookChaps.filter(isPendingChapter);
 
-  if (!targetUrl) {
+  if (!targetUrl && pendingQueue.length === 0) {
     const inputUrl = prompt(`ไม่พบ URL ตอนถัดไปสำหรับ "${lastChap.title}"\nกรุณาวาง URL ของตอนถัดไป:`, "");
     if (!inputUrl || !inputUrl.trim()) return;
     targetUrl = inputUrl.trim();
@@ -59,6 +103,8 @@ async function startBatchTranslateForBook(bookId) {
   // context ของเรื่องที่แปลล่วงหน้า แยกจากเรื่องที่ผู้ใช้กำลังอ่านอยู่โดยสมบูรณ์
   const knownBooks = await dbGetAllBooks();
   const ctx = makeBookContext(knownBooks.find(b => b.bookId === bookId) || { bookId });
+
+  if (count >= 3 && !confirm(formatBatchEstimate(estimateChapterTokens(bookChaps, ctx.sourceLang), count))) return;
 
   const controller = beginTask('batch');
   const signal = controller.signal;
@@ -83,6 +129,25 @@ async function startBatchTranslateForBook(bookId) {
     for (let i = 1; i <= count; i++) {
       if (signal.aborted) break;
 
+      if (pendingQueue.length) {
+        const pendingChap = pendingQueue.shift();
+        progressDesc.innerText = `กำลังแปลตอนที่รอแปล ${i}/${count}: ${pendingChap.title}`;
+        try {
+          await translatePendingChapterCore(pendingChap, ctx, {
+            signal,
+            onStatus: (msg) => { progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 60)}`; }
+          });
+          successCount++;
+          if (i === count) finishedAll = true;
+          if (i < count) await sleepAbortable(1500, signal);
+        } catch (err) {
+          if (isAbortError(err)) break;
+          progressDesc.innerText = `หยุดที่ "${pendingChap.title}": ${err.message}`;
+          break;
+        }
+        continue;
+      }
+
       if (!targetUrl) {
         progressDesc.innerText = `แปลครบ ${successCount} ตอนแล้ว แต่ยังไม่มี URL ของตอนถัดไป กรุณากด “แก้ URL ถัดไป”`;
         break;
@@ -103,7 +168,7 @@ async function startBatchTranslateForBook(bookId) {
       progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${urlSegment})`;
 
       try {
-        const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, signal);
+        const { text, nextUrl, rawChapTitle, rawBookTitle, author } = await scrapePage(targetUrl, signal, { bookId });
         if (author) ctx.author = author;
 
         const result = await translateChapter(text, ctx, {
@@ -261,7 +326,7 @@ async function openBookshelfModal() {
     const currentSort = bookSortModes[b.bookId];
     const timeBtnLabel = currentSort === 'time_desc' ? 'ล่าสุด ↓' : (currentSort === 'time_asc' ? 'เก่าสุด ↑' : 'เวลา');
     const titleBtnLabel = currentSort === 'title_asc' ? 'ชื่อ ก-ฮ ↓' : (currentSort === 'title_desc' ? 'ชื่อ ฮ-ก ↑' : 'ชื่อ');
-    const genreBadge = getGenreThaiName(b.genre || 'xianxia');
+    const genreBadge = `${getGenreThaiName(b.genre || 'xianxia')} · ${getLangName(getBookSourceLang(b))}`;
 
     itemBox.innerHTML = `
       <div class="book-card-header">
@@ -284,7 +349,10 @@ async function openBookshelfModal() {
         <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="startBatchTranslateForBook(${jsArg(b.bookId)})">
           ⚡ เริ่มแปลล่วงหน้า
         </button>
-        <button class="btn" style="padding: 3px 6px; font-size: 10px; margin-left: auto;" onclick="fixBookNextUrl(${jsArg(b.bookId)})" title="แก้ไข URL สำหรับบทถัดไป">
+        <button class="btn" style="padding: 3px 6px; font-size: 10px; margin-left: auto;" onclick="openTocModal(event, ${jsArg(b.bookId)})" title="ดึงสารบัญของเรื่อง เพื่อหาตอนถัดไปให้แม่นยำ เรียงตอน และเติมตอนที่ขาด">
+          📑 สารบัญ
+        </button>
+        <button class="btn" style="padding: 3px 6px; font-size: 10px;" onclick="fixBookNextUrl(${jsArg(b.bookId)})" title="แก้ไข URL สำหรับบทถัดไป">
           🔗 แก้ URL ถัดไป
         </button>
       </div>
@@ -398,6 +466,7 @@ async function openGenrePickerModal(e, bookId) {
 
   document.getElementById('genre-picker-book-title').innerText = b.title || 'นิยาย';
   document.getElementById('genre-picker-select').value = b.genre || 'xianxia';
+  document.getElementById('genre-picker-lang').value = getBookSourceLang(b);
 
   openModal('genre-picker-modal');
 }
@@ -409,12 +478,16 @@ async function saveChosenBookGenre() {
   if (!b) return closeModal('genre-picker-modal');
 
   const selectedGenre = document.getElementById('genre-picker-select').value;
+  const selectedLang = normalizeLang(document.getElementById('genre-picker-lang').value);
   b.genre = selectedGenre;
+  b.sourceLang = selectedLang;
   b.updatedAt = Date.now();
   await dbSaveBook(b);
 
   if (currentBookId === bookIdForGenreEdit) {
     currentBookGenre = selectedGenre;
+    currentSourceLang = selectedLang;
+    renderVirtualWindow(currentChapterIndex);
   }
 
   closeModal('genre-picker-modal');
