@@ -27,12 +27,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v3.1.2",
+    title: "คู่มือเริ่มต้น v3.2.0",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.1.2", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.2.0", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.1.2"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.2.0"
   }];
 }
 
@@ -2012,6 +2012,9 @@ function renderBackupImportModal(current) {
   document.getElementById('backup-import-baseurl-row').style.display = settings.baseUrl ? 'flex' : 'none';
   document.getElementById('backup-import-baseurl').checked = false;
   document.getElementById('backup-import-baseurl-value').innerText = settings.baseUrl || '';
+  document.getElementById('backup-import-proxies-row').style.display = settings.proxies ? 'flex' : 'none';
+  document.getElementById('backup-import-proxies').checked = false;
+  document.getElementById('backup-import-proxies-value').innerText = (settings.proxies || []).map(p => p.url).join(', ');
   document.querySelector('input[name="backup-import-mode"][value="merge"]').checked = true;
   document.getElementById('backup-import-safety').checked = true;
   onBackupImportModeChange();
@@ -2042,7 +2045,8 @@ async function confirmBackupImport() {
 
     const applySettings = document.getElementById('backup-import-settings').checked;
     const applyBaseUrl = !!settings.baseUrl && document.getElementById('backup-import-baseurl').checked;
-    applyImportedSettings(applySettings ? settings.safe : {}, { baseUrl: applyBaseUrl ? settings.baseUrl : null });
+    const applyProxies = !!settings.proxies && document.getElementById('backup-import-proxies').checked;
+    applyImportedSettings(applySettings ? settings.safe : {}, { baseUrl: applyBaseUrl ? settings.baseUrl : null, proxies: applyProxies ? settings.proxies : null });
     if (applySettings) loadSettings();
 
     await refreshInMemoryGlossaryCache();
@@ -2056,9 +2060,10 @@ async function confirmBackupImport() {
     else resetToGuideBook();
     await openBookshelfModal();
 
-    const needsReload = applyBaseUrl && !isConnectAllowedByCsp(settings.baseUrl);
+    const needsReload = (applyBaseUrl && !isConnectAllowedByCsp(settings.baseUrl)) ||
+      (applyProxies && settings.proxies.some(p => !isConnectAllowedByCsp(p.url)));
     alert(`✓ นำเข้าข้อมูลสำรองเรียบร้อยแล้ว (${mode === 'replace' ? 'แทนที่ทั้งหมด' : 'รวมกับของเดิม'})` +
-      (needsReload ? '\n\nBase URL ใหม่จะใช้ได้หลังรีโหลดหน้า' : ''));
+      (needsReload ? '\n\nBase URL / proxy ใหม่จะใช้ได้หลังรีโหลดหน้า' : ''));
   } catch (err) {
     alert(`นำเข้าข้อมูลไม่สำเร็จ (ข้อมูลเดิมไม่ถูกแก้ไข): ${err.message}`);
   } finally {
@@ -2094,6 +2099,10 @@ async function renderSafetyBanner() {
   } else if (remoteReplacedData) {
     html = `<span>⚠️ ข้อมูลทั้งหมดถูกแทนที่จากไฟล์สำรองในอีกแท็บ</span>
       <button class="btn btn-primary" onclick="location.reload()">รีโหลดหน้า</button>`;
+  } else if (profileWarningHost) {
+    html = `<span>🌐 โปรไฟล์ของเว็บ <b>${escapeHtml(profileWarningHost)}</b> หาเนื้อหาไม่เจอติดกันหลายครั้ง เว็บอาจเปลี่ยนหน้าตา (ระบบใช้ตัวดึงแบบกลางแทนไปก่อน)</span>
+      <button class="btn btn-primary" onclick="profileWarningHost = ''; renderSafetyBanner(); openSiteProfilesModal();">ตรวจโปรไฟล์</button>
+      <button class="btn" onclick="profileWarningHost = ''; renderSafetyBanner();">ปิด</button>`;
   } else if (budgetBannerText) {
     html = `<span>📊 ${escapeHtml(budgetBannerText)}</span>
       <button class="btn btn-primary" onclick="openUsageModal()">ดูการใช้งาน</button>
@@ -2223,6 +2232,14 @@ function clearAllApiKeys() {
 
 // ==================== AI USAGE DASHBOARD ====================
 let budgetBannerText = '';
+let profileWarningHost = '';
+
+/** hook จาก api.js: โปรไฟล์ของเว็บนี้หาเนื้อหาไม่เจอติดกันถึงเกณฑ์ */
+function notifyProfileFailing(host) {
+  profileWarningHost = host;
+  logDiagnostic({ source: 'scrape', kind: 'profile', message: `${host}: โปรไฟล์หาเนื้อหาไม่เจอติดกัน ${PROFILE_FAIL_WARN_AT} ครั้ง` });
+  renderSafetyBanner();
+}
 
 /** hook จาก usage.js: เกินเพดานแล้วแต่ผู้ใช้กดแปลเอง */
 function askBudgetOverride(message) {
@@ -2245,8 +2262,9 @@ function usageCardHtml(label, t, unitPrices) {
   const costText = t.cost > 0 || !t.unpricedTokens ? `~$${t.cost.toFixed(t.cost < 1 ? 3 : 2)}` : '—';
   return `<div class="usage-card">
     <div class="usage-card-label">${label}</div>
-    <div class="usage-card-main">${formatTokenCount(t.tokens)} <span>token</span></div>
+    <div class="usage-card-main">~${formatTokenCount(t.tokens)} <span>token (ประมาณ)</span></div>
     <div class="usage-card-sub">ส่ง ${formatTokenCount(t.input)} · รับ ${formatTokenCount(t.output)} · ${t.calls.toLocaleString()} ครั้ง</div>
+    ${t.estimatedInput ? `<div class="usage-card-sub" title="คำขอที่ส่งไปแล้วแต่ถูกยกเลิก/การเชื่อมต่อหลุด ผู้ให้บริการอาจคิดค่าขาเข้า">ยอดส่งรวมค่าประมาณ ${formatTokenCount(t.estimatedInput)} จากคำขอที่ไม่ได้ยอดกลับมา</div>` : ''}
     <div class="usage-card-sub">อ่านจาก cache ${cachePct}% · ค่าใช้จ่าย ${costText}${t.unpricedTokens && unitPrices ? ' (บางโมเดลยังไม่กรอกราคา)' : ''}</div>
   </div>`;
 }

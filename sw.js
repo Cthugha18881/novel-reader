@@ -1,7 +1,7 @@
 // Service worker: ทำให้เปิดแอพและอ่านตอนที่บันทึกไว้ได้แม้ออฟไลน์
 // ไฟล์ของแอพใช้ network-first (ออนไลน์ได้เวอร์ชันล่าสุดเสมอ) ส่วนฟอนต์/ไลบรารีจาก CDN ใช้ cache-first
 // คำขอไปยัง AI และ r.jina.ai จะไม่ถูกแตะต้องเลย
-const CACHE_NAME = 'noveltranslate-v3.1.2';
+const CACHE_NAME = 'noveltranslate-v3.2.0';
 const APP_SHELL = [
   './',
   'index.html',
@@ -19,6 +19,7 @@ const APP_SHELL = [
   'js/glossary.js',
   'js/bible.js',
   'js/shelf.js',
+  'js/updates.js',
   'js/export.js',
   'js/app.js',
   'vendor/jszip.min.js',
@@ -69,7 +70,8 @@ async function cacheFirst(request) {
   const cached = await cache.match(request);
   if (cached) return cached;
   const response = await fetch(request);
-  if (response.ok || response.type === 'opaque') cache.put(request, response.clone());
+  // เก็บเฉพาะคำตอบที่สำเร็จ ไม่เก็บแบบ opaque (Chrome คิดพื้นที่ของ opaque เกินจริงมาก และอาจเป็นหน้าที่ผิดพลาด)
+  if (response.ok) cache.put(request, response.clone());
   return response;
 }
 

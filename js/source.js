@@ -11,26 +11,107 @@ function normalizeNavText(text) {
 
 // ---------- Site profiles ----------
 // ค่าตั้งต้นสำหรับเว็บยอดนิยม (selector อาจต้องปรับถ้าเว็บเปลี่ยนหน้าตา ระบบจะกลับไปใช้ตัวดึงแบบกลางให้อัตโนมัติถ้าหาเนื้อหาไม่เจอ)
+// ฟิลด์ของโปรไฟล์:
+//   contentSelector / titleSelector / removeSelector / nextSelector: แยกเนื้อหาจาก HTML ด้วย CSS selector
+//   jinaTarget: ให้ r.jina.ai อ่านเฉพาะส่วนนี้ของหน้า (X-Target-Selector) ใช้กับเว็บที่โหลดเนื้อหาด้วย JavaScript
+//   jinaWait: รอจนส่วนนี้ปรากฏก่อนอ่าน (X-Wait-For-Selector) | noCache: ไม่ใช้ผลที่ r.jina.ai เก็บไว้ (X-No-Cache)
+//   nextMode: 'auto' (หาลิงก์ตอนถัดไป) | 'increment' (เพิ่มเลขตอนท้าย URL เช่น chapter-1 -> chapter-2)
 const BUILTIN_SITE_PROFILES = [
-  { host: 'ncode.syosetu.com', contentSelector: '.js-novel-text, .p-novel__body, #novel_honbun', titleSelector: '.p-novel__title, .novel_subtitle', removeSelector: '', nextSelector: '', aiExtract: false },
-  { host: 'kakuyomu.jp', contentSelector: '.widget-episodeBody', titleSelector: '.widget-episodeTitle', removeSelector: '', nextSelector: '', aiExtract: false },
-  { host: 'royalroad.com', contentSelector: '.chapter-content', titleSelector: 'h1', removeSelector: '', nextSelector: '', aiExtract: false }
+  { host: 'ncode.syosetu.com', contentSelector: '.js-novel-text, .p-novel__body, #novel_honbun', titleSelector: '.p-novel__title, .novel_subtitle', removeSelector: '', nextSelector: '' },
+  { host: 'kakuyomu.jp', contentSelector: '.widget-episodeBody', titleSelector: '.widget-episodeTitle', removeSelector: '', nextSelector: '' },
+  { host: 'royalroad.com', contentSelector: '.chapter-content', titleSelector: 'h1', removeSelector: '', nextSelector: '' },
+  // webnovel: ให้ r.jina.ai อ่านเฉพาะเนื้อหา (ไม่งั้นได้ชื่อเรื่อง/ผู้แต่ง/กล่องของขวัญปนมา)
+  // ลิงก์ตอนถัดไปไม่อยู่ในเนื้อหา แต่อยู่ใน <link rel="next"> ของ HTML ซึ่งระบบหาให้เอง (ใช้คำขอเพิ่ม 1 ครั้งต่อตอน)
+  { host: 'webnovel.com', contentSelector: '', titleSelector: '', removeSelector: '', nextSelector: '', jinaTarget: '.cha-words' },
+  // wtr-lab: เนื้อหาโหลดด้วย JavaScript และหน้าเว็บมี iframe โฆษณาที่ทำให้ r.jina.ai อ่านผิดหน้า จึงต้องระบุส่วนที่จะอ่าน
+  { host: 'wtr-lab.com', contentSelector: '', titleSelector: '', removeSelector: '', nextSelector: '', jinaTarget: '.reader-container', jinaWait: '.chapter-wrap p', noCache: true, nextMode: 'increment' }
 ];
 
 function hostOf(url) {
   try { return new URL(url).hostname.toLowerCase().replace(/^(www|m|wap|mobile)\./, ''); } catch (e) { return ''; }
 }
 
-function getSiteProfiles() {
+function getRemovedBuiltinHosts() {
   try {
-    const saved = JSON.parse(localStorage.getItem('nov_site_profiles') || 'null');
-    if (Array.isArray(saved)) return saved;
+    const list = JSON.parse(localStorage.getItem('nov_site_profiles_removed') || '[]');
+    return Array.isArray(list) ? list : [];
+  } catch (e) {
+    return [];
+  }
+}
+
+/**
+ * โปรไฟล์ที่ผู้ใช้บันทึกไว้ + โปรไฟล์ตั้งต้นที่เพิ่มในรุ่นใหม่ (ถ้าผู้ใช้ยังไม่มีเว็บนั้น และไม่ได้ลบทิ้งเอง)
+ * ผู้ใช้ที่เคยบันทึกโปรไฟล์ไว้แล้วจึงได้โปรไฟล์ของเว็บใหม่ด้วย โดยของที่แก้เองไม่ถูกเขียนทับ
+ */
+function getSiteProfiles() {
+  let saved = null;
+  try {
+    const parsed = JSON.parse(localStorage.getItem('nov_site_profiles') || 'null');
+    if (Array.isArray(parsed)) saved = parsed;
   } catch (e) {}
-  return BUILTIN_SITE_PROFILES.map(p => ({ ...p, builtin: true }));
+  if (!saved) return BUILTIN_SITE_PROFILES.map(p => ({ ...p, builtin: true }));
+  const removed = new Set(getRemovedBuiltinHosts());
+  const hosts = new Set(saved.map(p => p.host));
+  const added = BUILTIN_SITE_PROFILES.filter(p => !hosts.has(p.host) && !removed.has(p.host)).map(p => ({ ...p, builtin: true }));
+  return [...saved, ...added];
 }
 
 function saveSiteProfiles(profiles) {
   localStorage.setItem('nov_site_profiles', JSON.stringify(profiles));
+}
+
+/** จำว่าผู้ใช้ลบโปรไฟล์ตั้งต้นของเว็บไหนทิ้ง เพื่อไม่ให้เพิ่มกลับเองในรุ่นถัดไป */
+function rememberRemovedBuiltins(profiles) {
+  const hosts = new Set(profiles.map(p => p.host));
+  const removed = BUILTIN_SITE_PROFILES.map(p => p.host).filter(h => !hosts.has(h));
+  localStorage.setItem('nov_site_profiles_removed', JSON.stringify(removed));
+}
+
+/** header สำหรับ r.jina.ai ตามโปรไฟล์ของเว็บ (อ่านเฉพาะบางส่วน / รอโหลด / ไม่ใช้ cache) */
+function getProfileJinaHeaders(profile) {
+  const h = {};
+  if (!profile) return h;
+  if (profile.jinaTarget) h['X-Target-Selector'] = profile.jinaTarget;
+  if (profile.jinaWait) {
+    h['X-Wait-For-Selector'] = profile.jinaWait;
+    h['X-Timeout'] = '40';
+  }
+  if (profile.noCache) h['X-No-Cache'] = 'true';
+  return h;
+}
+
+// ---------- สุขภาพของโปรไฟล์: เตือนเมื่อ selector หาเนื้อหาไม่เจอติดกันหลายครั้ง (เว็บอาจเปลี่ยนหน้าตา) ----------
+const PROFILE_FAIL_WARN_AT = 3;
+
+function getProfileHealth() {
+  try {
+    const h = JSON.parse(localStorage.getItem('nov_profile_health') || '{}');
+    return h && typeof h === 'object' && !Array.isArray(h) ? h : {};
+  } catch (e) {
+    return {};
+  }
+}
+
+/** บันทึกผลการใช้โปรไฟล์ของเว็บนี้ คืน true ถ้าเพิ่งล้มเหลวติดกันถึงเกณฑ์เตือน */
+function recordProfileResult(host, ok) {
+  if (!host) return false;
+  const health = getProfileHealth();
+  const cur = health[host] || { fails: 0 };
+  if (ok) {
+    if (!cur.fails) return false;
+    delete health[host];
+  } else {
+    cur.fails += 1;
+    cur.lastFailAt = Date.now();
+    health[host] = cur;
+  }
+  localStorage.setItem('nov_profile_health', JSON.stringify(health));
+  return !ok && cur.fails === PROFILE_FAIL_WARN_AT;
+}
+
+function getFailingProfileHosts() {
+  return Object.entries(getProfileHealth()).filter(([, v]) => v.fails >= PROFILE_FAIL_WARN_AT).map(([host]) => host);
 }
 
 function getSiteProfile(url) {
@@ -48,16 +129,163 @@ function isAiExtractEnabled() {
   return localStorage.getItem('nov_ai_extract') !== 'false';
 }
 
-// ---------- HTML helpers ----------
-async function fetchJinaHtml(url, signal) {
+// ---------- ตัวดึงหน้าเว็บ: r.jina.ai + proxy สำรองของผู้ใช้ ----------
+// proxy สำรอง (เช่น Cloudflare Worker ของผู้ใช้เอง ดูตัวอย่างใน docs/cloudflare-worker.js) ใช้เมื่อ r.jina.ai ล่ม/โดนจำกัด
+// proxy ต้องคืน HTML ดิบของหน้าเว็บ และอนุญาต CORS ระบบจะแยกเนื้อหาเอง
+// nov_proxies: [{ name, url }] โดย url มี {url} เป็นตำแหน่งของลิงก์หน้าเว็บ (ถ้าไม่มี จะต่อท้ายเป็น ?url=)
+function getProxies() {
   try {
-    const res = await fetch(`https://r.jina.ai/${url}`, { signal, headers: getJinaHeaders({ 'X-Return-Format': 'html' }) });
-    if (!res.ok) throw new Error(res.status === 404 ? '404' : `ดึงหน้าเว็บไม่สำเร็จ (HTTP ${res.status})`);
-    return await res.text();
+    const list = JSON.parse(localStorage.getItem('nov_proxies') || '[]');
+    return Array.isArray(list) ? list.filter(p => p && typeof p.url === 'string' && /^https?:\/\//i.test(p.url.trim())) : [];
   } catch (e) {
-    if (e.name === 'AbortError') throw new LLMError('ผู้ใช้สั่งหยุดการทำงาน', 'abort');
-    throw e;
+    return [];
   }
+}
+
+function saveProxies(list) {
+  localStorage.setItem('nov_proxies', JSON.stringify(list));
+}
+
+function isProxyFirst() {
+  return localStorage.getItem('nov_proxy_first') === 'true';
+}
+
+function buildProxyUrl(template, pageUrl) {
+  const t = template.trim();
+  if (t.includes('{url}')) return t.replace('{url}', encodeURIComponent(pageUrl));
+  return `${t}${t.includes('?') ? '&' : '?'}url=${encodeURIComponent(pageUrl)}`;
+}
+
+class SourceFetchError extends Error {
+  constructor(message, status = 0) {
+    super(message);
+    this.name = 'SourceFetchError';
+    this.status = status;
+  }
+}
+
+function asAbort(e) {
+  return e?.name === 'AbortError' ? new LLMError('ผู้ใช้สั่งหยุดการทำงาน', 'abort') : e;
+}
+
+async function fetchViaJina(url, format, signal, profile) {
+  // อ่านเฉพาะบางส่วน/รอโหลด ใช้กับ markdown (เนื้อหา) เท่านั้น ถ้าใช้กับ HTML จะตัด <head> ที่มี <link rel="next"> ทิ้ง
+  const profileHeaders = getProfileJinaHeaders(profile);
+  if (format === 'html') {
+    delete profileHeaders['X-Target-Selector'];
+    delete profileHeaders['X-Wait-For-Selector'];
+    delete profileHeaders['X-Timeout'];
+  }
+  const headers = getJinaHeaders({ ...(format === 'html' ? { 'X-Return-Format': 'html' } : {}), ...profileHeaders });
+  let res;
+  try {
+    res = await fetch(`https://r.jina.ai/${url}`, { signal, headers });
+  } catch (e) {
+    throw asAbort(e);
+  }
+  if (!res.ok) throw new SourceFetchError(res.status === 404 ? '404' : `ดึงหน้าเว็บผ่าน r.jina.ai ไม่สำเร็จ (HTTP ${res.status})`, res.status);
+  return res.text();
+}
+
+async function fetchViaProxy(proxy, url, signal) {
+  const headers = {};
+  const key = (getSecret('nov_proxy_key') || '').trim();
+  if (key) headers['X-Proxy-Key'] = key;
+  const target = buildProxyUrl(proxy.url, url);
+  if (typeof isConnectAllowedByCsp === 'function' && !isConnectAllowedByCsp(target)) {
+    throw new SourceFetchError(`${proxy.name || 'proxy'} ยังไม่ได้รับอนุญาตในหน้านี้ (เพิ่งเพิ่ม proxy) กรุณารีโหลดหน้า`);
+  }
+  let res;
+  try {
+    res = await fetch(target, { signal, headers });
+  } catch (e) {
+    throw asAbort(e);
+  }
+  if (!res.ok) throw new SourceFetchError(res.status === 404 ? '404' : `ดึงหน้าเว็บผ่าน ${proxy.name || 'proxy'} ไม่สำเร็จ (HTTP ${res.status})`, res.status);
+  return decodeHtmlBuffer(await res.arrayBuffer(), res.headers.get('Content-Type') || '');
+}
+
+/** ถอดรหัส HTML ดิบตาม charset ใน header หรือ <meta charset> (เว็บจีนหลายเว็บยังใช้ GBK/Big5) */
+function decodeHtmlBuffer(buffer, contentType = '') {
+  const head = new TextDecoder('latin1').decode(new Uint8Array(buffer).subarray(0, 4096));
+  const charset = (contentType.match(/charset=["']?([\w-]+)/i) || head.match(/<meta[^>]+charset=["']?([\w-]+)/i) || [])[1];
+  if (charset) {
+    try { return new TextDecoder(charset.toLowerCase()).decode(buffer); } catch (e) { /* charset ที่เบราว์เซอร์ไม่รู้จัก */ }
+  }
+  return new TextDecoder('utf-8').decode(buffer);
+}
+
+/**
+ * ดึงหน้าเว็บ 1 หน้า ลองตามลำดับ: r.jina.ai -> proxy สำรอง (หรือ proxy ก่อนถ้าตั้งไว้)
+ * format 'markdown' ได้ markdown แบบ r.jina.ai (ถ้ามาจาก proxy จะแปลง HTML ให้หน้าตาเหมือนกัน) | 'html' ได้ HTML
+ * หน้าเว็บที่ไม่มีจริง (404) ไม่ลองตัวอื่นต่อ
+ */
+async function fetchSourcePage(url, { format = 'markdown', signal = null, profile = null } = {}) {
+  const proxies = getProxies();
+  const backends = [{ type: 'jina' }, ...proxies.map(p => ({ type: 'proxy', proxy: p }))];
+  // เว็บที่ต้องให้ r.jina.ai รันหน้าเว็บให้ (jinaTarget/jinaWait) ใช้ proxy แทนไม่ได้ จึงคง r.jina.ai ไว้ก่อนเสมอ
+  if (isProxyFirst() && !(profile?.jinaTarget || profile?.jinaWait)) backends.push(backends.shift());
+  let lastErr = null;
+  for (const b of backends) {
+    try {
+      if (b.type === 'jina') return { body: await fetchViaJina(url, format, signal, profile), via: 'jina' };
+      const html = await fetchViaProxy(b.proxy, url, signal);
+      return { body: format === 'html' ? html : htmlToPseudoMarkdown(html, url), via: b.proxy.name || 'proxy' };
+    } catch (e) {
+      if (isAbortError(e) || e.message === '404') throw e;
+      lastErr = e;
+    }
+  }
+  throw lastErr || new SourceFetchError('ดึงหน้าเว็บไม่สำเร็จ');
+}
+
+async function fetchJinaHtml(url, signal, profile = null) {
+  return (await fetchSourcePage(url, { format: 'html', signal, profile })).body;
+}
+
+/** ข้อความจาก element โดยไม่นับข้อความที่อยู่ในลิงก์ (เมนู/รายการลิงก์มีแต่ลิงก์) */
+function textWithoutLinks(el) {
+  let n = (el.textContent || '').trim().length;
+  el.querySelectorAll('a').forEach(a => { n -= (a.textContent || '').trim().length; });
+  return n;
+}
+
+/** หา element ที่น่าจะเป็นเนื้อเรื่อง: มีข้อความที่ไม่ใช่ลิงก์อยู่ในย่อหน้า/บรรทัดของตัวเองมากที่สุด */
+function findMainContentElement(doc) {
+  let best = null;
+  let bestScore = 0;
+  doc.body?.querySelectorAll('div, article, section, main, td').forEach(el => {
+    let score = 0;
+    for (const c of el.childNodes) {
+      if (c.nodeType === 3) score += c.textContent.trim().length;
+      else if (c.nodeType === 1 && /^(P|SPAN|FONT|B|I|EM|STRONG)$/.test(c.tagName) && !c.querySelector('div, p, table')) score += textWithoutLinks(c);
+    }
+    if (score > bestScore) {
+      bestScore = score;
+      best = el;
+    }
+  });
+  return best;
+}
+
+/**
+ * แปลง HTML ดิบ (จาก proxy) ให้เป็น markdown แบบเดียวกับที่ r.jina.ai ส่งมา เพื่อใช้ตัวแยกเนื้อหาตัวเดิมได้
+ * เนื้อหา = element ที่มีข้อความมากที่สุด, ลิงก์ทั้งหมดต่อท้ายเป็น [ข้อความ](ลิงก์) ไว้ให้หาตอนถัดไป
+ */
+function htmlToPseudoMarkdown(html, pageUrl) {
+  const doc = new DOMParser().parseFromString(html, 'text/html');
+  doc.querySelectorAll('script, style, noscript, iframe').forEach(n => n.remove());
+  const paragraphs = htmlElementToParagraphs(findMainContentElement(doc));
+  const links = [];
+  const rel = doc.querySelector('link[rel~="next"][href], a[rel~="next"][href]');
+  const relUrl = rel && resolveHref(rel.getAttribute('href'), pageUrl);
+  if (relUrl) links.push(`[nextchapter](${relUrl})`);
+  doc.querySelectorAll('a[href]').forEach(a => {
+    const url = resolveHref(a.getAttribute('href'), pageUrl);
+    const text = (a.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 60);
+    if (url && text) links.push(`[${text.replace(/[\[\]]/g, '')}](${url})`);
+  });
+  return `Title: ${(doc.title || '').trim()}\n\nURL Source: ${pageUrl}\n\nMarkdown Content:\n${paragraphs.join('\n\n')}\n\n${links.join('\n')}`;
 }
 
 const BLOCK_TAGS = new Set(['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'SECTION', 'ARTICLE', 'TR', 'PRE']);
@@ -468,7 +696,9 @@ function toggleTocReverse() {
 
 async function saveTocFromModal() {
   if (!tocDraftEntries) return;
-  await saveBookToc(tocEditingBookId, { url: tocDraftEntries.url, entries: tocDraftEntries.entries, fetchedAt: Date.now() });
+  // จำว่าผู้ใช้กลับลำดับเอง เพื่อให้การดึงสารบัญใหม่ (เช็กตอนใหม่) เรียงแบบเดียวกัน
+  const manualReverse = document.getElementById('toc-reverse-chk').checked;
+  await saveBookToc(tocEditingBookId, { url: tocDraftEntries.url, entries: tocDraftEntries.entries, fetchedAt: Date.now(), manualReverse });
   tocDraftEntries = null;
   document.getElementById('toc-save-btn').disabled = true;
   await renderTocSummary((await getBookToc(tocEditingBookId)).entries, true);
@@ -558,18 +788,26 @@ async function removeBookToc() {
 
 // ==================== SITE PROFILES UI ====================
 let siteProfilesDraft = [];
+let proxiesDraft = [];
 
 function openSiteProfilesModal() {
   siteProfilesDraft = getSiteProfiles().map(p => ({ ...p }));
+  proxiesDraft = getProxies().map(p => ({ ...p }));
   document.getElementById('jina-key-input').value = getSecret('nov_jina_key') || '';
   document.getElementById('ai-extract-chk').checked = isAiExtractEnabled();
+  document.getElementById('proxy-key-input').value = getSecret('nov_proxy_key') || '';
+  document.getElementById('proxy-first-chk').checked = isProxyFirst();
   renderSiteProfiles();
+  renderProxies();
   document.getElementById('site-test-result').innerHTML = '';
   openModal('site-profiles-modal');
 }
 
 function renderSiteProfiles() {
   const list = document.getElementById('site-profiles-list');
+  const failing = new Set(getFailingProfileHosts());
+  const field = (idx, key, label, placeholder, wide = false) =>
+    `<label${wide ? ' class="wide"' : ''}>${label} <input type="text" value="${escapeHtml(siteProfilesDraft[idx][key] || '')}" placeholder="${escapeHtml(placeholder)}" onchange="siteProfilesDraft[${idx}].${key} = this.value.trim()"></label>`;
   list.innerHTML = siteProfilesDraft.length ? siteProfilesDraft.map((p, idx) => `
     <div class="bible-char-card">
       <div class="bible-char-head">
@@ -577,12 +815,27 @@ function renderSiteProfiles() {
         <label style="font-size:11px; cursor:pointer;"><input type="checkbox" ${p.enabled !== false ? 'checked' : ''} onchange="siteProfilesDraft[${idx}].enabled = this.checked"> ใช้งาน</label>
         <button class="btn btn-danger" style="padding:1px 6px; font-size:10px;" onclick="siteProfilesDraft.splice(${idx}, 1); renderSiteProfiles();">✕</button>
       </div>
+      ${failing.has(p.host) ? '<div style="font-size:11px; color:#b45309; margin-bottom:4px;">⚠️ โปรไฟล์นี้หาเนื้อหาไม่เจอติดกันหลายครั้ง เว็บอาจเปลี่ยนหน้าตา ลองทดสอบด้านล่างแล้วปรับ selector</div>' : ''}
       <div class="bible-char-grid">
-        <label class="wide">CSS selector ของเนื้อหา <input type="text" value="${escapeHtml(p.contentSelector || '')}" placeholder="เช่น #content, .chapter-content" onchange="siteProfilesDraft[${idx}].contentSelector = this.value.trim()"></label>
-        <label>selector ชื่อตอน <input type="text" value="${escapeHtml(p.titleSelector || '')}" placeholder="เช่น h1" onchange="siteProfilesDraft[${idx}].titleSelector = this.value.trim()"></label>
-        <label>selector ลิงก์ตอนถัดไป <input type="text" value="${escapeHtml(p.nextSelector || '')}" placeholder="เช่น a.next" onchange="siteProfilesDraft[${idx}].nextSelector = this.value.trim()"></label>
-        <label class="wide">selector ส่วนที่ตัดทิ้ง <input type="text" value="${escapeHtml(p.removeSelector || '')}" placeholder="เช่น .ads, script, .comments" onchange="siteProfilesDraft[${idx}].removeSelector = this.value.trim()"></label>
+        ${field(idx, 'contentSelector', 'CSS selector ของเนื้อหา', 'เช่น #content, .chapter-content', true)}
+        ${field(idx, 'titleSelector', 'selector ชื่อตอน', 'เช่น h1')}
+        ${field(idx, 'nextSelector', 'selector ลิงก์ตอนถัดไป', 'เช่น a.next')}
+        ${field(idx, 'removeSelector', 'selector ส่วนที่ตัดทิ้ง', 'เช่น .ads, script, .comments', true)}
       </div>
+      <details style="font-size:11px; margin-top:4px;" ${p.jinaTarget || p.jinaWait || p.noCache || p.nextMode === 'increment' ? 'open' : ''}>
+        <summary style="cursor:pointer; opacity:0.75;">ตัวเลือกขั้นสูง (เว็บที่โหลดเนื้อหาด้วย JavaScript / เลขตอนใน URL)</summary>
+        <div class="bible-char-grid" style="margin-top:4px;">
+          ${field(idx, 'jinaTarget', 'ให้ r.jina.ai อ่านเฉพาะส่วน', 'เช่น .reader-container')}
+          ${field(idx, 'jinaWait', 'รอจนส่วนนี้โหลดเสร็จ', 'เช่น .chapter p')}
+          <label>ตอนถัดไป
+            <select onchange="siteProfilesDraft[${idx}].nextMode = this.value">
+              <option value="auto" ${p.nextMode !== 'increment' ? 'selected' : ''}>หาลิงก์ในหน้า (อัตโนมัติ)</option>
+              <option value="increment" ${p.nextMode === 'increment' ? 'selected' : ''}>เพิ่มเลขตอนท้าย URL</option>
+            </select>
+          </label>
+          <label style="flex-direction:row; align-items:center; gap:6px;"><input type="checkbox" ${p.noCache ? 'checked' : ''} onchange="siteProfilesDraft[${idx}].noCache = this.checked"> ไม่ใช้หน้าที่ r.jina.ai เก็บไว้ (ช้าลง แต่ได้หน้าล่าสุด)</label>
+        </div>
+      </details>
     </div>`).join('') : '<div style="text-align:center; padding:12px; opacity:0.6; font-size:12px;">ยังไม่มีโปรไฟล์ เว็บที่ไม่มีโปรไฟล์จะใช้ตัวดึงแบบกลาง</div>';
 }
 
@@ -597,27 +850,104 @@ function resetSiteProfiles() {
   renderSiteProfiles();
 }
 
+// ---------- นำเข้า/ส่งออกโปรไฟล์ (แชร์ให้คนอื่นได้) ----------
+const PROFILE_TEXT_FIELDS = ['host', 'contentSelector', 'titleSelector', 'nextSelector', 'removeSelector', 'jinaTarget', 'jinaWait'];
+
+/** ตรวจโปรไฟล์จากไฟล์: เก็บเฉพาะฟิลด์ที่รู้จัก เป็นข้อความสั้นๆ และมีโดเมนที่ถูกต้อง */
+function sanitizeSiteProfile(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const p = {};
+  PROFILE_TEXT_FIELDS.forEach(k => { if (typeof raw[k] === 'string') p[k] = raw[k].trim().slice(0, 300); });
+  p.host = (p.host || '').toLowerCase().replace(/^https?:\/\//, '').replace(/^(www|m)\./, '').replace(/\/.*$/, '');
+  if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(p.host)) return null;
+  p.noCache = raw.noCache === true;
+  p.nextMode = raw.nextMode === 'increment' ? 'increment' : 'auto';
+  p.enabled = raw.enabled !== false;
+  return p;
+}
+
+function exportSiteProfiles() {
+  const data = { format: 'NovelTranslateSiteProfiles', version: 1, profiles: siteProfilesDraft.filter(p => p.host).map(sanitizeSiteProfile).filter(Boolean) };
+  downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), `noveltranslate-site-profiles-${backupFileStamp()}.json`);
+}
+
+function triggerSiteProfilesImport() {
+  document.getElementById('site-profiles-file').click();
+}
+
+async function handleSiteProfilesFile(input) {
+  const file = input.files?.[0];
+  input.value = '';
+  if (!file) return;
+  let list;
+  try {
+    const data = JSON.parse(await file.text());
+    list = Array.isArray(data) ? data : data?.profiles;
+  } catch (e) {
+    return alert('ไฟล์นี้ไม่ใช่ไฟล์ JSON ที่ถูกต้อง');
+  }
+  const clean = (Array.isArray(list) ? list : []).map(sanitizeSiteProfile).filter(Boolean);
+  if (!clean.length) return alert('ไม่พบโปรไฟล์เว็บที่ใช้ได้ในไฟล์นี้');
+  const existing = new Set(siteProfilesDraft.map(p => p.host));
+  const replaced = clean.filter(p => existing.has(p.host)).map(p => p.host);
+  if (!confirm(`พบโปรไฟล์ ${clean.length} เว็บ${replaced.length ? `\nจะแทนที่โปรไฟล์เดิมของ: ${replaced.join(', ')}` : ''}\n\nนำเข้าหรือไม่? (กด "บันทึก" ด้านล่างเพื่อใช้งาน)`)) return;
+  clean.forEach(p => {
+    const i = siteProfilesDraft.findIndex(x => x.host === p.host);
+    if (i === -1) siteProfilesDraft.unshift(p);
+    else siteProfilesDraft[i] = p;
+  });
+  renderSiteProfiles();
+}
+
+// ---------- proxy สำรอง ----------
+function renderProxies() {
+  const list = document.getElementById('proxy-list');
+  list.innerHTML = proxiesDraft.length ? proxiesDraft.map((p, idx) => `
+    <div style="display:flex; gap:4px; margin-bottom:4px;">
+      <input type="text" class="form-input" style="flex:1; font-size:11px; padding:4px 6px;" value="${escapeHtml(p.name || '')}" placeholder="ชื่อ" onchange="proxiesDraft[${idx}].name = this.value.trim()">
+      <input type="url" class="form-input" style="flex:3; font-size:11px; padding:4px 6px; font-family:monospace;" value="${escapeHtml(p.url || '')}" placeholder="https://my-proxy.workers.dev/?url={url}" onchange="proxiesDraft[${idx}].url = this.value.trim()">
+      <button class="btn btn-danger" style="padding:1px 6px; font-size:10px;" onclick="proxiesDraft.splice(${idx}, 1); renderProxies();">✕</button>
+    </div>`).join('') : '<div style="font-size:11px; opacity:0.6;">ยังไม่มี proxy สำรอง (ใช้ r.jina.ai อย่างเดียว)</div>';
+}
+
+function addProxy() {
+  proxiesDraft.push({ name: `proxy ${proxiesDraft.length + 1}`, url: '' });
+  renderProxies();
+}
+
 function saveSiteProfilesModal() {
-  saveSiteProfiles(siteProfilesDraft.filter(p => p.host));
+  const profiles = siteProfilesDraft.filter(p => p.host);
+  saveSiteProfiles(profiles);
+  rememberRemovedBuiltins(profiles);
   const key = document.getElementById('jina-key-input').value.trim();
   setSecret('nov_jina_key', key);
   localStorage.setItem('nov_ai_extract', document.getElementById('ai-extract-chk').checked ? 'true' : 'false');
+  const proxies = proxiesDraft.filter(p => /^https?:\/\//i.test((p.url || '').trim())).map(p => ({ name: (p.name || '').slice(0, 60), url: p.url.trim() }));
+  saveProxies(proxies);
+  setSecret('nov_proxy_key', document.getElementById('proxy-key-input').value.trim());
+  localStorage.setItem('nov_proxy_first', document.getElementById('proxy-first-chk').checked ? 'true' : 'false');
   htmlNavMisses.clear();
   closeModal('site-profiles-modal');
+  const blocked = proxies.filter(p => typeof isConnectAllowedByCsp === 'function' && !isConnectAllowedByCsp(buildProxyUrl(p.url, 'https://example.com/')));
+  if (blocked.length && confirm(`proxy ใหม่ (${blocked.map(p => p.name || p.url).join(', ')}) จะใช้ได้หลังรีโหลดหน้า (ระบบความปลอดภัยอนุญาตปลายทางตอนเปิดหน้าเท่านั้น)\n\nรีโหลดตอนนี้เลยหรือไม่?`)) {
+    location.reload();
+  }
 }
-
 /** ทดสอบดึง 1 หน้าด้วยการตั้งค่าในฟอร์ม (ยังไม่บันทึก) เพื่อปรับ selector */
 async function testSiteProfile() {
   const url = document.getElementById('site-test-url').value.trim();
   const box = document.getElementById('site-test-result');
   if (!/^https?:\/\//i.test(url)) return alert('กรุณาวางลิงก์หน้าตอนที่ต้องการทดสอบ');
   const saved = localStorage.getItem('nov_site_profiles');
-  saveSiteProfiles(siteProfilesDraft.filter(p => p.host));
+  const savedRemoved = localStorage.getItem('nov_site_profiles_removed');
+  const draft = siteProfilesDraft.filter(p => p.host);
+  saveSiteProfiles(draft);
+  rememberRemovedBuiltins(draft);
   box.innerHTML = '<span class="spinner-icon"></span> กำลังทดสอบ...';
   const controller = beginTask('site-test');
   try {
     const page = await scrapePage(url, controller.signal);
-    const sourceLabel = { profile: 'โปรไฟล์เว็บ', link: 'ลิงก์ในหน้า', html: 'HTML / rel=next', ai: 'AI', toc: 'สารบัญ', guess: 'เดาจากเลข URL' }[page.nextUrlSource] || page.nextUrlSource;
+    const sourceLabel = { profile: 'โปรไฟล์เว็บ', link: 'ลิงก์ในหน้า', html: 'HTML / rel=next', ai: 'AI', toc: 'สารบัญ', increment: 'เพิ่มเลขตอน (โปรไฟล์)', guess: 'เดาจากเลข URL' }[page.nextUrlSource] || page.nextUrlSource;
     const viaLabel = { profile: 'โปรไฟล์เว็บ', generic: 'ตัวดึงแบบกลาง', ai: 'AI ช่วยแยกเนื้อหา' }[page.via] || page.via;
     box.innerHTML = `
       <div>✓ ดึงได้ด้วย: <b>${escapeHtml(viaLabel)}</b>${page.profileFailed ? ' <span style="color:#dc2626;">(selector ของโปรไฟล์หาเนื้อหาไม่เจอ)</span>' : ''}</div>
@@ -629,5 +959,6 @@ async function testSiteProfile() {
   } finally {
     endTask('site-test', controller);
     if (saved === null) localStorage.removeItem('nov_site_profiles'); else localStorage.setItem('nov_site_profiles', saved);
+    if (savedRemoved === null) localStorage.removeItem('nov_site_profiles_removed'); else localStorage.setItem('nov_site_profiles_removed', savedRemoved);
   }
 }

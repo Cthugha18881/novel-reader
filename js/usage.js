@@ -99,11 +99,38 @@ async function recordUsage(u, signal = null) {
       r.output += output;
       r.cacheRead += Math.max(0, Math.round(u.cacheRead || 0));
       r.cacheWrite += Math.max(0, Math.round(u.cacheWrite || 0));
+      // ยอดประมาณ (คำขอที่ไม่ได้ยอดกลับมา) รวมอยู่ใน input แล้ว และเก็บแยกไว้แสดงให้รู้ว่าส่วนไหนเป็นค่าประมาณ
+      if (u.estimated) {
+        r.estimatedInput = (r.estimatedInput || 0) + input;
+        r.calls -= 1;
+        r.estimatedCalls = (r.estimatedCalls || 0) + 1;
+      }
       return r;
     });
   } catch (e) {
     console.warn('Record usage failed:', e);
   }
+}
+
+// อัตราตัวอักษรต่อ token ล่าสุดของแต่ละผู้ให้บริการ (จากคำขอที่ได้ยอดกลับมา) ใช้ประมาณคำขอที่ไม่ได้ยอด
+const charsPerTokenByProvider = {};
+
+function learnCharsPerToken(provider, chars, inputTokens) {
+  if (!chars || !inputTokens) return;
+  const ratio = chars / inputTokens;
+  const prev = charsPerTokenByProvider[provider];
+  charsPerTokenByProvider[provider] = prev ? prev * 0.8 + ratio * 0.2 : ratio;
+}
+
+/**
+ * คำขอที่ส่งไปแล้วแต่ไม่ได้ยอดกลับมา (ถูกยกเลิกกลางทาง / การเชื่อมต่อหลุด)
+ * ผู้ให้บริการอาจยังคิดค่า token ขาเข้า จึงบันทึกเป็น "ค่าประมาณ" ไว้ (output ไม่ประมาณ เพราะส่วนใหญ่ยังไม่ทันสร้าง)
+ */
+async function recordEstimatedInput(provider, model, chars, signal) {
+  const ratio = charsPerTokenByProvider[provider] || 2;
+  const estimated = Math.round(chars / ratio);
+  if (!estimated) return;
+  await recordUsage({ provider, model, input: estimated, output: 0, estimated: true }, signal);
 }
 
 /** ค่าเฉลี่ย token ต่อตอนของเรื่อง แยกตามโหมดคุณภาพ (ใช้ประมาณก่อนแปลล่วงหน้า) */
@@ -149,6 +176,7 @@ function sumUsage(records, prices = getModelPrices()) {
     total.output += r.output || 0;
     total.cacheRead += r.cacheRead || 0;
     total.cacheWrite += r.cacheWrite || 0;
+    total.estimatedInput = (total.estimatedInput || 0) + (r.estimatedInput || 0);
     const c = estimateCost(r, prices);
     if (c === null) total.unpricedTokens += (r.input || 0) + (r.output || 0);
     else total.cost += c;

@@ -79,7 +79,7 @@ function formatBatchEstimate(est, count) {
     `ใช้ประมาณ ${formatTokenCount(est.input * count)} input token + ${formatTokenCount(est.output * count)} output token\n` +
     `(ตอนละ ~${formatTokenCount(est.input)} + ${formatTokenCount(est.output)})` +
     (cost !== null ? `\nค่าใช้จ่ายโดยประมาณ ~$${cost.toFixed(2)} (ตามราคาที่กรอกไว้ของ ${cfg.mainModel})` : '') + '\n\n' +
-    `* เป็นค่าประมาณ ใช้จริงอาจต่างไปตามโมเดลและเนื้อหา ต้องการเริ่มแปลหรือไม่?`;
+    `* เป็นค่าประมาณ ยอดที่ผู้ให้บริการเรียกเก็บจริงอาจสูงกว่านี้ ต้องการเริ่มแปลหรือไม่?`;
 }
 
 /** ใช้ค่าเฉลี่ย token ที่ใช้จริงของเรื่องนี้ (ถ้ามีอย่างน้อย 2 ตอน) แทนการประมาณจากความยาว */
@@ -397,6 +397,10 @@ async function openBookshelfModal() {
         <span style="font-size: 11px; opacity: 0.75;">ส่งออกทั้งเรื่อง (${bookChaps.length} ตอน):</span>
         <button class="btn" style="padding: 2px 8px; font-size: 10px;" onclick="exportBookTxt(${jsArg(b.bookId)})" title="ไฟล์ข้อความ .txt รวมทุกตอนเรียงตามลำดับ">📄 TXT</button>
         <button class="btn" style="padding: 2px 8px; font-size: 10px;" onclick="exportBookEpub(${jsArg(b.bookId)})" title="ไฟล์ e-book .epub เปิดได้ในแอพอ่านหนังสือทั่วไป มีสารบัญ">📘 EPUB</button>
+      </div>
+      <div class="batch-bar" style="padding-top: 6px; padding-bottom: 6px; flex-wrap: wrap;">
+        <button class="btn" style="padding: 2px 8px; font-size: 10px;" onclick="checkNewChaptersForBook(${jsArg(b.bookId)})" title="เช็กว่าเว็บต้นฉบับมีตอนใหม่หรือยัง (ไม่ใช้โควตา AI)">🔔 เช็กตอนใหม่</button>
+        <span id="newchap-${escapeHtml(b.bookId)}" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">${newChapterBadgeHtml(b.bookId)}</span>
       </div>
 
       <div class="shelf-sub-toolbar" id="shelf-sub-bar-${b.bookId}" style="display: none;">

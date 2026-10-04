@@ -4,7 +4,7 @@
 
 // ---------- API Key ----------
 // โหมด "ไม่จำ key": เก็บใน sessionStorage (หายเมื่อปิดแท็บ และแต่ละแท็บต้องใส่เอง)
-const SECRET_NAME_PATTERN = /^nov_(llm_keys_[a-z0-9]+|jina_key)$/;
+const SECRET_NAME_PATTERN = /^nov_(llm_keys_[a-z0-9]+|jina_key|proxy_key)$/;
 const SECRETS_SESSION_FLAG = 'nov_secrets_session_only';
 
 function isSecretName(name) {
@@ -71,6 +71,8 @@ function countStoredSecrets() {
 // ใช้รายชื่อที่กำหนดไว้เท่านั้น (ไม่ใช่ทุก key ที่ขึ้นต้นด้วย nov_) เพื่อไม่ให้ไฟล์สำรองจากคนอื่นแอบตั้งค่าอันตรายได้
 // Base URL แยกออกมา: ถ้าเปลี่ยน API Key ของ OpenAI-compatible จะถูกส่งไปที่นั่น จึงต้องถามผู้ใช้ก่อนเสมอ
 const BACKUP_BASEURL_SETTING = 'nov_llm_baseurl_openai';
+// proxy สำรองก็เช่นกัน: ลิงก์ที่อ่านและ proxy key จะถูกส่งไปที่นั่น
+const BACKUP_PROXIES_SETTING = 'nov_proxies';
 const MAX_SETTING_LENGTH = 200000;
 
 function getBackupSettingNames() {
@@ -78,8 +80,8 @@ function getBackupSettingNames() {
     'nov_llm_provider', 'nov_llm_fallback_provider', 'nov_quality_mode', 'nov_retry_limit',
     'nov_enable_deep_ner', 'nov_enable_infinite', 'nov_enable_prefetch', 'nov_enable_auto_glossary',
     'nov_enable_bible_auto', 'nov_show_junk', 'nov_export_notes', 'nov_theme', 'nov_font_size',
-    'nov_site_profiles', 'nov_ai_extract', 'nov_backup_remind_days',
-    'nov_budget_unit', 'nov_budget_daily', 'nov_budget_monthly', 'nov_model_prices'
+    'nov_site_profiles', 'nov_site_profiles_removed', 'nov_ai_extract', 'nov_backup_remind_days',
+    'nov_budget_unit', 'nov_budget_daily', 'nov_budget_monthly', 'nov_model_prices', 'nov_proxy_first'
   ];
   Object.keys(LLM_PROVIDERS).forEach(p => names.push(`nov_llm_model_${p}`, `nov_llm_aux_model_${p}`));
   return names;
@@ -87,7 +89,7 @@ function getBackupSettingNames() {
 
 function collectBackupSettings() {
   const settings = {};
-  [...getBackupSettingNames(), BACKUP_BASEURL_SETTING].forEach(name => {
+  [...getBackupSettingNames(), BACKUP_BASEURL_SETTING, BACKUP_PROXIES_SETTING].forEach(name => {
     const v = localStorage.getItem(name);
     if (v !== null) settings[name] = v;
   });
@@ -102,11 +104,23 @@ function splitImportedSettings(settings) {
   const allowed = new Set(getBackupSettingNames());
   const safe = {};
   let baseUrl = null;
-  if (!settings || typeof settings !== 'object') return { safe, baseUrl };
+  let proxies = null;
+  if (!settings || typeof settings !== 'object') return { safe, baseUrl, proxies };
   Object.entries(settings).forEach(([name, value]) => {
     if (typeof value !== 'string' || value.length > MAX_SETTING_LENGTH) return;
     if (name === BACKUP_BASEURL_SETTING) {
       if (/^https?:\/\//i.test(value.trim())) baseUrl = value.trim();
+      return;
+    }
+    if (name === BACKUP_PROXIES_SETTING) {
+      try {
+        const list = JSON.parse(value);
+        if (Array.isArray(list)) {
+          const clean = list.filter(p => p && typeof p.url === 'string' && /^https?:\/\//i.test(p.url.trim()))
+            .map(p => ({ name: String(p.name || '').slice(0, 60), url: p.url.trim() }));
+          if (clean.length) proxies = clean;
+        }
+      } catch (e) {}
       return;
     }
     if (!allowed.has(name)) return;
@@ -116,12 +130,14 @@ function splitImportedSettings(settings) {
     safe[name] = value;
   });
   if (baseUrl && baseUrl.replace(/\/+$/, '') === getProviderBaseUrl('openai')) baseUrl = null;
-  return { safe, baseUrl };
+  if (proxies && JSON.stringify(proxies) === JSON.stringify(getProxies().map(p => ({ name: String(p.name || ''), url: p.url.trim() })))) proxies = null;
+  return { safe, baseUrl, proxies };
 }
 
-function applyImportedSettings(safe, { baseUrl = null } = {}) {
+function applyImportedSettings(safe, { baseUrl = null, proxies = null } = {}) {
   Object.entries(safe).forEach(([name, value]) => localStorage.setItem(name, value));
   if (baseUrl) localStorage.setItem(BACKUP_BASEURL_SETTING, baseUrl);
+  if (proxies) localStorage.setItem(BACKUP_PROXIES_SETTING, JSON.stringify(proxies));
 }
 
 // ---------- พื้นที่จัดเก็บถาวร ----------

@@ -468,3 +468,6 @@ body.theme-dark .usage-card { border-color: rgba(255, 255, 255, 0.15); }
 .usage-price-model { font-size: 11px; word-break: break-all; }
 .usage-price-head { font-size: 10px; opacity: 0.65; }
 .diag-entry { font-size: 11px; padding: 4px 0; border-bottom: 1px dashed rgba(0, 0, 0, 0.1); word-break: break-word; }
+.usage-estimate-note { font-size: 11px; line-height: 1.6; margin-bottom: 10px; padding: 6px 10px; border-radius: 6px; background: rgba(234, 179, 8, 0.12); border: 1px solid rgba(202, 138, 4, 0.3); }
+
+.new-chap-badge { font-size: 11px; font-weight: 600; color: #b45309; background: rgba(234, 179, 8, 0.15); border-radius: 10px; padding: 1px 8px; }

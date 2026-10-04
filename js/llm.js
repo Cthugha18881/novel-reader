@@ -504,9 +504,16 @@ async function callLLMWithProvider(prompt, { json = true, schema = null, system 
     try {
       const text = await caller(cfg, pickKey(cfg), prompt, { json, schema, system, onUsage }, signal);
       logAttempt(attempt, { ok: true });
+      if (reported && typeof learnCharsPerToken === 'function') learnCharsPerToken(cfg.provider, prompt.length + system.length, reported.input);
       return text;
     } catch (err) {
-      logAttempt(attempt, { ok: false, kind: isAbortError(err) || signal?.aborted ? 'abort' : (err.kind || 'error'), status: err.status || 0, error: err.message });
+      const failKind = isAbortError(err) || signal?.aborted ? 'abort' : (err.kind || 'error');
+      logAttempt(attempt, { ok: false, kind: failKind, status: err.status || 0, error: err.message });
+      // ส่งคำขอไปแล้วแต่ไม่ได้ยอดกลับมา: ผู้ให้บริการอาจคิดค่า token ขาเข้าแล้ว จึงบันทึกค่าประมาณไว้
+      // (429 / 4xx ไม่ถูกคิดเงิน จึงไม่นับ)
+      if (!reported && (failKind === 'abort' || failKind === 'network') && typeof recordEstimatedInput === 'function') {
+        recordEstimatedInput(cfg.provider, cfg.model, prompt.length + system.length, signal);
+      }
       if (isAbortError(err) || signal?.aborted) throw new LLMError('ผู้ใช้สั่งหยุดการทำงาน', 'abort');
       const retryable = ['rate', 'server', 'network'].includes(err.kind);
       if (!retryable || attempt === maxRetries) {

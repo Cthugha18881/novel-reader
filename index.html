@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/csp.js"></script>
-  <title>NovelTranslate AI v3.1.2</title>
+  <title>NovelTranslate AI v3.2.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -147,6 +147,7 @@
       <div id="bookshelf-list" class="modal-scrollable-body" style="max-height: 400px; margin-bottom: 12px;"></div>
       <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px;">
         <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="exportBackup()" title="ดาวน์โหลดนิยาย ตอน และคลังศัพท์ทั้งหมดเป็นไฟล์ .json (ไม่รวม API Key)">⬇️ สำรองข้อมูลทั้งหมด</button>
+        <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="checkNewChaptersForAllBooks()" title="เช็กตอนใหม่ของทุกเรื่องบนชั้นหนังสือ (ไม่ใช้โควตา AI)">🔔 เช็กตอนใหม่ทุกเรื่อง</button>
         <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="openUsageModal()" title="token ที่ใช้จริง เพดานค่าใช้จ่าย และบันทึกข้อผิดพลาด">📊 การใช้งาน AI</button>
         <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="triggerBackupImport()" title="นำเข้าไฟล์สำรอง .json (เลือกได้ว่าจะรวมกับของเดิมหรือแทนที่ทั้งหมด)">⬆️ นำเข้าไฟล์สำรอง</button>
         <input type="file" id="backup-file-input" accept=".json,application/json" style="display: none;" onchange="handleBackupFileSelected(this)">
@@ -164,7 +165,11 @@
         <button class="modal-close" onclick="closeModal('usage-modal')">✕</button>
       </div>
       <div class="modal-scrollable-body" style="max-height: 68vh; font-size: 12px;">
-        <div style="font-size: 11px; opacity: 0.7; margin-bottom: 8px;">นับจาก token ที่ผู้ให้บริการแจ้งกลับมาจริงในเบราว์เซอร์นี้ (ยอดในหน้าเว็บผู้ให้บริการคือยอดจริงที่ถูกเรียกเก็บ)</div>
+        <div class="usage-estimate-note">
+          ⚠️ <b>ตัวเลขในหน้านี้เป็นค่าโดยประมาณ</b> นับจาก token ที่ผู้ให้บริการแจ้งกลับมาในแต่ละคำขอ ยอดที่ถูกเรียกเก็บจริงอาจ<b>สูงกว่านี้</b>
+          (เช่น ผู้ให้บริการบางเจ้าคิดส่วนที่ไม่ได้แจ้งกลับมา หรือมีคำขอที่ถูกยกเลิกกลางทาง)
+          ยอดจริงให้ดูที่หน้าเว็บของผู้ให้บริการ และควรตั้งเพดานต่ำกว่างบที่มีจริงเผื่อไว้
+        </div>
         <div id="usage-summary" class="usage-cards"></div>
         <div class="form-label" style="margin-top: 12px;">14 วันล่าสุด</div>
         <div id="usage-days" class="usage-days"></div>
@@ -248,6 +253,11 @@
           <input type="checkbox" id="backup-import-baseurl" style="margin-top: 2px;">
           <div>ใช้ Base URL ของ OpenAI-compatible จากไฟล์: <code id="backup-import-baseurl-value" style="word-break: break-all;"></code>
             <div style="color: #b45309;">⚠️ API Key ของ OpenAI-compatible จะถูกส่งไปที่ปลายทางนี้ เลือกเฉพาะเมื่อเป็นไฟล์สำรองของคุณเอง</div></div>
+        </label>
+        <label id="backup-import-proxies-row" style="display: none; gap: 8px; align-items: flex-start; cursor: pointer; margin-bottom: 6px;">
+          <input type="checkbox" id="backup-import-proxies" style="margin-top: 2px;">
+          <div>ใช้ proxy สำรองจากไฟล์: <code id="backup-import-proxies-value" style="word-break: break-all;"></code>
+            <div style="color: #b45309;">⚠️ ลิงก์นิยายที่อ่าน (และ proxy key ถ้ามี) จะถูกส่งไปที่ปลายทางนี้ เลือกเฉพาะเมื่อเป็นไฟล์สำรองของคุณเอง</div></div>
         </label>
       </div>
       <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px; flex-shrink: 0;">
@@ -392,11 +402,27 @@
           <b style="font-size: 12px;">โปรไฟล์เว็บ (CSS selector)</b>
           <span style="display: flex; gap: 6px;">
             <button class="btn btn-primary" style="padding: 2px 8px; font-size: 11px;" onclick="addSiteProfile()">+ เพิ่ม</button>
+            <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="exportSiteProfiles()" title="ส่งออกโปรไฟล์เป็นไฟล์ไว้แชร์หรือสำรอง">⬇️ ส่งออก</button>
+            <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="triggerSiteProfilesImport()" title="นำเข้าโปรไฟล์จากไฟล์ (เว็บที่ซ้ำจะถูกแทนที่)">⬆️ นำเข้า</button>
+            <input type="file" id="site-profiles-file" accept=".json,application/json" style="display: none;" onchange="handleSiteProfilesFile(this)">
             <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="resetSiteProfiles()">คืนค่าเริ่มต้น</button>
           </span>
         </div>
         <div style="font-size: 11px; opacity: 0.65; margin-bottom: 8px;">ระบุตำแหน่งเนื้อหาของเว็บที่ตัวดึงแบบกลางดึงได้ไม่ดี ถ้า selector หาเนื้อหาไม่เจอ ระบบจะกลับไปใช้ตัวดึงแบบกลางให้อัตโนมัติ (ค่าเริ่มต้นของเว็บยอดนิยมอาจต้องปรับถ้าเว็บเปลี่ยนหน้าตา)</div>
         <div id="site-profiles-list"></div>
+        <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <b style="font-size: 12px;">Proxy สำรอง (เมื่อ r.jina.ai ใช้ไม่ได้)</b>
+            <button class="btn btn-primary" style="padding: 2px 8px; font-size: 11px;" onclick="addProxy()">+ เพิ่ม</button>
+          </div>
+          <div style="font-size: 11px; opacity: 0.65; margin-bottom: 6px; line-height: 1.5;">ใส่ proxy ของคุณเอง เช่น Cloudflare Worker (ดูตัวอย่างโค้ดใน <code>docs/cloudflare-worker.js</code>) ระบบจะลองตามลำดับเมื่อ r.jina.ai ล่ม/โดนจำกัด proxy ต้องคืน HTML ของหน้าเว็บ และใช้ <code>{url}</code> แทนตำแหน่งลิงก์</div>
+          <div id="proxy-list"></div>
+          <label class="form-label" for="proxy-key-input" style="margin-top: 6px;">Proxy key (ไม่บังคับ ส่งเป็น header X-Proxy-Key)</label>
+          <input type="password" id="proxy-key-input" class="form-input" autocomplete="off" style="font-family: monospace; font-size: 12px;">
+          <label style="display: flex; gap: 6px; align-items: center; font-size: 11px; margin-top: 6px; cursor: pointer;">
+            <input type="checkbox" id="proxy-first-chk" style="accent-color: #2563eb;"> ใช้ proxy ก่อน r.jina.ai (เว็บที่ตั้งให้ r.jina.ai รันหน้าเว็บ ยังใช้ r.jina.ai ก่อนเสมอ)
+          </label>
+        </div>
         <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 10px;">
           <label class="form-label" for="site-test-url">🧪 ทดสอบดึงหน้าเว็บ (ใช้ค่าในฟอร์มนี้)</label>
           <div style="display: flex; gap: 6px;">
@@ -918,6 +944,7 @@
   <script src="js/glossary.js"></script>
   <script src="js/bible.js"></script>
   <script src="js/shelf.js"></script>
+  <script src="js/updates.js"></script>
   <script src="js/export.js"></script>
   <script src="js/app.js"></script>
 </body>

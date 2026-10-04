@@ -83,19 +83,27 @@ const SCHEMAS = {
 };
 
 // ---------- URL helpers ----------
+/**
+ * เดา URL ตอนถัดไปโดยเพิ่มเลขตัวสุดท้าย
+ * - ค่าสุดท้ายใน ?query เป็นตัวเลข: เพิ่มเลขนั้น (read.php?bid=1&cid=2 -> cid=3)
+ * - ไม่งั้นถ้า path ลงท้ายด้วยเลข: เพิ่มเลขใน path และคง ?query #hash ไว้ (chapter-1?service=x -> chapter-2?service=x)
+ */
 function computeNextNumericUrl(url) {
   if (!url) return null;
-  const match = url.match(/^(.*?)(\d+)(\.html?|\/)?$/i);
-  if (!match) return null;
-
-  const prefix = match[1];
-  const numStr = match[2];
-  const suffix = match[3] || '';
-
-  const nextNum = (BigInt(numStr) + 1n).toString();
-  const paddedNextNum = nextNum.padStart(numStr.length, '0');
-
-  return `${prefix}${paddedNextNum}${suffix}`;
+  const increment = (str) => {
+    const match = str.match(/^(.*?)(\d+)(\.html?|\/)?$/i);
+    if (!match) return null;
+    const numStr = match[2];
+    const nextNum = (BigInt(numStr) + 1n).toString().padStart(numStr.length, '0');
+    return `${match[1]}${nextNum}${match[3] || ''}`;
+  };
+  const qIndex = url.search(/[?#]/);
+  const queryEndsWithNumber = qIndex !== -1 && /=\d+$/.test(url.replace(/#.*$/, ''));
+  if (qIndex !== -1 && !queryEndsWithNumber) {
+    const nextPath = increment(url.slice(0, qIndex));
+    if (nextPath) return nextPath + url.slice(qIndex);
+  }
+  return increment(url);
 }
 
 // ---------- URL identity ----------
@@ -173,6 +181,8 @@ function deriveBookKey(url) {
     if (bookSegs.length && looksLikeChapterSegment(bookSegs[bookSegs.length - 1])) bookSegs.pop();
     while (bookSegs.length && /^(chapter|chapters|episodes?|ep|read)$/i.test(bookSegs[bookSegs.length - 1])) bookSegs.pop();
   }
+  // "ชื่อเรื่อง_เลขเรื่อง" ใช้แค่เลขเรื่อง: เว็บอย่าง webnovel ใช้ทั้ง book/ชื่อ_123 และ book/123/... กับเรื่องเดียวกัน
+  bookSegs = bookSegs.map(s => s.replace(/^[^/]+_(\d{8,})$/, '$1'));
   const reliable = bookSegs.length > 0;
   return { key: `${host}/${bookSegs.join('/')}`, reliable, legacyId };
 }
@@ -345,19 +355,13 @@ function parseJinaMarkdown(md, pageUrl) {
   };
 }
 
-async function fetchJinaMarkdown(url, signal) {
-  try {
-    const res = await fetch(`https://r.jina.ai/${url}`, { signal, headers: getJinaHeaders() });
-    if (!res.ok) throw new Error(res.status === 404 ? '404' : `ดึงหน้าเว็บไม่สำเร็จ (HTTP ${res.status})`);
-    const md = await res.text();
-    if (md.includes('404 Not Found') || md.includes('页面不存在') || (md.includes('Just a moment...') && md.length < 1500)) {
-      throw new Error('404');
-    }
-    return md;
-  } catch (e) {
-    if (e.name === 'AbortError') throw new LLMError("ผู้ใช้สั่งหยุดการทำงาน", 'abort');
-    throw e;
+/** ดึงหน้าเว็บเป็น markdown (r.jina.ai หรือ proxy สำรอง ดู fetchSourcePage ใน source.js) */
+async function fetchJinaMarkdown(url, signal, profile = null) {
+  const { body: md } = await fetchSourcePage(url, { format: 'markdown', signal, profile });
+  if (md.includes('404 Not Found') || md.includes('页面不存在') || (md.includes('Just a moment...') && md.length < 1500)) {
+    throw new Error('404');
   }
+  return md;
 }
 
 // เว็บที่ลองหา "ตอนถัดไป" จาก HTML แล้วไม่เจอหลายครั้ง ไม่ต้องเสียคำขอเพิ่มอีก
@@ -368,7 +372,7 @@ async function findNextViaHtml(url, signal, profile) {
   const host = hostOf(url);
   if ((htmlNavMisses.get(host) || 0) >= HTML_NAV_MAX_MISSES) return null;
   try {
-    const html = await fetchJinaHtml(url, signal);
+    const html = await fetchJinaHtml(url, signal, profile);
     const nav = findNextInHtml(new DOMParser().parseFromString(html, 'text/html'), url, profile);
     const found = nav && (nav.kind === 'chapter' || !isContinuationPage(url, nav.url)) ? nav.url : null;
     htmlNavMisses.set(host, found ? 0 : (htmlNavMisses.get(host) || 0) + 1);
@@ -382,13 +386,13 @@ async function findNextViaHtml(url, signal, profile) {
 
 /** ดึงด้วยโปรไฟล์เว็บ (HTML + CSS selector) รวมหน้าต่อของบทเดียวกัน */
 async function scrapeWithProfile(url, profile, signal) {
-  const first = parseHtmlWithProfile(await fetchJinaHtml(url, signal), url, profile);
+  const first = parseHtmlWithProfile(await fetchJinaHtml(url, signal, profile), url, profile);
   const paragraphs = first.paragraphs.slice();
   let nav = first.nav;
   let pageCount = 1;
   for (let page = 0; page < MAX_EXTRA_PAGES && nav?.kind === 'page' && isContinuationPage(url, nav.url); page++) {
     try {
-      const next = parseHtmlWithProfile(await fetchJinaHtml(nav.url, signal), nav.url, profile);
+      const next = parseHtmlWithProfile(await fetchJinaHtml(nav.url, signal, profile), nav.url, profile);
       paragraphs.push(...next.paragraphs);
       nav = next.nav;
       pageCount++;
@@ -411,8 +415,8 @@ async function scrapeWithProfile(url, profile, signal) {
 }
 
 /** ตัวดึงแบบกลาง (markdown จาก Jina) + ให้ AI ช่วยแยกเนื้อหาถ้าแยกไม่ออก */
-async function scrapeGeneric(url, signal) {
-  const firstMd = await fetchJinaMarkdown(url, signal);
+async function scrapeGeneric(url, signal, profile = null, { allowAi = true } = {}) {
+  const firstMd = await fetchJinaMarkdown(url, signal, profile);
   const first = parseJinaMarkdown(firstMd, url);
   const textParts = [first.text];
   let nav = first.nav;
@@ -420,7 +424,7 @@ async function scrapeGeneric(url, signal) {
   // บทที่แบ่งเป็นหลายหน้า: ตามลิงก์ "下一页" ที่ยังเป็นบทเดิมไปต่อ
   for (let page = 0; page < MAX_EXTRA_PAGES && !nav.nextChapter && nav.nextPage && isContinuationPage(url, nav.nextPage); page++) {
     try {
-      const next = parseJinaMarkdown(await fetchJinaMarkdown(nav.nextPage, signal), nav.nextPage);
+      const next = parseJinaMarkdown(await fetchJinaMarkdown(nav.nextPage, signal, profile), nav.nextPage);
       if (next.text) textParts.push(next.text);
       nav = next.nav;
     } catch (e) {
@@ -436,7 +440,7 @@ async function scrapeGeneric(url, signal) {
   let via = 'generic';
 
   // แยกเนื้อหาไม่ค่อยได้ (สั้นผิดปกติ): ให้ AI ช่วยชี้ตำแหน่งเนื้อหาและลิงก์ตอนถัดไป
-  if (text.length < AI_EXTRACT_THRESHOLD && isAiExtractEnabled() && hasActiveApiKey()) {
+  if (allowAi && text.length < AI_EXTRACT_THRESHOLD && isAiExtractEnabled() && hasActiveApiKey()) {
     try {
       const ai = await aiExtractFromMarkdown(firstMd, url, signal);
       // AI ตัดเมนู/คอมเมนต์ออก ผลจึงมักสั้นกว่าตัวดึงแบบกลาง ใช้ได้ถ้าพบเนื้อหาจริง
@@ -479,12 +483,13 @@ async function scrapePage(url, signal = null, options = {}) {
   }
 }
 
-async function scrapePageInner(url, signal = null, { bookId = null } = {}) {
+async function scrapePageInner(url, signal = null, { bookId = null, allowAi = true } = {}) {
   let parsedUrl;
   try { parsedUrl = new URL(url); } catch { throw new Error('กรุณาใส่ URL ที่ถูกต้อง'); }
   if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('รองรับเฉพาะ URL ที่ขึ้นต้นด้วย http:// หรือ https://');
 
   const profile = getSiteProfile(url);
+  const host = hostOf(url);
   let page = null;
   let profileFailed = false;
   if (profile?.contentSelector) {
@@ -498,14 +503,26 @@ async function scrapePageInner(url, signal = null, { bookId = null } = {}) {
       profileFailed = true;
     }
   }
-  if (!page) page = await scrapeGeneric(url, signal);
-  if (!page.text || page.text.length < 40) throw new Error('ไม่พบเนื้อหานิยายในหน้าที่ดึงมาได้');
+  // โปรไฟล์ที่มีแค่ตัวเลือกของ r.jina.ai (jinaTarget/jinaWait/noCache) ใช้กับตัวดึงแบบกลาง
+  if (!page) page = await scrapeGeneric(url, signal, profile, { allowAi });
+  const found = !!page.text && page.text.length >= 40;
+  // โปรไฟล์ล้มเหลวติดกันหลายครั้ง = เว็บอาจเปลี่ยนหน้าตา (แจ้งเตือนครั้งเดียวเมื่อถึงเกณฑ์)
+  if (profile) {
+    const profileOk = profile.contentSelector ? !profileFailed : found;
+    if (recordProfileResult(host, profileOk) && typeof notifyProfileFailing === 'function') notifyProfileFailing(host);
+  }
+  if (!found) throw new Error('ไม่พบเนื้อหานิยายในหน้าที่ดึงมาได้');
 
   // ตอนถัดไป: สารบัญมีความแม่นที่สุด
   const tocNext = bookId ? await getTocNextUrl(bookId, url) : null;
   if (tocNext) {
     page.nextUrl = tocNext;
     page.nextUrlSource = 'toc';
+  }
+  // เว็บที่เลขตอนเรียงใน URL (ตั้งในโปรไฟล์): เพิ่มเลขเลย ไม่ต้องเสียคำขอหาลิงก์จาก HTML
+  if (!page.nextUrl && profile?.nextMode === 'increment') {
+    page.nextUrl = computeNextNumericUrl(url);
+    page.nextUrlSource = page.nextUrl ? 'increment' : null;
   }
   if (!page.nextUrl) {
     const htmlNext = await findNextViaHtml(url, signal, profile);

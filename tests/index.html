@@ -32,6 +32,7 @@
   <script src="../js/glossary.js"></script>
   <script src="../js/bible.js"></script>
   <script src="../js/shelf.js"></script>
+  <script src="../js/updates.js"></script>
   <script src="../js/export.js"></script>
   <script>
     const results = [];
@@ -581,6 +582,64 @@
       return s1 === s2 && !s1.includes('林动') && !s1.includes('第一章') && p.includes('林动=หลินต้ง') && p.includes('林动出手') && p.includes('第一章') &&
         buildTranslationSystemPrompt(ctx, { noteMode: true }) !== s1;
     });
+    // ---------- Round 2 step 3: sources ----------
+    test('computeNextNumericUrl: คง ?query ที่ไม่ใช่เลขตอน', () => eq(computeNextNumericUrl('https://wtr-lab.com/en/novel/15235/slug/chapter-1?service=webplus'), 'https://wtr-lab.com/en/novel/15235/slug/chapter-2?service=webplus'));
+    test('computeNextNumericUrl: เลขตอนอยู่ใน query', () => eq([computeNextNumericUrl('https://x.test/read.php?bid=1&cid=2'), computeNextNumericUrl('https://x.test/b/12/?p=3')], ['https://x.test/read.php?bid=1&cid=3', 'https://x.test/b/12/?p=4']));
+    test('deriveBookKey: webnovel ทั้งแบบมีชื่อเรื่องและแบบเลขล้วนเป็นเรื่องเดียวกัน', () => {
+      const a = deriveBookKey('https://www.webnovel.com/book/i-can-equip-infinitely_36845737800834505/chapter-1-fear-of-the-dark_99163779840917709');
+      const b = deriveBookKey('https://www.webnovel.com/book/36845737800834505/99163781719966919');
+      return a.reliable && eq(a.key, b.key) && a.key === 'webnovel.com/book/36845737800834505';
+    });
+    test('getSiteProfiles: ผู้ใช้ที่บันทึกไว้แล้วได้โปรไฟล์ตั้งต้นใหม่ด้วย (ยกเว้นที่ลบเอง)', () => withStorage(['nov_site_profiles', 'nov_site_profiles_removed'], () => {
+      localStorage.setItem('nov_site_profiles', JSON.stringify([{ host: 'kakuyomu.jp', contentSelector: '.mine' }, { host: 'my.site', contentSelector: '#c' }]));
+      localStorage.setItem('nov_site_profiles_removed', JSON.stringify(['royalroad.com']));
+      const hosts = getSiteProfiles().map(p => p.host);
+      const kakuyomu = getSiteProfiles().find(p => p.host === 'kakuyomu.jp');
+      return hosts.includes('webnovel.com') && hosts.includes('wtr-lab.com') && hosts.includes('my.site') && !hosts.includes('royalroad.com') && kakuyomu.contentSelector === '.mine' && hosts.filter(h => h === 'kakuyomu.jp').length === 1;
+    }));
+    test('rememberRemovedBuiltins: จำโปรไฟล์ตั้งต้นที่ถูกลบ', () => withStorage(['nov_site_profiles_removed'], () => {
+      rememberRemovedBuiltins(BUILTIN_SITE_PROFILES.filter(p => p.host !== 'webnovel.com'));
+      return eq(JSON.parse(localStorage.getItem('nov_site_profiles_removed')), ['webnovel.com']);
+    }));
+    test('getProfileJinaHeaders: แปลงตัวเลือกโปรไฟล์เป็น header ของ r.jina.ai', () => eq(getProfileJinaHeaders({ jinaTarget: '.a', jinaWait: '.b', noCache: true }), { 'X-Target-Selector': '.a', 'X-Wait-For-Selector': '.b', 'X-Timeout': '40', 'X-No-Cache': 'true' }) && eq(getProfileJinaHeaders(null), {}));
+    test('sanitizeSiteProfile: ตัดฟิลด์แปลก ตรวจโดเมน', () => {
+      const p = sanitizeSiteProfile({ host: 'https://www.Example.com/path', contentSelector: '#c', evil: 'x', nextMode: 'weird', noCache: 'yes' });
+      return eq(p, { host: 'example.com', contentSelector: '#c', noCache: false, nextMode: 'auto', enabled: true }) && sanitizeSiteProfile({ host: 'not a host' }) === null && sanitizeSiteProfile([]) === null;
+    });
+    test('buildProxyUrl: แทน {url} หรือต่อท้าย ?url=', () => eq([
+      buildProxyUrl('https://p.dev/?url={url}', 'https://a.com/1?x=2'),
+      buildProxyUrl('https://p.dev/fetch', 'https://a.com/1'),
+      buildProxyUrl('https://p.dev/fetch?k=1', 'https://a.com/1')
+    ], ['https://p.dev/?url=https%3A%2F%2Fa.com%2F1%3Fx%3D2', 'https://p.dev/fetch?url=https%3A%2F%2Fa.com%2F1', 'https://p.dev/fetch?k=1&url=https%3A%2F%2Fa.com%2F1']));
+    test('htmlToPseudoMarkdown: ได้เนื้อหาหลัก ไม่เอาเมนู และหาตอนถัดไปจาก rel=next', () => {
+      const html = '<html><head><title>第1章 - 书</title><link rel="next" href="/b/2.html"></head><body><div class="nav"><a href="/">首页</a><a href="/list">目录</a></div><div id="content">林动睁开了眼睛。<br>他看着四周，心中一惊。<br>这里是哪里？</div><div class="foot">copyright</div></body></html>';
+      const md = htmlToPseudoMarkdown(html, 'https://x.test/b/1.html');
+      const parsed = parseJinaMarkdown(md, 'https://x.test/b/1.html');
+      return parsed.text.includes('林动睁开了眼睛') && parsed.text.includes('这里是哪里') && !parsed.text.includes('首页') && !parsed.text.includes('copyright') && parsed.nav.nextChapter === 'https://x.test/b/2.html';
+    });
+    test('decodeHtmlBuffer: ถอดรหัส GBK จาก <meta charset>', () => {
+      const head = new TextEncoder().encode('<meta charset="gbk"><p>');
+      const gbk = new Uint8Array([0xD6, 0xD0, 0xCE, 0xC4]);
+      const buf = new Uint8Array([...head, ...gbk]);
+      return decodeHtmlBuffer(buf.buffer, 'text/html').endsWith('中文') && decodeHtmlBuffer(new TextEncoder().encode('ทดสอบ').buffer, 'text/html; charset=utf-8') === 'ทดสอบ';
+    });
+    test('recordProfileResult: เตือนครั้งเดียวเมื่อล้มเหลวติดกันครบ 3 ครั้ง และรีเซ็ตเมื่อสำเร็จ', () => withStorage(['nov_profile_health'], () => {
+      localStorage.removeItem('nov_profile_health');
+      const r = [recordProfileResult('a.test', false), recordProfileResult('a.test', false), recordProfileResult('a.test', false), recordProfileResult('a.test', false)];
+      const failing = getFailingProfileHosts();
+      recordProfileResult('a.test', true);
+      return eq([r, failing, getFailingProfileHosts()], [[false, false, true, false], ['a.test'], []]);
+    }));
+    test('splitImportedSettings: proxy จากไฟล์ต้องยืนยันแยก และตรวจรูปแบบ', () => {
+      const { safe, proxies } = splitImportedSettings({ nov_proxies: JSON.stringify([{ name: 'p', url: 'https://p.dev/?url={url}' }, { url: 'javascript:x' }]), nov_proxy_first: 'true' });
+      return eq([safe, proxies], [{ nov_proxy_first: 'true' }, [{ name: 'p', url: 'https://p.dev/?url={url}' }]]);
+    });
+    test('newChapterBadgeHtml: แสดงจำนวนตอนใหม่ / ยังไม่มี', () => withStorage([NEW_CHAPTER_STATE_KEY], () => {
+      setNewChapterState('b1', { count: 3, checkedAt: Date.now(), mode: 'toc' });
+      setNewChapterState('b2', { count: 1, atLeast: true, checkedAt: Date.now(), mode: 'next' });
+      setNewChapterState('b3', { count: 0, checkedAt: Date.now(), mode: 'toc' });
+      return newChapterBadgeHtml('b1').includes('3 ตอนใหม่') && newChapterBadgeHtml('b2').includes('มีตอนใหม่') && newChapterBadgeHtml('b3').includes('ยังไม่มีตอนใหม่') && newChapterBadgeHtml('zz') === '';
+    }));
     const passed = results.filter(r => r.ok).length;
     const summary = document.getElementById('summary');
     summary.textContent = `ผ่าน ${passed}/${results.length}`;

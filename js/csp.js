@@ -25,6 +25,11 @@
   } catch (e) {
     custom.push('https://api.openai.com');
   }
+  // proxy สำรองสำหรับดึงหน้าเว็บที่ผู้ใช้ตั้งเอง (source.js)
+  try {
+    const proxies = JSON.parse(localStorage.getItem('nov_proxies') || '[]');
+    if (Array.isArray(proxies)) proxies.forEach(p => custom.push(originOf(p?.url || '')));
+  } catch (e) {}
 
   const connect = [...new Set(["'self'", ...FIXED_CONNECT_ORIGINS, ...custom.filter(Boolean)])];
   window.NT_CSP_CONNECT_ORIGINS = connect.filter(o => o !== "'self'");
