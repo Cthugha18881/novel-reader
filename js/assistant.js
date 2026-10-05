@@ -21,6 +21,9 @@ const APP_HELP = `คู่มือการใช้งาน NovelTranslate A
 [เริ่มต้น] ตั้งค่า → เลือกผู้ให้บริการ AI (Gemini / Claude / OpenAI-compatible) → วาง API Key (ใส่ได้หลายคีย์ บรรทัดละ 1) → กด "ตรวจเช็กโมเดล" แล้วเลือกโมเดล → บันทึกการตั้งค่า ใส่ "โมเดลสำหรับงานรอง" ที่ถูกกว่าได้ (ใช้กับสแกนคำศัพท์/ตรวจทาน)
 [วางลิงก์] ปุ่ม "+ วางลิงก์" → วาง URL หน้าตอน → เลือกภาษา/แนวเรื่อง → เริ่มแปลตอนนี้ แท็บ "วางข้อความ / ไฟล์" นำเข้า .txt/.epub หรือข้อความ แยกตอนอัตโนมัติ และเข้าคิว "รอแปล"
 [อ่าน] เลื่อนอ่านต่อเนื่องได้ ระบบแปลตอนถัดไปล่วงหน้า 1 ตอน แตะย่อหน้าเพื่อดูต้นฉบับ/แก้คำแปล เลือกคำแล้วกด "+ ใส่คลัง" หรือ "หาคำจีน" ปุ่ม 🔄 มุมขวาบน = แปลตอนนี้ใหม่ ปุ่ม 🔍+ = สแกนคำศัพท์ในตอนนี้
+[ตั้งค่าการอ่าน] ปุ่ม Aa (บนจอคอมอยู่แถบบน มือถืออยู่แถบล่าง): ธีม ขนาดตัวอักษร ฟอนต์ ระยะบรรทัด ระยะห่างย่อหน้า ความกว้างหน้า โหมดอ่านต่อเนื่อง/ทีละตอน และปุ่มเลื่อนทีละหน้าจอ ▲▼ (ใช้ลูกศรซ้าย/ขวาบนคีย์บอร์ดได้)
+[ฟังเสียงอ่าน] ปุ่ม 🎧 อ่านออกเสียงจากย่อหน้าที่เห็นบนจอ หรือแตะย่อหน้าแล้วกด "🔊 ฟังจากตรงนี้" ปรับความเร็ว/เลือกเสียงได้ อ่านต่อตอนถัดไปเอง ต้องมีเสียงภาษาไทยในเครื่อง (ถ้าไม่มี แอพจะบอกวิธีติดตั้ง) มือถือบางรุ่นหยุดอ่านเมื่อปิดจอ
+[ค้นหา/บุ๊กมาร์ก] ปุ่ม 🔎 ค้นข้อความในคำแปลหรือต้นฉบับ ในเรื่องนี้หรือทุกเรื่อง กดผลเพื่อไปที่ย่อหน้านั้น แตะย่อหน้าแล้วกด "🔖 บุ๊กมาร์ก/โน้ต" เพื่อจดโน้ต ดูรวมได้ที่แท็บ 🔖 ในหน้าต่างค้นหา (อยู่ในไฟล์สำรอง)
 [ชั้นหนังสือ] แปลล่วงหน้าหลายตอน (⚡ เริ่มแปลล่วงหน้า), 📑 สารบัญ (หาตอนถัดไปแม่นขึ้น เรียงตอน เติมตอนที่ขาด), 🔗 แก้ URL ถัดไป, 🔔 เช็กตอนใหม่ (ไม่ใช้โควตา AI) แล้ว "เพิ่มเข้าคิว", ส่งออก TXT/EPUB, ย้าย/ลบตอน, เปลี่ยนแนวเรื่องและภาษาที่ป้ายแนวเรื่อง
 [คลังศัพท์] เก็บชื่อเฉพาะและคำแปลที่ต้องใช้ตรงกันทุกตอน คำ "สากล" ใช้ทุกเรื่องภาษาเดียวกัน คำ "เฉพาะเรื่อง" ใช้เรื่องเดียว ตั้งคำแปลเฉพาะเรื่องได้ (ชื่อเดียวกันแต่ละเรื่องแปลต่างกัน) แก้คำแปลแล้วระบบแทนในตอนที่แปลแล้วให้
 [คู่มือเรื่อง] ข้อมูลตัวละคร (เพศ สรรพนาม คำเรียก), แนวทางสำนวน, กฎแทนคำ, ตัวอย่างสำนวนจากที่ผู้ใช้แก้ AI ใช้ทุกครั้งที่แปลเรื่องนั้น
@@ -49,7 +52,8 @@ const ASSISTANT_SYSTEM = `คุณคือ "ผู้ช่วย" ในแ�
 
 กฎสำคัญ (ข้อบนสำคัญกว่า):
 - ตอบเรื่องนิยายจาก "ข้อมูลนิยาย" ที่ให้มาเท่านั้น ห้ามแต่งเติมเหตุการณ์หรือข้อมูลที่ไม่มีในข้อมูล
-- ทุกข้อเท็จจริงเรื่องนิยายต้องอ้างอิงตอนในรูปแบบ [#N] โดย N คือเลขตอนตามที่กำกับในข้อมูล (ไม่ใช่เลขในชื่อตอน)
+- ทุกข้อเท็จจริงเรื่องนิยายต้องอ้างอิงตอนในรูปแบบ [#N] โดย N คือเลขตอนตามที่กำกับในข้อมูลเท่านั้น (เช่น [#831] หรือ [#831.1] สำหรับตอนพิเศษที่ไม่มีเลข) ห้ามนับลำดับเอง
+- ผู้ใช้อาจเริ่มอ่านในแอพจากกลางเรื่อง เลขตอนจึงอาจไม่เริ่มที่ 1 ให้ใช้เลขตามข้อมูล ถ้าผู้ใช้ถามถึงตอนที่ไม่มีในข้อมูล ให้บอกว่าไม่มีข้อมูลของตอนนั้น
 - ถ้าข้อมูลไม่พอ ให้บอกตรงๆ ว่า "ไม่พบในตอนที่อ่านมา" แล้วบอกว่าข้อมูลครอบคลุมตอนไหนถึงตอนไหน ห้ามเดา
 - "ข้อเท็จจริงที่คำนวณจากข้อมูล" (เช่นโผล่ครั้งแรกตอนไหน) ถูกต้องแน่นอน ให้ใช้ตามนั้น
 - ไม่สปอยล์เกินตำแหน่งที่ผู้ใช้อ่าน ข้อมูลที่ให้มาถูกตัดไว้แล้ว ถ้าผู้ใช้ขอรู้เรื่องหลังจากนี้ หรือขอข้อมูลจากความรู้ทั่วไปนอกเหนือจากที่แปลไว้ ให้เตือนก่อนว่าอาจสปอยล์และอาจไม่ถูกต้อง แล้วแยกให้ชัดว่าส่วนไหนไม่ได้มาจากตอนที่อ่าน
@@ -116,7 +120,8 @@ async function loadAssistantBook(bookId, { includeUnread = false } = {}) {
   const book = (await dbGetAllBooks()).find(b => b.bookId === bookId);
   if (!book) return null;
   const all = (await dbGetChaptersByBook(bookId)).sort((a, b) => (a.order || 0) - (b.order || 0));
-  const numberOf = new Map(all.map((c, i) => [c.id, i + 1]));
+  // เลขตอนจริงของเรื่อง (จากชื่อตอน/URL) ไม่ใช่ลำดับในแอพ เพราะผู้ใช้อาจเริ่มอ่านจากกลางเรื่อง
+  const numberOf = computeChapterNumbers(all);
   const limitOrder = await getReadingLimitOrder(book, all);
   const usable = all.filter(c => c.status !== 'pending' && c.chapterType !== 'placeholder' && c.paragraphs?.some(p => (p.th || '').trim()));
   const allowed = usable.filter(c => includeUnread || (c.order || 0) <= limitOrder);
@@ -127,8 +132,84 @@ async function loadAssistantBook(bookId, { includeUnread = false } = {}) {
     groups: buildEntityGroups(allowed, extras, activeTerms),
     logCount: allowed.filter(isStoryLogFresh).length,
     unreadTranslated: usable.length - allowed.length,
-    readingNumber: numberOf.get(all.find(c => (c.order || 0) === limitOrder)?.id) || allowed.length
+    readingNumber: numberOf.get(all.find(c => (c.order || 0) === limitOrder)?.id) || String(allowed.length),
+    readingChapterId: all.find(c => (c.order || 0) === limitOrder)?.id || null
   };
+}
+
+// ---------- ตอนที่ผู้ใช้ระบุในคำถาม ----------
+const THAI_COUNT_WORDS = { หนึ่ง: 1, สอง: 2, สาม: 3, สี่: 4, ห้า: 5, หก: 6, เจ็ด: 7, แปด: 8, เก้า: 9, สิบ: 10 };
+const MAX_REQUESTED_CHAPTERS = 30;
+
+/**
+ * ตอนที่คำถามพูดถึง: เลขตอนจริง ("ตอน 831", "ตอนที่ 820-825", "#831")
+ * หรือนับย้อนจากตำแหน่งที่อ่าน ("5 ตอนก่อนหน้า" = 5 ตอนก่อนตอนที่อ่านอยู่, "3 ตอนล่าสุด" = รวมตอนที่อ่านอยู่)
+ * คืน { chapters, missing } โดย missing คือเลขที่ขอแต่ไม่มี/ยังไม่ได้อ่าน
+ */
+function findRequestedChapters(question, data) {
+  const q = String(question || '');
+  const picked = new Map();
+  const missing = [];
+  const byLabel = new Map();
+  data.all.forEach(c => byLabel.set(data.numberOf.get(c.id), c));
+  const allowedIds = new Set(data.allowed.map(c => c.id));
+  const addLabel = (label) => {
+    const chap = byLabel.get(label);
+    if (chap && allowedIds.has(chap.id)) picked.set(chap.id, chap);
+    else missing.push(label);
+  };
+
+  const absolute = /(?:ตอน(?:ที่)?|บท(?:ที่)?|#|\bchapter|\bch\.?)\s*(\d{1,5}(?:\.\d+)?)(?:\s*(?:-|–|—|~|ถึง|to)\s*(?:ตอน(?:ที่)?|บท(?:ที่)?|#)?\s*(\d{1,5}))?/gi;
+  for (const m of q.matchAll(absolute)) {
+    const from = m[1];
+    if (!m[2] || from.includes('.')) {
+      addLabel(from);
+      continue;
+    }
+    const a = parseInt(from, 10);
+    const b = parseInt(m[2], 10);
+    const [lo, hi] = a <= b ? [a, b] : [b, a];
+    const inRange = data.all.filter(c => {
+      const n = parseFloat(data.numberOf.get(c.id));
+      return n >= lo && n < hi + 1;
+    });
+    inRange.forEach(c => addLabel(data.numberOf.get(c.id)));
+    if (!inRange.length) missing.push(`${lo}-${hi}`);
+  }
+
+  // นับย้อนจากตำแหน่งที่อ่าน
+  const countWord = Object.keys(THAI_COUNT_WORDS).join('|');
+  const relative = new RegExp(`(\\d{1,3}|${countWord})?\\s*ตอน\\s*(ก่อนหน้า(?:นี้)?|ที่แล้ว|ที่ผ่านมา|ย้อนหลัง|ล่าสุด|หลังสุด)`, 'g');
+  for (const m of q.matchAll(relative)) {
+    const count = Math.min(MAX_REQUESTED_CHAPTERS, m[1] ? (THAI_COUNT_WORDS[m[1]] || parseInt(m[1], 10)) : 1);
+    const readIdx = data.allowed.findIndex(c => c.id === data.readingChapterId);
+    const end = readIdx === -1 ? data.allowed.length : readIdx + 1;
+    const includeCurrent = /ล่าสุด|หลังสุด/.test(m[2]);
+    const stop = includeCurrent ? end : end - 1;
+    data.allowed.slice(Math.max(0, stop - count), Math.max(0, stop)).forEach(c => picked.set(c.id, c));
+  }
+
+  const chaptersOut = [...picked.values()].sort((a, b) => (a.order || 0) - (b.order || 0)).slice(-MAX_REQUESTED_CHAPTERS);
+  return { chapters: chaptersOut, missing: [...new Set(missing)] };
+}
+
+/** เนื้อหาของตอนที่ถามถึง: ตอนน้อยส่งเนื้อเรื่องด้วย ตอนเยอะส่งเฉพาะสรุป */
+function requestedChaptersSection(data, requested) {
+  const lines = [];
+  const perChapter = requested.chapters.length <= 2 ? 3500 : (requested.chapters.length <= 5 ? 1500 : 0);
+  requested.chapters.forEach(c => {
+    lines.push(chapterSummaryLine(data, c));
+    if (perChapter) {
+      const text = c.paragraphs.filter(p => (p.th || '').trim() && (p.kind || 'story') !== 'site_junk').map(p => p.th.trim()).join('\n');
+      lines.push(`<<<NOVEL\n${text.slice(0, perChapter)}${text.length > perChapter ? '\n…(ตัดเหลือช่วงต้นตอน)' : ''}\nNOVEL>>>`);
+    }
+  });
+  const reading = data.readingChapterId ? data.numberOf.get(data.readingChapterId) : '';
+  const head = `ตอนที่ผู้ใช้ถามถึง${reading ? ` (ตอนนี้ผู้ใช้อ่านอยู่ที่ #${reading})` : ''}:`;
+  const miss = requested.missing.length
+    ? `\n(ไม่มีข้อมูลของตอน ${requested.missing.map(n => '#' + n).join(', ')} ในตอนที่อ่านแล้ว: อาจยังไม่ได้อ่าน ยังไม่ได้แปล หรือไม่ได้นำเข้ามาในแอพ)`
+    : '';
+  return `${head}\n${lines.join('\n') || '(ไม่มี)'}${miss}`;
 }
 
 function chapterLabel(data, chap) {
@@ -417,8 +498,10 @@ async function buildAssistantRequest(question, { bookId, scope = 'current', incl
 
   const data = bookId ? await loadAssistantBook(bookId, { includeUnread }) : null;
   if (data) {
+    meta.numberScheme = 'real';
     data.allowed.forEach(c => meta.validNumbers.add(data.numberOf.get(c.id)));
     const entities = findQuestionEntities(question, data);
+    const requested = findRequestedChapters(question, data);
     const helpOnly = intents.help && !entities.length && !intents.summary && keywords.every(k => ASSISTANT_INTENTS.help.test(k));
     meta.coverage = data.allowed.length
       ? `#${data.numberOf.get(data.allowed[0].id)}–#${data.numberOf.get(data.allowed[data.allowed.length - 1].id)}`
@@ -439,7 +522,10 @@ async function buildAssistantRequest(question, { bookId, scope = 'current', incl
       if (corrections.length) sections.push('ข้อมูลที่ผู้ใช้แก้ให้ (ถูกต้องที่สุด ใช้แทนข้อมูลอื่นที่ขัดกัน):\n' + corrections.map(c => `- ${c.correction}${c.chapterNumber ? ` (แก้เมื่ออ่านถึง #${c.chapterNumber})` : ''}`).join('\n'));
       const eventHits = searchStoryEvents(data, keywords);
       if (eventHits.length) sections.push('เหตุการณ์จากบันทึกที่ตรงกับคำค้น:\n' + eventHits.map(e => formatStoryEvent(e, data.activeTerms)).join('\n'));
-      if (intents.summary || (!entities.length && !keywords.length)) {
+      if (requested.chapters.length || requested.missing.length) sections.push(requestedChaptersSection(data, requested));
+      if (requested.chapters.length) {
+        // ถามเจาะตอน (เช่น "สรุป 5 ตอนก่อนหน้า") ไม่ต้องส่ง/สร้างสรุปทั้งเรื่อง
+      } else if (intents.summary || (!entities.length && !keywords.length)) {
         const summary = await buildSummarySection(data, { allowGenerate: intents.summary, signal, onStatus, askConfirm: (m) => confirm(m) });
         meta.summaryMode = summary.mode;
         sections.push(`สรุปเรื่องที่อ่านมา${summary.mode === 'arcs' ? ' (สรุปเป็นช่วงเรื่อง + รายตอนช่วงท้าย)' : ''}:\n${summary.text}`);
@@ -477,16 +563,21 @@ async function buildAssistantRequest(question, { bookId, scope = 'current', incl
 
   if (intents.help || !data) sections.push(`สถานะของแอพตอนนี้:\n${await buildAppStateSection()}`);
 
-  const historyText = history.slice(-ASSISTANT_LIMITS.historyTurns).map(m => `${m.role === 'user' ? 'ผู้ใช้' : 'ผู้ช่วย'}: ${String(m.text).slice(0, ASSISTANT_LIMITS.historyCharsPerTurn)}`).join('\n');
+  // คำตอบเก่า (ก่อนใช้เลขตอนจริง) อ้างลำดับในแอพ บอก AI ไม่ให้เอาเลขนั้นมาใช้ต่อ
+  const historyText = history.slice(-ASSISTANT_LIMITS.historyTurns).map(m => `${m.role === 'user' ? 'ผู้ใช้' : 'ผู้ช่วย'}: ${String(m.text).slice(0, ASSISTANT_LIMITS.historyCharsPerTurn)}${m.role !== 'user' && m.meta && m.meta.numberScheme !== 'real' ? ' (เลขตอนในคำตอบนี้เป็นลำดับในแอพแบบเก่า ไม่ใช่เลขตอนจริง ห้ามใช้ต่อ)' : ''}`).join('\n');
   const prompt = `ข้อมูลนิยาย:\n${sections.join('\n\n')}\n\n${historyText ? `บทสนทนาก่อนหน้า:\n${historyText}\n\n` : ''}คำถามล่าสุดของผู้ใช้: ${question}`;
   return { prompt, meta, intents };
 }
 
+// [#831] หรือ [#831.1] (ตอนพิเศษที่ไม่มีเลขของตัวเอง)
+const ASSISTANT_CITATION_PATTERN = /\[#(\d+(?:\.\d+)?)\]/g;
+
 /** ตรวจว่าคำตอบอ้างอิงตอนที่ไม่อยู่ในข้อมูลที่ให้ไปหรือไม่ (สัญญาณว่า AI อาจแต่งเอง) */
 function findInvalidCitations(answer, meta) {
-  const nums = [...String(answer).matchAll(/\[#(\d+)\]/g)].map(m => Number(m[1]));
+  const nums = [...String(answer).matchAll(ASSISTANT_CITATION_PATTERN)].map(m => m[1]);
   if (!meta.validNumbers.size) return [];
-  return [...new Set(nums.filter(n => !meta.validNumbers.has(n)))];
+  const valid = new Set([...meta.validNumbers].map(String));
+  return [...new Set(nums.filter(n => !valid.has(n)))];
 }
 
 // ---------- ข้อมูลที่ผู้ใช้แก้จากแชท (เก็บใน bookData.assistantCorrections) ----------
@@ -588,15 +679,16 @@ async function refreshAssistantPanel() {
   renderAssistantMessages();
 }
 
-function formatAssistantAnswer(text, bookId, invalid = []) {
-  const bad = new Set(invalid);
+// scheme: 'real' = เลขตอนจริงของเรื่อง, ไม่ระบุ = ข้อความเก่า (ก่อน v3.5) ที่อ้างลำดับในแอพ
+function formatAssistantAnswer(text, bookId, invalid = [], scheme = '') {
+  const bad = new Set((invalid || []).map(String));
   let html = escapeHtml(text);
   html = html.replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
   html = html.replace(/^#{1,4}\s+(.+)$/gm, '<b>$1</b>');
   html = html.replace(/^\s*[-*•]\s+(.+)$/gm, '<div class="assistant-li">• $1</div>');
   // ตอนที่ไม่อยู่ในข้อมูล (AI อาจแต่งเอง) ไม่ทำเป็นลิงก์
-  html = html.replace(/\[#(\d+)\]/g, (m, n) => bookId && !bad.has(Number(n))
-    ? `<button class="assistant-cite" onclick="jumpToAssistantCitation(${jsArg(bookId)}, ${Number(n)})" title="ไปที่ตอนนี้">#${n}</button>`
+  html = html.replace(ASSISTANT_CITATION_PATTERN, (m, n) => bookId && !bad.has(n)
+    ? `<button class="assistant-cite" onclick="jumpToAssistantCitation(${jsArg(bookId)}, ${jsArg(n)}, ${jsArg(scheme || '')})" title="ไปที่ตอนนี้">#${n}</button>`
     : `<span class="assistant-cite invalid" title="ไม่อยู่ในข้อมูลที่ส่งให้ AI">#${n}?</span>`);
   return html.replace(/<\/div>\n/g, '</div>').replace(/\n/g, '<br>');
 }
@@ -625,7 +717,7 @@ function renderAssistantMessages() {
       m.meta.passages ? `${m.meta.passages} ข้อความที่เกี่ยวข้อง` : ''
     ].filter(Boolean).join(' · '))}</div>` : '';
     const cls = m.error ? 'assistant-msg bot error' : 'assistant-msg bot';
-    return `<div class="${cls}">${m.error ? escapeHtml(m.text) : formatAssistantAnswer(m.text, m.meta?.bookId, m.meta?.invalidCitations)}${warn}${info}${m.error ? '' : assistantFeedbackHtml(m, i)}</div>`;
+    return `<div class="${cls}">${m.error ? escapeHtml(m.text) : formatAssistantAnswer(m.text, m.meta?.bookId, m.meta?.invalidCitations, m.meta?.numberScheme)}${warn}${info}${m.error ? '' : assistantFeedbackHtml(m, i)}</div>`;
   }).join('');
   box.scrollTop = box.scrollHeight;
 }
@@ -678,9 +770,15 @@ async function openStoryLogFromAssistant() {
   await openBibleModal();
   await switchBibleTab('log');
 }
-async function jumpToAssistantCitation(bookId, number) {
+async function jumpToAssistantCitation(bookId, number, scheme = '') {
   const chaps = (await dbGetChaptersByBook(bookId)).sort((a, b) => (a.order || 0) - (b.order || 0));
-  const chap = chaps[number - 1];
+  let chap;
+  if (scheme === 'real') {
+    const labels = computeChapterNumbers(chaps);
+    chap = chaps.find(c => labels.get(c.id) === String(number));
+  } else {
+    chap = chaps[Number(number) - 1];
+  }
   if (!chap) return;
   if (window.innerWidth < 700) toggleAssistantPanel(false);
   await jumpToChapterById(bookId, chap.id);

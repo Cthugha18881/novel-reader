@@ -35,6 +35,7 @@
   <script src="../js/shelf.js"></script>
   <script src="../js/updates.js"></script>
   <script src="../js/assistant.js"></script>
+  <script src="../js/reader.js"></script>
   <script src="../js/export.js"></script>
   <script>
     const results = [];
@@ -712,7 +713,7 @@
       return p.length >= 2 && p.every((x, i) => i === 0 || p[i - 1].ci <= x.ci) && p.some(x => x.text.includes('ดาบ')) && !p.some(x => x.chap.id === 'c4');
     });
     test('retrievePassages: ไม่มีคำค้นเลย คืนว่าง', () => eq(retrievePassages(mockAssistantData(), [], []), []));
-    test('findInvalidCitations: จับการอ้างอิงตอนที่ไม่ได้ส่งให้ AI', () => eq(findInvalidCitations('ตามที่เห็นใน [#2] และ [#9] และ [#3]', { validNumbers: new Set([1, 2, 3]) }), [9]));
+    test('findInvalidCitations: จับการอ้างอิงตอนที่ไม่ได้ส่งให้ AI (รวมเลขย่อย)', () => eq(findInvalidCitations('ตามที่เห็นใน [#2] และ [#9] และ [#3] [#3.1] [#4.1]', { validNumbers: new Set(['1', '2', '3', '3.1']) }), ['9', '4.1']));
     test('pickOtherBooks: ชื่อเรื่องในคำถาม / "เรื่องก่อน" = เรื่องที่อ่านล่าสุดรองลงมา / ขอบเขตที่เลือก', () => {
       const books = [{ bookId: 'cur', title: 'เรื่องนี้', updatedAt: 9 }, { bookId: 'a', title: 'มหาเทพสงคราม', updatedAt: 5 }, { bookId: 'b', title: 'ราชันย์ดาบ', updatedAt: 7 }];
       const named = pickOtherBooks('พระเอกมหาเทพสงครามเก่งไหม', books, 'cur', 'current');
@@ -723,8 +724,112 @@
     });
     test('formatAssistantAnswer: กัน HTML แปลกปลอม และทำลิงก์อ้างอิงตอน', () => {
       const html = formatAssistantAnswer('**ตัวหนา** <img src=x onerror=alert(1)> ดู [#3]', 'b1');
-      return html.includes('<b>ตัวหนา</b>') && !html.includes('<img') && html.includes('&lt;img') && html.includes('assistant-cite') && html.includes('jumpToAssistantCitation(&quot;b1&quot;, 3)') &&
-        !formatAssistantAnswer('[#9]', 'b1', [9]).includes('jumpToAssistantCitation');
+      return html.includes('<b>ตัวหนา</b>') && !html.includes('<img') && html.includes('&lt;img') && html.includes('assistant-cite') && html.includes('jumpToAssistantCitation(&quot;b1&quot;, &quot;3&quot;, &quot;&quot;)') &&
+        !formatAssistantAnswer('[#9]', 'b1', [9]).includes('jumpToAssistantCitation') &&
+        formatAssistantAnswer('[#831.1]', 'b1', [], 'real').includes('jumpToAssistantCitation(&quot;b1&quot;, &quot;831.1&quot;, &quot;real&quot;)');
+    });
+
+    // ---------- เลขตอนจริง ----------
+    test('parseCjkNumber: เลขจีนแบบมีหน่วย / เรียงหลัก / อารบิก', () => eq(
+      ['八百三十一', '一千零二', '十二', '二十', '一二三', '三万五千', '831', 'abc'].map(parseCjkNumber), [831, 1002, 12, 20, 123, 35000, 831, null]));
+    test('extractChapterNumber: ชื่อตอนหลายภาษา', () => eq(
+      ['ตอนที่ 831 ศึกใหญ่', 'บทที่12', '第八百三十一章 风起', 'Chapter 45: Dawn', '12화', '831. การเดินทาง', 'ปฐมบท', 'พบกันปี 2024'].map(extractChapterNumber),
+      [831, 12, 831, 45, 12, 831, null, null]));
+    test('computeChapterNumbers: เริ่มอ่านจากตอน 801 ได้เลขจริง ไม่ใช่ 1, 2, 3', () => {
+      const chaps = [801, 802, 803].map((n, i) => ({ id: 'x' + n, order: i + 1, title: `ตอนที่ ${n} ชื่อตอน` }));
+      return eq([...computeChapterNumbers(chaps).values()], ['801', '802', '803']);
+    });
+    test('computeChapterNumbers: ตอนไม่มีเลขต่อเลขเดิม ตอนพิเศษได้เลขย่อย ชื่อสำรองเลขผิดไม่ใช้', () => {
+      const chaps = [
+        { id: 'a', title: 'ตอนที่ 830' },
+        { id: 'b', title: 'ประกาศผู้เขียน', chapterType: 'author_note' },
+        { id: 'c', title: 'ไม่มีเลข' },
+        { id: 'd', title: 'ตอนที่ 5' },
+        { id: 'e', title: 'ตอนที่ 833' },
+        { id: 'f', title: 'ตอนที่ 833 (2)' },
+        { id: 'g', title: 'ไม่มีเลขอีก', sourceUrl: 'https://www.webnovel.com/book/x_1/chapter-840-title_99' }
+      ];
+      return eq([...computeChapterNumbers(chaps).values()], ['830', '830.1', '831', '832', '833', '833.1', '840']);
+    });
+    test('computeChapterNumbers: ตอนไม่มีเลขที่จะชนกับตอนถัดไป ใช้เลขย่อย', () => {
+      const chaps = [{ id: 'a', title: 'ตอนที่ 10' }, { id: 'b', title: 'ตอนแทรก' }, { id: 'c', title: 'ตอนที่ 11' }];
+      return eq([...computeChapterNumbers(chaps).values()], ['10', '10.1', '11']);
+    });
+    test('computeChapterNumbers: เรื่องที่ไม่มีเลขตอนเลย ได้ 1, 2, 3 เหมือนเดิม', () => eq([...computeChapterNumbers([{ id: 'a', title: 'บทนำ' }, { id: 'b', title: 'ภาคต่อ' }]).values()], ['1', '2']));
+    function midBookData() {
+      const all = [831, 832, 833, 834, 835, 836, 837].map((n, i) => ({ id: 'm' + n, order: i + 1, title: `ตอนที่ ${n}`, summary: `สรุป ${n}`, paragraphs: [{ src: 'x', th: `เนื้อหา ${n}` }] }));
+      const allowed = all.slice(0, 6);
+      return { book: { bookId: 'b' }, all, allowed, numberOf: computeChapterNumbers(all), readingChapterId: 'm836', extras: {}, activeTerms: {} };
+    }
+    test('findRequestedChapters: "5 ตอนก่อนหน้า" = 5 ตอนก่อนตอนที่อ่านอยู่ (เลขจริง)', () => {
+      const d = midBookData();
+      const r = findRequestedChapters('สรุป 5 ตอนก่อนหน้าให้หน่อย', d);
+      return eq(r.chapters.map(c => d.numberOf.get(c.id)), ['831', '832', '833', '834', '835']);
+    });
+    test('findRequestedChapters: "3 ตอนล่าสุด" รวมตอนที่อ่านอยู่ / "ห้าตอนที่แล้ว"', () => {
+      const d = midBookData();
+      const a = findRequestedChapters('3 ตอนล่าสุดเกิดอะไรขึ้น', d).chapters.map(c => d.numberOf.get(c.id));
+      const b = findRequestedChapters('ห้าตอนที่แล้ว', d).chapters.length;
+      return eq(a, ['834', '835', '836']) && b === 5;
+    });
+    test('findRequestedChapters: เลขตอนจริง ช่วงตอน และตอนที่ยังไม่อ่าน (กันสปอยล์)', () => {
+      const d = midBookData();
+      const one = findRequestedChapters('ตอนที่ 833 เกิดอะไรขึ้น', d);
+      const range = findRequestedChapters('สรุปตอน 832-834', d);
+      const future = findRequestedChapters('ตอน 837 เป็นยังไง', d);
+      return eq(one.chapters.map(c => c.id), ['m833']) && eq(range.chapters.map(c => c.id), ['m832', 'm833', 'm834']) &&
+        future.chapters.length === 0 && eq(future.missing, ['837']) && findRequestedChapters('ตอนนี้หลินต้งอยู่ไหน', d).chapters.length === 0;
+    });
+    test('requestedChaptersSection: บอกตอนที่อ่านอยู่และตอนที่ไม่มีข้อมูล', () => {
+      const d = midBookData();
+      const s = requestedChaptersSection(d, findRequestedChapters('ตอน 835 กับตอน 900', d));
+      return s.includes('#836') && s.includes('#835 "ตอนที่ 835"') && s.includes('เนื้อหา 835') && s.includes('#900');
+    });
+
+    // ---------- ประสบการณ์การอ่าน ----------
+    test('normalizeForSearch / findSearchMatches: ไม่สนช่องว่าง ตัวเล็กใหญ่ และ ํา', () => {
+      const text = 'เขาเดินเข้า ไปในถ้ ำ  Dragon Cave';
+      const m1 = findSearchMatches(text, 'เข้าไปในถ้ำ');
+      const m2 = findSearchMatches(text, 'dragoncave');
+      const m3 = findSearchMatches('ตักนํามา', 'นำ');
+      return m1.length === 1 && text.slice(m1[0].start, m1[0].end) === 'เข้า ไปในถ้ ำ' && m2.length === 1 && text.slice(m2[0].start, m2[0].end) === 'Dragon Cave' &&
+        findSearchMatches(text, '').length === 0 && m3.length === 1 && m3[0].end - m3[0].start === 3;
+    });
+    test('searchSnippetHtml: ตัดรอบคำที่เจอ และกัน HTML', () => {
+      const s = 'ก'.repeat(100) + '<b>ดาบ</b>' + 'ข'.repeat(100);
+      const html = searchSnippetHtml(s, findSearchMatches(s, 'ดาบ')[0], 10);
+      return html.startsWith('…') && html.endsWith('…') && html.includes('<mark>ดาบ</mark>') && html.includes('&lt;b&gt;') && !html.includes('<b>');
+    });
+    test('splitForSpeech: ข้อความยาวแบ่งไม่เกินกำหนด ตัดที่ช่องว่าง ไม่หายสักตัว', () => {
+      const text = Array.from({ length: 30 }, (_, i) => `ประโยคที่${i}ยาวพอสมควร`).join(' ');
+      const chunks = splitForSpeech(text, 60);
+      const long = splitForSpeech('ก'.repeat(130), 60);
+      return chunks.every(c => c.length <= 60) && chunks.join(' ') === text && eq(long.map(c => c.length), [60, 60, 10]) && eq(splitForSpeech('  '), []) && eq(splitForSpeech('สั้น'), ['สั้น']);
+    });
+    test('getReadingPrefs: ค่าผิดรูปแบบถูกตัด/คืนค่าเริ่มต้น', () => {
+      const saved = localStorage.getItem('nov_reading_prefs');
+      localStorage.setItem('nov_reading_prefs', JSON.stringify({ font: 'evil<script>', lineHeight: 99, width: 'x', paraGap: -5, pageButtons: 'yes' }));
+      const p = getReadingPrefs();
+      localStorage.setItem('nov_reading_prefs', '{bad json');
+      const q = getReadingPrefs();
+      if (saved === null) localStorage.removeItem('nov_reading_prefs'); else localStorage.setItem('nov_reading_prefs', saved);
+      return eq(p, { font: 'sarabun', lineHeight: 2.8, width: 740, paraGap: 0, pageButtons: false }) && eq(q, READING_PREF_DEFAULTS);
+    });
+    test('resolveBookmarkParagraph: ย่อหน้าเลื่อนหลังแปลใหม่ หาจากต้นฉบับที่จำไว้', () => {
+      const chap = { paragraphs: [{ src: 'ใหม่', th: 'n' }, { src: '甲乙丙', th: 'a' }, { src: '丁', th: 'b' }] };
+      return resolveBookmarkParagraph(chap, { paraIdx: 1, srcStart: '甲乙' }) === 1 &&
+        resolveBookmarkParagraph(chap, { paraIdx: 0, srcStart: '丁' }) === 2 &&
+        resolveBookmarkParagraph(chap, { paraIdx: 9, srcStart: 'ไม่มี' }) === 2 &&
+        resolveBookmarkParagraph(chap, { paraIdx: 0, thStart: 'b' }) === 2;
+    });
+    test('sanitizeBookDataRecord: บุ๊กมาร์กผิดรูปแบบถูกตัด โน้ตยาวถูกตัด', () => {
+      const d = sanitizeBookDataRecord({ bookId: 'b', bookmarks: [{ chapId: 'c1', paraIdx: 2, note: 'x'.repeat(3000) }, { chapId: '', paraIdx: 1 }, { chapId: 'c2', paraIdx: -1 }, { chapId: 'c3', paraIdx: 1.5 }, 'junk'] });
+      const bad = sanitizeBookDataRecord({ bookId: 'b', bookmarks: 'nope' });
+      return d.bookmarks.length === 1 && d.bookmarks[0].note.length === 2000 && d.bookmarks[0].id && eq(bad.bookmarks, []);
+    });
+    test('getBackupSettingNames: มีตั้งค่าการอ่าน/เสียงอ่าน แต่ไม่มีเสียงที่เลือก (ขึ้นกับเครื่อง)', () => {
+      const names = getBackupSettingNames();
+      return names.includes('nov_reading_prefs') && names.includes('nov_tts_rate') && !names.includes('nov_tts_voice');
     });
     // ---------- Story log ----------
     function logChap(n, paras, log) {

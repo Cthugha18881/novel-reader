@@ -81,7 +81,8 @@ function getBackupSettingNames() {
     'nov_enable_deep_ner', 'nov_enable_infinite', 'nov_enable_prefetch', 'nov_enable_auto_glossary',
     'nov_enable_bible_auto', 'nov_show_junk', 'nov_export_notes', 'nov_theme', 'nov_font_size',
     'nov_site_profiles', 'nov_site_profiles_removed', 'nov_ai_extract', 'nov_backup_remind_days',
-    'nov_budget_unit', 'nov_budget_daily', 'nov_budget_monthly', 'nov_model_prices', 'nov_proxy_first'
+    'nov_budget_unit', 'nov_budget_daily', 'nov_budget_monthly', 'nov_model_prices', 'nov_proxy_first',
+    'nov_story_log', 'nov_assistant_role', 'nov_reading_prefs', 'nov_tts_rate'
   ];
   Object.keys(LLM_PROVIDERS).forEach(p => names.push(`nov_llm_model_${p}`, `nov_llm_aux_model_${p}`));
   return names;

@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/csp.js"></script>
-  <title>NovelTranslate AI v3.4.0</title>
+  <title>NovelTranslate AI v3.5.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -15,7 +15,8 @@
   <meta name="apple-mobile-web-app-title" content="NovelTranslate">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&display=swap" rel="stylesheet">
+  <!-- Noto Sans/Serif Thai โหลดไฟล์ฟอนต์เฉพาะเมื่อเลือกใช้ในตั้งค่าการอ่าน -->
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;600&family=Sarabun:wght@400;500;600&family=Noto+Sans+Thai:wght@400;600&family=Noto+Serif+Thai:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body class="theme-sepia" id="app-body">
@@ -38,6 +39,9 @@
         <button class="btn" onclick="adjustFontSize(-1)" title="ลดขนาดตัวอักษร">A-</button>
         <button class="btn" onclick="adjustFontSize(1)" title="เพิ่มขนาดตัวอักษร">A+</button>
         <button class="btn" id="desktop-theme-btn" onclick="cycleTheme()" title="เปลี่ยนธีม">ถนอมสายตา</button>
+        <button class="btn" data-reader-panel-toggle onclick="toggleReaderPanel()" title="ตั้งค่าการอ่าน: ฟอนต์ ระยะบรรทัด ความกว้าง โหมดเลื่อน">Aa</button>
+        <button class="btn" onclick="openReaderTools('search')" title="ค้นหาข้อความ และบุ๊กมาร์ก/โน้ต">🔎</button>
+        <button class="btn" onclick="toggleTts()" title="ฟังเสียงอ่าน (เริ่มจากย่อหน้าที่เห็นบนจอ)">🎧</button>
       </div>
 
       <div id="prefetch-badge">ตอนถัดไปพร้อม</div>
@@ -145,11 +149,28 @@
   <!-- MOBILE BOTTOM DOCK -->
   <nav class="mobile-dock">
     <button class="btn" onclick="openBookshelfModal()">ชั้นหนังสือ</button>
-    <button class="btn" onclick="adjustFontSize(-1)">A-</button>
-    <button class="btn" id="mobile-theme-btn" onclick="cycleTheme()">ถนอมสายตา</button>
-    <button class="btn" onclick="adjustFontSize(1)">A+</button>
+    <button class="btn" data-reader-panel-toggle onclick="toggleReaderPanel()" title="ตั้งค่าการอ่าน (ธีม ขนาด ฟอนต์)">Aa</button>
+    <button class="btn" onclick="openReaderTools('search')" title="ค้นหา / บุ๊กมาร์ก">🔎</button>
+    <button class="btn" onclick="toggleTts()" title="ฟังเสียงอ่าน">🎧</button>
     <button class="btn" onclick="openGlossaryModal()">คลังศัพท์</button>
   </nav>
+
+  <!-- ตั้งค่าการอ่าน (ไม่บังหน้าอ่าน ดูผลได้ทันที) -->
+  <div id="reader-panel" class="reader-panel" role="dialog" aria-label="ตั้งค่าการอ่าน">
+    <div class="reader-panel-head"><b>ตั้งค่าการอ่าน</b><button class="modal-close" onclick="toggleReaderPanel(false)">✕</button></div>
+    <div id="reader-panel-body"></div>
+  </div>
+
+  <!-- ปุ่มเลื่อนทีละหน้าจอ -->
+  <div class="page-nav-btns">
+    <button onclick="pageScroll(-1)" title="เลื่อนขึ้น 1 หน้าจอ (←)">▲</button>
+    <button onclick="pageScroll(1)" title="เลื่อนลง 1 หน้าจอ (→)">▼</button>
+  </div>
+
+  <!-- แถบควบคุมเสียงอ่าน -->
+  <div id="tts-bar" class="tts-bar" role="region" aria-label="เสียงอ่าน">
+    <div id="tts-bar-body"></div>
+  </div>
 
   <!-- MODAL: BOOKSHELF -->
   <div class="modal-overlay" id="bookshelf-modal">
@@ -379,6 +400,59 @@
       <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
         <button class="btn" onclick="closeModal('edit-para-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="saveEditedParagraph()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: ค้นหา / บุ๊กมาร์ก -->
+  <div class="modal-overlay" id="reader-tools-modal" style="z-index: 60;">
+    <div class="modal-box" style="max-width: 600px;">
+      <div class="modal-head">
+        <div class="modal-title">ค้นหาและบุ๊กมาร์ก</div>
+        <button class="modal-close" onclick="closeModal('reader-tools-modal')">✕</button>
+      </div>
+      <div class="reader-tabs">
+        <button class="reader-tab active" data-tab="search" onclick="switchReaderToolsTab('search')">🔎 ค้นหา</button>
+        <button class="reader-tab" data-tab="bookmarks" onclick="switchReaderToolsTab('bookmarks')">🔖 บุ๊กมาร์ก/โน้ต</button>
+      </div>
+      <div id="reader-search-panel">
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
+          <input type="text" id="reader-search-input" class="form-input" style="flex: 1; min-width: 160px;" placeholder="คำหรือข้อความ (ไม่ต้องเว้นวรรคตรงกัน)" onkeydown="onReaderSearchKey(event)">
+          <button class="btn btn-primary" onclick="runReaderSearch()">ค้นหา</button>
+        </div>
+        <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; font-size: 12px;">
+          <select id="reader-search-scope" class="form-input" style="width: auto;">
+            <option value="book">เรื่องที่เปิดอยู่</option>
+            <option value="all">ทุกเรื่องบนชั้นหนังสือ</option>
+          </select>
+          <select id="reader-search-field" class="form-input" style="width: auto;">
+            <option value="th">ในคำแปล</option>
+            <option value="src">ในต้นฉบับ</option>
+            <option value="both">ทั้งคำแปลและต้นฉบับ</option>
+          </select>
+        </div>
+        <div id="reader-search-results" class="modal-scrollable-body" style="max-height: 55vh;"></div>
+      </div>
+      <div id="reader-bookmark-panel" style="display: none;">
+        <div id="reader-bookmark-list" class="modal-scrollable-body" style="max-height: 60vh;"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: บุ๊กมาร์ก / โน้ต -->
+  <div class="modal-overlay" id="bookmark-modal" style="z-index: 66;">
+    <div class="modal-box" style="max-width: 480px;">
+      <div class="modal-head">
+        <div class="modal-title" id="bookmark-modal-title">เพิ่มบุ๊กมาร์ก</div>
+        <button class="modal-close" onclick="closeModal('bookmark-modal')">✕</button>
+      </div>
+      <div id="bookmark-excerpt" class="bookmark-excerpt"></div>
+      <textarea id="bookmark-note" class="form-input" rows="4" maxlength="2000" placeholder="โน้ต (ไม่ใส่ก็ได้) เช่น จุดที่พระเอกได้ดาบ / ประโยคที่ชอบ"></textarea>
+      <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">เก็บในเครื่องนี้ และอยู่ในไฟล์สำรองข้อมูล</div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px;">
+        <button class="btn btn-danger" id="bookmark-delete-btn" style="margin-right: auto;" onclick="deleteBookmarkFromEditor()">ลบ</button>
+        <button class="btn" onclick="closeModal('bookmark-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveBookmarkFromEditor()">บันทึก</button>
       </div>
     </div>
   </div>
@@ -988,6 +1062,7 @@
   <script src="js/shelf.js"></script>
   <script src="js/updates.js"></script>
   <script src="js/assistant.js"></script>
+  <script src="js/reader.js"></script>
   <script src="js/export.js"></script>
   <script src="js/app.js"></script>
 </body>

@@ -94,7 +94,7 @@ body.is-fullscreen main { padding-top: 14px; }
 
 /* MAIN CANVAS */
 main {
-  flex: 1; width: 100%; max-width: 740px; margin: 0 auto;
+  flex: 1; width: 100%; max-width: var(--reader-width, 740px); margin: 0 auto;
   padding: 20px 16px 120px 16px; transition: padding 0.2s ease;
 }
 @media (min-width: 768px) { main { padding-bottom: 50px; } }
@@ -136,8 +136,8 @@ body.theme-dark .chapter-block-divider { border-top-color: rgba(255,255,255,0.15
   font-size: 12px; font-weight: 600; opacity: 0.6;
 }
 
-#reading-content { line-height: 1.9; user-select: text; }
-.para-item { padding: 6px 8px; margin-bottom: 14px; border-radius: 6px; transition: background-color 0.15s ease; }
+#reading-content { line-height: var(--reader-line-height, 1.9); font-family: var(--reader-font, 'Sarabun', sans-serif); user-select: text; }
+.para-item { padding: 6px 8px; margin-bottom: var(--reader-para-gap, 14px); border-radius: 6px; transition: background-color 0.15s ease; position: relative; }
 .para-th { font-size: inherit; cursor: pointer; text-indent: 1.5em; }
 .para-th:hover { background-color: rgba(0,0,0,0.02); }
 body.theme-dark .para-th:hover { background-color: rgba(255,255,255,0.02); }
@@ -541,3 +541,92 @@ body.theme-dark .story-log-row { border-color: rgba(255, 255, 255, 0.12); }
 .assistant-rate { border: none; background: transparent; cursor: pointer; font-size: 12px; opacity: 0.45; padding: 0 2px; }
 .assistant-rate:hover, .assistant-rate.active { opacity: 1; }
 .assistant-feedback-form { margin-top: 6px; padding-top: 6px; border-top: 1px dashed rgba(0, 0, 0, 0.12); }
+/* ---------- Reading experience (ตั้งค่าการอ่าน / เสียงอ่าน / ค้นหา / บุ๊กมาร์ก) ---------- */
+.reader-panel {
+  position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); z-index: 48;
+  width: 400px; max-width: calc(100vw - 24px); max-height: calc(100vh - 140px); overflow-y: auto;
+  display: none; padding: 10px 14px 12px; border-radius: 12px;
+  background: #fffdf8; color: #1f2937; border: 1px solid rgba(0, 0, 0, 0.12); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
+  font-size: 13px;
+}
+.reader-panel.open { display: block; }
+body.theme-dark .reader-panel { background: #1e2533; color: #e5e7eb; border-color: rgba(255, 255, 255, 0.12); }
+@media (min-width: 768px) { .reader-panel { bottom: auto; top: 64px; left: auto; right: 16px; transform: none; } }
+.reader-panel-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.reader-row { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px dashed rgba(0, 0, 0, 0.08); }
+body.theme-dark .reader-row { border-bottom-color: rgba(255, 255, 255, 0.1); }
+.reader-row > span { flex-shrink: 0; }
+.reader-row select.form-input { width: auto; max-width: 210px; padding: 4px 6px; }
+.reader-seg { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; justify-content: flex-end; }
+.reader-seg .btn { padding: 4px 9px; }
+.reader-seg input[type="range"] { width: 130px; accent-color: #2563eb; }
+
+.page-nav-btns { display: none; position: fixed; right: 16px; bottom: 112px; z-index: 43; flex-direction: column; gap: 6px; }
+body.page-buttons-on .page-nav-btns { display: flex; }
+.page-nav-btns button {
+  width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: 13px; color: inherit;
+  background: rgba(0, 0, 0, 0.06); border: 1px solid rgba(0, 0, 0, 0.15); backdrop-filter: blur(6px); opacity: 0.75;
+}
+body.theme-dark .page-nav-btns button { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.18); }
+.page-nav-btns button:hover { opacity: 1; }
+@media (max-width: 767px) { .page-nav-btns { bottom: 156px; } }
+body.is-fullscreen .page-nav-btns { bottom: 64px; }
+body.modal-open .page-nav-btns { display: none; }
+
+.para-tts-active { background: rgba(37, 99, 235, 0.1); box-shadow: inset 3px 0 0 #2563eb; }
+body.theme-dark .para-tts-active { background: rgba(96, 165, 250, 0.14); }
+@keyframes paraFlash { 0%, 40% { background: rgba(234, 179, 8, 0.35); } 100% { background: transparent; } }
+.para-flash { animation: paraFlash 2.2s ease-out; }
+.para-bookmarked { box-shadow: inset -3px 0 0 rgba(234, 179, 8, 0.75); }
+.para-bookmark-mark {
+  position: absolute; right: -6px; top: -8px; z-index: 2; border: none; background: transparent; cursor: pointer;
+  font-size: 13px; line-height: 1; padding: 2px;
+}
+
+.tts-bar {
+  position: fixed; left: 50%; bottom: 64px; transform: translateX(-50%); z-index: 46;
+  width: 420px; max-width: calc(100vw - 24px); display: none; padding: 8px 10px; border-radius: 12px;
+  background: #fffdf8; color: #1f2937; border: 1px solid rgba(37, 99, 235, 0.35); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22);
+  font-size: 12px;
+}
+.tts-bar.open { display: block; }
+body.theme-dark .tts-bar { background: #1e2533; color: #e5e7eb; }
+@media (min-width: 768px) { .tts-bar { bottom: 20px; } }
+body.is-fullscreen .tts-bar { bottom: 12px; }
+body.tts-on main { padding-bottom: 220px; }
+.tts-row { display: flex; gap: 6px; align-items: center; }
+.tts-row .btn { padding: 4px 10px; font-size: 14px; }
+.tts-row select.form-input { width: auto; padding: 3px 6px; font-size: 12px; }
+.tts-sub { margin: 5px 2px; opacity: 0.8; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tts-warn { margin-top: 6px; padding: 5px 8px; border-radius: 6px; background: rgba(234, 179, 8, 0.15); line-height: 1.5; }
+
+.reader-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.reader-tab { flex: 1; padding: 6px 8px; font-size: 12px; border-radius: 6px; cursor: pointer; border: 1px solid rgba(0, 0, 0, 0.12); background: transparent; color: inherit; font-family: inherit; }
+.reader-tab.active { background: #2563eb; color: #fff; border-color: #2563eb; }
+.reader-empty { text-align: center; padding: 18px 8px; font-size: 12px; opacity: 0.7; }
+.reader-result-count { font-size: 11px; opacity: 0.7; margin-bottom: 6px; }
+.reader-result-book { font-size: 12px; font-weight: 600; margin: 10px 0 4px; }
+.reader-result {
+  display: block; width: 100%; text-align: left; padding: 7px 9px; margin-bottom: 4px; border-radius: 6px; cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.08); background: transparent; color: inherit; font-family: inherit;
+}
+.reader-result:hover { background: rgba(37, 99, 235, 0.06); }
+body.theme-dark .reader-result { border-color: rgba(255, 255, 255, 0.1); }
+.reader-result-meta { font-size: 11px; opacity: 0.65; margin-bottom: 2px; }
+.reader-result-text { font-size: 13px; line-height: 1.6; word-break: break-word; }
+.reader-result-text mark { background: #fde68a; color: inherit; border-radius: 2px; padding: 0 1px; }
+body.theme-dark .reader-result-text mark { background: #854d0e; }
+.reader-bookmark { padding: 8px 9px; margin-bottom: 6px; border-radius: 6px; border: 1px solid rgba(234, 179, 8, 0.35); }
+.reader-bookmark-note { font-size: 12px; margin-top: 4px; padding: 4px 8px; border-radius: 4px; background: rgba(234, 179, 8, 0.12); white-space: pre-wrap; word-break: break-word; }
+.bookmark-excerpt { font-size: 13px; line-height: 1.6; padding: 8px 10px; margin-bottom: 8px; border-radius: 6px; background: rgba(0, 0, 0, 0.04); border-left: 3px solid #eab308; max-height: 140px; overflow-y: auto; }
+body.theme-dark .bookmark-excerpt { background: rgba(255, 255, 255, 0.05); }
+/* หัวแอพบนจอแคบ: ปุ่มเยอะเกินความกว้างจอ ให้เลื่อนในแถบปุ่มเองแทนการทำให้ทั้งหน้าเลื่อนข้าง */
+@media (max-width: 767px) {
+  header { gap: 8px; }
+  .brand-box { flex-shrink: 0; }
+  .header-actions { min-width: 0; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .header-actions::-webkit-scrollbar { display: none; }
+  .header-actions > .btn { flex-shrink: 0; white-space: nowrap; }
+}
+@media (max-width: 480px) { .brand-title { display: none; } }/* มือถือ: แถบเสียงอ่านบังปุ่มลอยด้านล่าง ซ่อนไว้ระหว่างฟัง */
+@media (max-width: 767px) { body.tts-on .assistant-fab, body.tts-on .page-nav-btns { display: none; } }

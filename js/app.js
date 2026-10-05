@@ -19,6 +19,8 @@ let renderedWindowIndices = [];
 let isAppendingNextChapter = false;
 let chapterIntersectionObserver = null;
 let renderRequestVersion = 0;
+// จำนวนตอนสูงสุดที่อยู่บนหน้าพร้อมกัน (โหมดอ่านต่อเนื่อง) เกินนี้เอาตอนที่ไกลจากตำแหน่งอ่านออก
+const MAX_RENDERED_CHAPTERS = 4;
 
 let selectedWordBuffer = "";
 let isSelectedChinese = false;
@@ -27,12 +29,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v3.4.0",
+    title: "คู่มือเริ่มต้น v3.5.0",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.4.0", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.5.0", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.4.0"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.5.0"
   }];
 }
 
@@ -105,7 +107,10 @@ function cycleTheme() {
 
 function adjustFontSize(delta) {
   currentFontSize = Math.min(28, Math.max(14, currentFontSize + delta));
-  document.getElementById('reading-content').style.fontSize = currentFontSize + 'px';
+  // เปลี่ยนขนาดแล้วเนื้อหายืด/หด: ตรึงย่อหน้าที่อ่านอยู่ไว้ที่เดิมบนจอ
+  preserveScrollAnchor(() => {
+    document.getElementById('reading-content').style.fontSize = currentFontSize + 'px';
+  });
   localStorage.setItem('nov_font_size', currentFontSize);
 }
 
@@ -258,16 +263,21 @@ function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
       const noteLabel = (kind === 'author_note' && !isNoteChapter)
         ? `<span class="para-kind-label">📝 ข้อความผู้เขียน <button class="para-kind-reset" onclick="markParagraphAsStory(event, ${chapIdx}, ${pIdx})" title="ไม่ใช่ข้อความผู้เขียน เปลี่ยนเป็นเนื้อเรื่อง">ไม่ใช่</button></span>`
         : '';
+      const bookmark = typeof findBookmark === 'function' ? findBookmark(chap.id, pIdx) : null;
       const actions = `
           <div class="para-actions">
-            <button class="para-action-btn" onclick="openEditParagraphModal(event, ${chapIdx}, ${pIdx})">✎ แก้คำแปล</button>
-            ${p.thDraft && p.thDraft !== p.th ? `<button class="para-action-btn" onclick="swapParagraphDraft(event, ${chapIdx}, ${pIdx})" title="สลับไปใช้คำแปลอีกฉบับ (ก่อนเกลา/ก่อนแก้)">↺ ใช้ฉบับ${p.userEdited ? 'ของ AI' : 'ก่อนเกลา'}</button>` : ''}
+            ${p.src ? `<button class="para-action-btn" onclick="openEditParagraphModal(event, ${chapIdx}, ${pIdx})">✎ แก้คำแปล</button>` : ''}
+            ${p.src && p.thDraft && p.thDraft !== p.th ? `<button class="para-action-btn" onclick="swapParagraphDraft(event, ${chapIdx}, ${pIdx})" title="สลับไปใช้คำแปลอีกฉบับ (ก่อนเกลา/ก่อนแก้)">↺ ใช้ฉบับ${p.userEdited ? 'ของ AI' : 'ก่อนเกลา'}</button>` : ''}
+            <button class="para-action-btn" onclick="openBookmarkEditor(event, ${chapIdx}, ${pIdx})">${bookmark ? '🔖 แก้บุ๊กมาร์ก/โน้ต' : '🔖 บุ๊กมาร์ก/โน้ต'}</button>
+            <button class="para-action-btn" onclick="readFromParagraph(event, ${chapIdx}, ${pIdx})" title="อ่านออกเสียงตั้งแต่ย่อหน้านี้">🔊 ฟังจากตรงนี้</button>
           </div>`;
+      const ttsClass = typeof isTtsParagraph === 'function' && isTtsParagraph(chap.id, pIdx) ? ' para-tts-active' : '';
       parasHtml += `
-      <div class="para-item${kind === 'author_note' ? ' para-note' : ''}${p.userEdited ? ' para-user-edited' : ''}" id="para-box-${chapIdx}-${pIdx}">
+      <div class="para-item${kind === 'author_note' ? ' para-note' : ''}${p.userEdited ? ' para-user-edited' : ''}${bookmark ? ' para-bookmarked' : ''}${ttsClass}" id="para-box-${chapIdx}-${pIdx}">
+        ${bookmark ? bookmarkMarkHtml(bookmark, chapIdx, pIdx) : ''}
         ${noteLabel}
         <div class="para-th" onclick="toggleParagraphSrc(event, '${chapIdx}-${pIdx}')" data-unique-key="${chapIdx}-${pIdx}" data-th="${escapeHtml(encodeURIComponent(p.th || ''))}" data-src="${escapeHtml(encodeURIComponent(p.src || ''))}">${highlightedTh}</div>
-        <div class="para-src" id="src-${chapIdx}-${pIdx}"><span class="para-src-text">${escapeHtml(p.src || "ไม่มีข้อความต้นฉบับ")}</span>${p.src ? actions : ''}</div>
+        <div class="para-src" id="src-${chapIdx}-${pIdx}"><span class="para-src-text">${escapeHtml(p.src || "ไม่มีข้อความต้นฉบับ")}</span>${actions}</div>
       </div>
     `;
     });
@@ -407,6 +417,7 @@ async function renderVirtualWindow(targetIdx, scrollToTop = false, targetParaIdx
   document.getElementById('display-chap-title').innerText = curChap.title;
 
   const activeTerms = await getActiveGlossaryForCurrentBook();
+  if (bookmarkCache.bookId !== currentBookId) await refreshBookmarkCache(currentBookId);
   if (requestVersion !== renderRequestVersion) return;
 
   if (!isInfinite) {
@@ -440,6 +451,7 @@ async function renderVirtualWindow(targetIdx, scrollToTop = false, targetParaIdx
   }
 
   container.innerHTML = combinedHtml;
+  lastWindowRenderAt = Date.now();
   setupChapterIntersectionObserver();
 
   if (targetParaIdx > 0 && scrollToParagraph(currentChapterIndex, targetParaIdx)) {
@@ -480,10 +492,15 @@ async function appendNextChapterToWindow() {
     if (tempDiv.firstElementChild) container.appendChild(tempDiv.firstElementChild);
 
     if (!renderedWindowIndices.includes(nextIdx)) renderedWindowIndices.push(nextIdx);
-    if (renderedWindowIndices.length > 3) {
-      const removeIdx = renderedWindowIndices.shift();
-      const removeEl = document.getElementById(`chapter-block-${removeIdx}`);
-      if (removeEl) removeEl.remove();
+    renderedWindowIndices.sort((a, b) => a - b);
+    // อ่านยาวแล้วไม่หน่วง: เอาตอนบนสุดออก แล้วเลื่อนชดเชยให้ย่อหน้าที่อ่านอยู่ไม่กระโดด
+    if (renderedWindowIndices.length > MAX_RENDERED_CHAPTERS) {
+      preserveScrollAnchor(() => {
+        while (renderedWindowIndices.length > MAX_RENDERED_CHAPTERS && renderedWindowIndices[0] < currentChapterIndex) {
+          const removeEl = document.getElementById(`chapter-block-${renderedWindowIndices.shift()}`);
+          if (removeEl) removeEl.remove();
+        }
+      });
     }
 
     setupChapterIntersectionObserver();
@@ -491,6 +508,34 @@ async function appendNextChapterToWindow() {
     isAppendingNextChapter = false;
     checkAndRefreshBottomStatus();
     checkProactivePrefetch();
+  }
+}
+
+/** เลื่อนขึ้นไปถึงตอนบนสุดที่แสดงอยู่: ใส่ตอนก่อนหน้าไว้ด้านบน (ตำแหน่งที่อ่านไม่กระโดด) และเอาตอนล่างสุดออกถ้าเกิน */
+async function prependPreviousChapterToWindow() {
+  if (localStorage.getItem('nov_enable_infinite') === 'false' || isAppendingNextChapter || !renderedWindowIndices.length) return;
+  const prevIdx = Math.min(...renderedWindowIndices) - 1;
+  if (prevIdx < 0 || document.getElementById(`chapter-block-${prevIdx}`)) return;
+  isAppendingNextChapter = true;
+  try {
+    const activeTerms = await getActiveGlossaryForCurrentBook();
+    const prevChap = chapters[prevIdx];
+    const container = document.getElementById('reading-content');
+    if (!prevChap || document.getElementById(`chapter-block-${prevIdx}`)) return;
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = buildChapterBlockHtml(prevChap, prevIdx, activeTerms);
+    const el = tempDiv.firstElementChild;
+    if (!el) return;
+    preserveScrollAnchor(() => container.insertBefore(el, container.firstChild));
+    renderedWindowIndices.push(prevIdx);
+    renderedWindowIndices.sort((a, b) => a - b);
+    while (renderedWindowIndices.length > MAX_RENDERED_CHAPTERS && renderedWindowIndices[renderedWindowIndices.length - 1] > currentChapterIndex) {
+      const removeEl = document.getElementById(`chapter-block-${renderedWindowIndices.pop()}`);
+      if (removeEl) removeEl.remove();
+    }
+    setupChapterIntersectionObserver();
+  } finally {
+    isAppendingNextChapter = false;
   }
 }
 
@@ -626,6 +671,8 @@ function findTopVisibleParagraph() {
 
 let readingPositionTimer = null;
 let lastSavedPosition = '';
+let lastScrollY = 0;
+let lastWindowRenderAt = 0;
 
 function setupScrollMonitor() {
   window.addEventListener('scroll', () => {
@@ -641,7 +688,15 @@ function setupScrollMonitor() {
     }, 700);
 
     const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
+    const scrollingUp = window.scrollY < lastScrollY;
+    lastScrollY = window.scrollY;
     if (!isInfinite) return;
+
+    // เลื่อนขึ้นใกล้ตอนบนสุดที่แสดงอยู่: เติมตอนก่อนหน้า (เว้นช่วงหลังสร้างหน้าใหม่ ที่ยังเลื่อนไปตำแหน่งอ่านอยู่)
+    if (scrollingUp && Date.now() - lastWindowRenderAt > 1500 && renderedWindowIndices.length && Math.min(...renderedWindowIndices) > 0) {
+      const firstEl = document.getElementById(`chapter-block-${Math.min(...renderedWindowIndices)}`);
+      if (firstEl && firstEl.getBoundingClientRect().top > -900) prependPreviousChapterToWindow();
+    }
 
     if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 1200) {
       if (currentChapterIndex < chapters.length - 1) appendNextChapterToWindow();
@@ -1219,8 +1274,12 @@ async function confirmMoveChapters() {
   }
 }
 
-async function loadBookFromDB(bookId, specifyChapIdOrIdx = null) {
-  if (currentBookId !== bookId) abortReaderTasks();
+// paraIdx: เปิดแล้วไปที่ย่อหน้านั้นเลย (ใช้กับผลค้นหา/บุ๊กมาร์ก)
+async function loadBookFromDB(bookId, specifyChapIdOrIdx = null, { paraIdx = null } = {}) {
+  if (currentBookId !== bookId) {
+    abortReaderTasks();
+    if (tts.active) stopTts();
+  }
   const books = await dbGetAllBooks();
   const targetBook = books.find(b => b.bookId === bookId);
   if (!targetBook) {
@@ -1260,10 +1319,11 @@ async function loadBookFromDB(bookId, specifyChapIdOrIdx = null) {
     nextUrlCalculated = latestChap.nextUrl;
 
     // เปิดเรื่องเดิมต่อโดยไม่ระบุบท: กลับไปย่อหน้าที่อ่านค้างไว้
-    const resumePara = (specifyChapIdOrIdx === null && currentActiveChap.id === targetBook.lastChapterId)
-      ? (targetBook.lastParaIndex || 0) : null;
+    const resumePara = paraIdx !== null ? paraIdx : ((specifyChapIdOrIdx === null && currentActiveChap.id === targetBook.lastChapterId)
+      ? (targetBook.lastParaIndex || 0) : null);
     lastSavedPosition = '';
-    renderVirtualWindow(currentChapterIndex, true, resumePara);
+    await refreshBookmarkCache(bookId);
+    await renderVirtualWindow(currentChapterIndex, true, resumePara);
     refreshShelfViewOnly(bookId);
   } else {
     chapters = [{
@@ -2578,6 +2638,11 @@ async function handleRemoteDataChanges(changes) {
   try {
     if (changes.some(c => c.kind === 'glossary')) await refreshInMemoryGlossaryCache();
     if (changes.some(c => c.kind === 'chapters' && (!c.bookId || c.bookId === currentBookId))) await syncChaptersFromOtherTab();
+    // บุ๊กมาร์กที่เพิ่ม/ลบจากอีกแท็บ
+    if (changes.some(c => c.kind === 'bookData' && c.bookId === currentBookId)) {
+      await refreshBookmarkCache(currentBookId);
+      refreshBookmarkMarkers();
+    }
     if (document.getElementById('bookshelf-modal')?.classList.contains('active')) {
       const bookIds = [...new Set(changes.map(c => c.bookId).filter(Boolean))];
       if (changes.some(c => c.kind === 'books' && !c.bookId) || !bookIds.length) await openBookshelfModal();
@@ -2692,6 +2757,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
   loadSettings();
+  setupReader();
   setupSelectionMonitor();
   setupScrollMonitor();
   setupFullscreenListener();

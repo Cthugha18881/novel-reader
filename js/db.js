@@ -514,6 +514,20 @@ function sanitizeBookDataRecord(raw) {
   if ('bible' in d && !isPlainRecord(d.bible)) delete d.bible;
   if (isPlainRecord(d.bible) && 'characters' in d.bible && !Array.isArray(d.bible.characters)) d.bible.characters = [];
   if ('toc' in d && !isPlainRecord(d.toc)) delete d.toc;
+  // บุ๊กมาร์ก/โน้ต: เก็บเฉพาะรายการที่รูปแบบถูก (ตอน + เลขย่อหน้า) ตัดข้อความที่ยาวเกิน
+  if ('bookmarks' in d) {
+    d.bookmarks = Array.isArray(d.bookmarks)
+      ? d.bookmarks.filter(b => isPlainRecord(b) && isValidId(b.chapId) && Number.isInteger(b.paraIdx) && b.paraIdx >= 0).slice(-1000).map(b => ({
+        ...b,
+        id: isValidId(b.id) ? b.id : `bm_${b.chapId}_${b.paraIdx}`,
+        note: asText(b.note).slice(0, 2000),
+        excerpt: asText(b.excerpt).slice(0, 200),
+        chapTitle: asText(b.chapTitle).slice(0, 300),
+        srcStart: asText(b.srcStart).slice(0, 60),
+        thStart: asText(b.thStart).slice(0, 60)
+      }))
+      : [];
+  }
   return d;
 }
 

@@ -326,7 +326,7 @@ async function renderStoryLogTab() {
   const bookId = bibleEditingBookId;
   const book = (await dbGetAllBooks()).find(b => b.bookId === bookId);
   const all = (await dbGetChaptersByBook(bookId)).sort((a, b) => (a.order || 0) - (b.order || 0));
-  const numberOf = new Map(all.map((c, i) => [c.id, i + 1]));
+  const numberOf = computeChapterNumbers(all);
   const eligible = all.filter(c => c.status !== 'pending' && c.chapterType !== 'placeholder' && c.chapterType !== 'author_note' && storySourceText(c).trim());
   const fresh = eligible.filter(isStoryLogFresh);
   const stale = eligible.filter(c => c.storyLog && !isStoryLogFresh(c));

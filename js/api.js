@@ -710,6 +710,106 @@ const NOTE_TITLE_PATTERN = /(请假|感言|公告|通知|上架|致歉|道歉|�
 const SIDE_TITLE_PATTERN = /(番外|外传|特别篇|番外編|閑話|外伝|외전|특별편|side\s*story|extra\s*chapter|bonus\s*chapter)/i;
 const NUMBERED_TITLE_PATTERN = /第\s*[0-9零〇一二三四五六七八九十百千万两]+\s*[章节回话卷話]|\d+\s*[화장](?![가-힣])|chapter\s*\d+|episode\s*\d+|^\s*\d+\s*[.、:：]/i;
 
+// ---------- เลขตอนจริงของเรื่อง (ไม่ใช่ลำดับในแอพ) ----------
+// ผู้ใช้อาจเริ่มอ่านในแอพจากกลางเรื่อง (เช่นตอน 801) ลำดับในแอพจึงไม่ตรงกับเลขตอนจริง
+// ใช้กับการอ้างอิงตอนของผู้ช่วย AI / บันทึกเหตุการณ์ / ผลค้นหา / บุ๊กมาร์ก
+const CJK_DIGIT_VALUES = { 零: 0, 〇: 0, 一: 1, 二: 2, 两: 2, 兩: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9 };
+const CJK_UNIT_VALUES = { 十: 10, 百: 100, 千: 1000 };
+
+/** "831" / "八百三十一" / "一千零二" -> ตัวเลข (อ่านไม่ได้ = null) */
+function parseCjkNumber(text) {
+  const s = String(text || '').trim();
+  if (/^\d+$/.test(s)) return parseInt(s, 10);
+  if (!s || /[^零〇一二两兩三四五六七八九十百千万萬]/.test(s)) return null;
+  // เขียนเรียงหลักแบบไม่มีหน่วย เช่น 一二三 = 123
+  if (!/[十百千万萬]/.test(s)) return parseInt([...s].map(ch => CJK_DIGIT_VALUES[ch]).join(''), 10);
+  let total = 0;
+  let section = 0;
+  let digit = 0;
+  for (const ch of s) {
+    if (ch in CJK_DIGIT_VALUES) digit = CJK_DIGIT_VALUES[ch];
+    else if (ch === '万' || ch === '萬') {
+      total += (section + digit) * 10000;
+      section = 0;
+      digit = 0;
+    } else {
+      section += (digit || 1) * CJK_UNIT_VALUES[ch];
+      digit = 0;
+    }
+  }
+  return total + section + digit;
+}
+
+const CHAPTER_NUMBER_PATTERNS = [
+  /(?:ตอนที่|บทที่|ตอน|บท)\s*(\d{1,5})(?!\d)/,
+  /第\s*([0-9]{1,5}|[零〇一二两兩三四五六七八九十百千万萬]{1,10})\s*[章节節回话話]/,
+  /(?:chapter|chap\.?|ch\.|episode|ep\.)\s*(\d{1,5})(?!\d)/i,
+  /(\d{1,5})\s*(?:화|話|장)(?![가-힣])/,
+  /^\s*(\d{1,5})\s*(?:[.、:：\-–—)]|$)/
+];
+
+function extractChapterNumber(text) {
+  const s = String(text || '').slice(0, 200);
+  for (const re of CHAPTER_NUMBER_PATTERNS) {
+    const m = s.match(re);
+    const n = m ? parseCjkNumber(m[1]) : null;
+    if (n !== null && n > 0 && n < 100000) return n;
+  }
+  return null;
+}
+
+/** เลขตอนจากชื่อตอน -> หัวตอนในเนื้อหา (บรรทัดสั้นช่วงแรก) -> URL ที่มีคำว่า chapter */
+function chapterNumberHint(chap) {
+  const fromTitle = extractChapterNumber(chap?.title);
+  if (fromTitle !== null) return fromTitle;
+  for (const p of (chap?.paragraphs || []).slice(0, 2)) {
+    for (const text of [p.src, p.th]) {
+      if (text && text.length <= 60) {
+        const n = extractChapterNumber(text);
+        if (n !== null) return n;
+      }
+    }
+  }
+  const m = String(chap?.sourceUrl || '').match(/chapter[-_]?(\d{1,5})(?!\d)/i) || String(chap?.sourceUrl || '').match(/第(\d{1,5})章/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+/**
+ * ป้ายเลขตอนของทุกตอนในเรื่อง (ต้องเรียงตาม order แล้ว) คืน Map(id -> "831")
+ * - ใช้เลขที่อ่านได้จากตอนนั้น ถ้ามากกว่าตอนก่อนหน้า
+ * - ตอนที่ไม่มีเลข: ต่อจากตอนก่อนหน้า (+1) ถ้าไม่ชนกับเลขของตอนถัดไป
+ *   ไม่งั้น (หรือเป็นตอนพิเศษ/ประกาศ) ใช้เลขย่อย เช่น "831.1" จะได้ไม่ซ้ำกับตอนจริง
+ * - เรื่องที่ไม่มีเลขตอนเลย ได้ 1, 2, 3, ... ตามลำดับเหมือนเดิม
+ */
+function computeChapterNumbers(sortedChaps) {
+  const hints = sortedChaps.map(chapterNumberHint);
+  const labels = new Map();
+  let last = 0;
+  let sub = 0;
+  sortedChaps.forEach((chap, i) => {
+    const h = hints[i];
+    if (h !== null && h > last && (last === 0 || h - last <= 5000)) {
+      last = h;
+      sub = 0;
+      labels.set(chap.id, String(h));
+      return;
+    }
+    const isStory = !chap.chapterType || chap.chapterType === 'story' || chap.chapterType === 'placeholder';
+    const nextHint = hints.slice(i + 1).find(n => n !== null && n > last);
+    // เลขน้อยกว่าตอนก่อนหน้า = เลขที่เชื่อไม่ได้ (เช่นชื่อสำรอง "ตอนที่ N" ที่แอพตั้งให้) ถือว่าไม่มีเลข
+    // เลขเท่ากับตอนก่อนหน้า = ตอนเดียวกันที่แบ่งเป็นหลายส่วน ใช้เลขย่อย
+    if ((h === null || h < last) && isStory && (nextHint === undefined || nextHint > last + 1)) {
+      last += 1;
+      sub = 0;
+      labels.set(chap.id, String(last));
+      return;
+    }
+    sub += 1;
+    labels.set(chap.id, `${last}.${sub}`);
+  });
+  return labels;
+}
+
 // ข้อความจากหน้าเว็บ แยก 2 ระดับเพื่อไม่ให้ซ่อนเนื้อเรื่องผิด:
 // - รูปแบบชัดเจน (ลิงก์, "收藏本站") ใช้กับย่อหน้าไม่เกิน 120 ตัวอักษร
 // - คำที่อาจปรากฏในเนื้อเรื่องได้ (ชื่อเว็บ, "上一章") นับเป็นขยะเฉพาะเมื่อย่อหน้าประกอบด้วยคำพวกนี้เกือบทั้งหมด
