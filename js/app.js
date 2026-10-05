@@ -29,12 +29,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v3.5.0",
+    title: "คู่มือเริ่มต้น v3.6.0",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.5.0", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.6.0", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.5.0"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.6.0"
   }];
 }
 
@@ -681,7 +681,9 @@ function setupScrollMonitor() {
     readingPositionTimer = setTimeout(() => {
       const pos = findTopVisibleParagraph();
       if (!pos || !chapters[pos.chapIdx]) return;
-      const key = `${currentBookId}:${chapters[pos.chapIdx].id}:${pos.paraIdx}`;
+      // เพลงประกอบตอนอ่านเงียบๆ: ตามย่อหน้าที่เห็นบนจอ (ถ้ากำลังฟังเสียงอ่าน เพลงตามเสียงอ่านแทน)
+      if (isBgmSilentReading() && !tts.active) bgmOnParagraph(chapters[pos.chapIdx], pos.paraIdx);
+      const key =`${currentBookId}:${chapters[pos.chapIdx].id}:${pos.paraIdx}`;
       if (key === lastSavedPosition) return;
       lastSavedPosition = key;
       saveReadingPointer(pos.chapIdx, pos.paraIdx);

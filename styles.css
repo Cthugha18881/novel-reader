@@ -630,3 +630,11 @@ body.theme-dark .bookmark-excerpt { background: rgba(255, 255, 255, 0.05); }
 }
 @media (max-width: 480px) { .brand-title { display: none; } }/* มือถือ: แถบเสียงอ่านบังปุ่มลอยด้านล่าง ซ่อนไว้ระหว่างฟัง */
 @media (max-width: 767px) { body.tts-on .assistant-fab, body.tts-on .page-nav-btns { display: none; } }
+/* ---------- เพลงประกอบ ---------- */
+.bgm-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+.bgm-row label { display: flex; align-items: center; gap: 2px; cursor: pointer; flex-shrink: 0; }
+.bgm-row input[type="range"] { width: 80px; accent-color: #2563eb; flex-shrink: 0; }
+.bgm-status { font-size: 11px; opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.story-mood-row { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-size: 11px; }
+.story-mood-row input, .story-mood-row select { font-size: 11px; padding: 3px 5px; border-radius: 4px; border: 1px solid rgba(0, 0, 0, 0.15); background: transparent; color: inherit; }
+.story-mood-row input { width: 64px; }

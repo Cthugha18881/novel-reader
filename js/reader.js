@@ -14,6 +14,8 @@ const READING_PREF_DEFAULTS = { font: 'sarabun', lineHeight: 1.9, width: 740, pa
 const READING_PREF_LIMITS = { lineHeight: [1.3, 2.8], width: [480, 1200], paraGap: [0, 48] };
 
 function clampNumber(value, [min, max], fallback) {
+  // localStorage ที่ยังไม่ได้ตั้งค่าคืน null ซึ่ง Number(null) = 0 ต้องใช้ค่าเริ่มต้นแทน
+  if (value === null || value === undefined || value === '') return fallback;
   const n = Number(value);
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 }
@@ -75,7 +77,9 @@ function renderReaderPanel() {
       <button class="btn${!infinite ? ' btn-primary' : ''}" onclick="setReadingMode(false)" title="แสดงทีละตอน มีปุ่มตอนก่อน/ถัดไป">ทีละตอน</button></div></div>
     <label class="reader-row" style="cursor: pointer;"><span>ปุ่มเลื่อนทีละหน้าจอ ▲▼<br><small style="opacity: 0.65;">ใช้ปุ่มลูกศรซ้าย/ขวาบนคีย์บอร์ดได้ด้วย</small></span>
       <input type="checkbox" ${prefs.pageButtons ? 'checked' : ''} onchange="saveReadingPrefs({ pageButtons: this.checked })"></label>
-    <div style="text-align: right; margin-top: 6px;"><button class="btn" style="font-size: 11px;" onclick="resetReadingPrefs()">คืนค่าเริ่มต้น</button></div>`;
+    <div style="text-align: right; margin-top: 6px;"><button class="btn" style="font-size: 11px;" onclick="resetReadingPrefs()">คืนค่าเริ่มต้น</button></div>
+    <div id="bgm-settings" style="border-top: 1px solid rgba(0,0,0,0.1); margin-top: 8px; padding-top: 4px;"></div>`;
+  renderBgmSettings(document.getElementById('bgm-settings'));
 }
 
 function formatReadingPref(key, value) {
@@ -239,6 +243,14 @@ function renderTtsBar(status = '') {
   bar.classList.toggle('open', tts.active);
   document.body.classList.toggle('tts-on', tts.active);
   if (!tts.active) return;
+  // กำลังลาก/เลือกค่าในแถบอยู่ (เช่นความดังเพลง): อัปเดตแค่บรรทัดสถานะ ไม่สร้างแถบใหม่ทับมือผู้ใช้
+  const focused = document.activeElement;
+  const sub = bar.querySelector('[data-tts-sub]');
+  if (sub && focused && bar.contains(focused) && ['INPUT', 'SELECT'].includes(focused.tagName)) {
+    const c = chapters.find(x => x.id === tts.chapId);
+    sub.textContent = status || (c ? `${c.title} · ย่อหน้า ${tts.paraIdx + 1}` : '');
+    return;
+  }
   const voices = getTtsVoices();
   const thai = getThaiVoices(voices);
   const list = thai.length ? thai : voices;
@@ -253,10 +265,11 @@ function renderTtsBar(status = '') {
       <select class="form-input" onchange="setTtsRate(this.value)" title="ความเร็ว">${rates.map(r => `<option value="${r}" ${r === getTtsRate() ? 'selected' : ''}>${r}x</option>`).join('')}</select>
       <button class="btn" onclick="stopTts()" title="ปิดเสียงอ่าน">✕</button>
     </div>
-    <div class="tts-sub">${escapeHtml(status || (chap ? `${chap.title} · ย่อหน้า ${tts.paraIdx + 1}` : ''))}</div>
+    <div class="tts-sub" data-tts-sub>${escapeHtml(status || (chap ? `${chap.title} · ย่อหน้า ${tts.paraIdx + 1}` : ''))}</div>
     <div class="tts-row">
       <select class="form-input" style="flex: 1; min-width: 0;" onchange="setTtsVoice(this.value)" title="เสียง">${list.length ? list.map(v => `<option value="${escapeHtml(v.voiceURI)}" ${current && v.voiceURI === current.voiceURI ? 'selected' : ''}>${escapeHtml(v.name)} (${escapeHtml(v.lang)})</option>`).join('') : '<option>เสียงเริ่มต้นของเครื่อง</option>'}</select>
     </div>
+    ${bgmControlsHtml()}
     ${thai.length ? '' : '<div class="tts-warn">⚠️ เครื่องนี้ไม่มีเสียงภาษาไทย อาจอ่านไม่ออกหรือออกเสียงผิด ติดตั้งเสียงไทยได้ที่ Windows: ตั้งค่า → เวลาและภาษา → คำพูด / Android: Google Text-to-speech → ภาษาไทย / iPhone: ตั้งค่า → การช่วยการเข้าถึง → เนื้อหาที่ถูกอ่าน</div>'}
     <div class="tts-sub" style="opacity: 0.55;">มือถือบางรุ่นหยุดอ่านเมื่อปิดจอหรือสลับแอพ</div>`;
 }
@@ -301,6 +314,8 @@ async function waitForTtsVoices(timeout = 1500) {
 /** เริ่มอ่านจากย่อหน้าที่ระบุ หรือจากย่อหน้าบนสุดที่เห็นบนจอ */
 async function startTts(chapIdx = null, paraIdx = null) {
   if (!ttsSupported()) return alert('เบราว์เซอร์นี้ไม่รองรับการอ่านออกเสียง ลองใช้ Chrome, Edge หรือ Safari รุ่นใหม่');
+  // ต้องปลดล็อกเสียงเพลงตอนนี้ (ยังอยู่ในจังหวะที่ผู้ใช้กดปุ่ม) ก่อน await ใดๆ
+  bgmUnlock();
   const voices = await waitForTtsVoices();
   // ไม่มีเสียงไทย: บอกวิธีแก้ก่อน แทนที่จะอ่านข้ามไปเงียบๆ (เสียงภาษาอื่นอ่านได้แค่ตัวเลข/คำอังกฤษ)
   if (!getThaiVoices(voices).length) {
@@ -335,6 +350,7 @@ function stopTts() {
   releaseTtsWakeLock();
   setTtsHighlight();
   renderTtsBar();
+  if (!isBgmSilentReading()) bgmStop();
 }
 
 // หยุดชั่วคราวด้วยการยกเลิกแล้วเริ่มย่อหน้าเดิมใหม่ (pause()/resume() ของ Android ใช้ไม่ได้จริง)
@@ -349,6 +365,7 @@ function toggleTtsPause() {
     tts.token++;
     window.speechSynthesis.cancel();
     releaseTtsWakeLock();
+    bgmPause();
     renderTtsBar();
   }
 }
@@ -401,6 +418,7 @@ async function speakParagraph(chapId, paraIdx) {
     if (rect.top < 60 || rect.bottom > window.innerHeight - 140) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
   renderTtsBar();
+  bgmOnParagraph(chap, i);
   const chunks = splitForSpeech(chap.paragraphs[i].th);
   speakChunks(chunks, 0, token, () => speakParagraph(chapId, i + 1));
 }

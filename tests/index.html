@@ -36,6 +36,7 @@
   <script src="../js/updates.js"></script>
   <script src="../js/assistant.js"></script>
   <script src="../js/reader.js"></script>
+  <script src="../js/bgm.js"></script>
   <script src="../js/export.js"></script>
   <script>
     const results = [];
@@ -826,6 +827,45 @@
       const d = sanitizeBookDataRecord({ bookId: 'b', bookmarks: [{ chapId: 'c1', paraIdx: 2, note: 'x'.repeat(3000) }, { chapId: '', paraIdx: 1 }, { chapId: 'c2', paraIdx: -1 }, { chapId: 'c3', paraIdx: 1.5 }, 'junk'] });
       const bad = sanitizeBookDataRecord({ bookId: 'b', bookmarks: 'nope' });
       return d.bookmarks.length === 1 && d.bookmarks[0].note.length === 2000 && d.bookmarks[0].id && eq(bad.bookmarks, []);
+    });
+    // ---------- เพลงประกอบ ----------
+    test('normalizeStoryMoods: เรียง ตัดค่าแปลก รวมช่วงซ้ำ ช่วงแรกเริ่มที่ 0', () => eq(
+      normalizeStoryMoods([{ from: 12, mood: 'battle' }, { from: 3, mood: 'calm' }, { from: 20, mood: 'battle' }, { from: 30, mood: 'x' }, { from: -1, mood: 'sad' }, { from: 99, mood: 'sad' }, { from: 40, mood: 'sad' }], 50),
+      [{ from: 0, mood: 'calm' }, { from: 12, mood: 'battle' }, { from: 40, mood: 'sad' }]));
+    test('storySourceWithMarkers: ใส่เลขย่อหน้าตาม chapter.paragraphs ข้ามขยะหน้าเว็บ', () => {
+      const s = storySourceWithMarkers({ paragraphs: [{ src: 'junk', kind: 'site_junk' }, { src: '甲' }, { src: '', th: 'x' }, { src: '乙' }] });
+      return s === '[P1] 甲\n[P3] 乙';
+    });
+    test('bgmCandidates: อารมณ์ใกล้เคียงในแนวเดียวกันก่อน แล้วชุด general / แนวที่ไม่มีโฟลเดอร์ใช้ general', () => {
+      const a = bgmCandidates('xianxia', 'dread').map(x => x.join('/'));
+      const b = bgmCandidates('fanfic', 'epic').map(x => x.join('/'));
+      return eq(a, ['xianxia/dread', 'xianxia/tense', 'xianxia/calm', 'general/dread', 'general/tense', 'general/calm']) &&
+        eq(b, ['general/epic', 'general/battle', 'general/tense', 'general/calm']) && bgmGenreFolder('apocalypse') === 'apocalypse';
+    });
+    test('estimateChapterMoods: เดาจากคำ ช่วงสั้นไม่เปลี่ยนเพลง', () => {
+      const p = (th) => ({ th });
+      const chap = { paragraphs: [p('เช้าวันใหม่'), p('เดินเล่น'), p('กินข้าว'), p('ศัตรูพุ่งเข้าโจมตี'), p('ปะทะกันดุเดือด หมัดระเบิด'), p('สังหารศัตรู บาดแผลเต็มตัว'), p('หลบการโจมตี'), p('สงบลง'), p('นั่งพัก'), p('ดื่มชา'), p('หลับไป'), p('ร้องไห้ครั้งเดียว')] };
+      const segs = estimateChapterMoods(chap);
+      return segs[0].mood === 'calm' && segs.some(s => s.mood === 'battle') && moodAtParagraph(segs, 5) === 'battle' && moodAtParagraph(segs, 11) !== 'sad';
+    });
+    test('mergeShortMoodSegments / moodAtParagraph', () => {
+      const segs = mergeShortMoodSegments([{ from: 0, mood: 'calm' }, { from: 5, mood: 'sad' }, { from: 6, mood: 'calm' }, { from: 10, mood: 'battle' }], 20, 3);
+      return eq(segs, [{ from: 0, mood: 'calm' }, { from: 10, mood: 'battle' }]) && moodAtParagraph(segs, 9) === 'calm' && moodAtParagraph(segs, 15) === 'battle' && moodAtParagraph([], 3) === 'calm';
+    });
+    test('getChapterMoodSegments: ใช้ป้ายจาก AI เมื่อบันทึกยังตรงกับเนื้อหา ไม่งั้นเดาจากคำ', () => {
+      const chap = { paragraphs: Array.from({ length: 10 }, (_, i) => ({ src: 'x' + i, th: 'ข้อความ' })) };
+      chap.storyLog = { srcHash: computeStorySrcHash(chap), moods: [{ from: 0, mood: 'mystery' }, { from: 6, mood: 'epic' }] };
+      const ai = getChapterMoodSegments(chap);
+      chap.paragraphs[0].src = 'changed';
+      const est = getChapterMoodSegments(chap);
+      return ai.source === 'ai' && moodAtParagraph(ai.segments, 7) === 'epic' && est.source === 'estimate';
+    });
+    test('getTtsRate: ยังไม่ตั้งค่า = 1x (ไม่ใช่ช้าสุด)', () => {
+      const saved = localStorage.getItem('nov_tts_rate');
+      localStorage.removeItem('nov_tts_rate');
+      const r = getTtsRate();
+      if (saved !== null) localStorage.setItem('nov_tts_rate', saved);
+      return r === 1 && clampNumber('3', [0.5, 2.5], 1) === 2.5;
     });
     test('getBackupSettingNames: มีตั้งค่าการอ่าน/เสียงอ่าน แต่ไม่มีเสียงที่เลือก (ขึ้นกับเครื่อง)', () => {
       const names = getBackupSettingNames();

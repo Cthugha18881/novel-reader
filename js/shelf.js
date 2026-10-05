@@ -17,6 +17,8 @@ function getGenreThaiName(g) {
     case 'fanfic': return 'แฟนฟิค';
     case 'light_novel': return 'ไลท์โนเวล';
     case 'kr_fantasy': return 'เว็บโนเวลเกาหลี';
+    case 'mystery': return 'สืบสวน/ลึกลับ';
+    case 'apocalypse': return 'วันสิ้นโลก';
     default: return 'วรรณกรรมทั่วไป';
   }
 }
