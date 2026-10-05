@@ -175,7 +175,9 @@ function getThaiVoices(voices = getTtsVoices()) {
 function pickTtsVoice() {
   const voices = getTtsVoices();
   const saved = localStorage.getItem('nov_tts_voice');
-  return voices.find(v => v.voiceURI === saved) || getThaiVoices(voices)[0] || null;
+  const thai = getThaiVoices(voices);
+  // ใช้เฉพาะเสียงไทย (เสียงที่จำไว้อาจเป็นของอีกเครื่อง/ถูกถอนออกไปแล้ว)
+  return thai.find(v => v.voiceURI === saved) || thai[0] || null;
 }
 
 function getTtsRate() {
@@ -277,9 +279,35 @@ function releaseTtsWakeLock() {
   tts.wakeLock = null;
 }
 
+const TTS_NO_THAI_HELP = `เครื่องนี้ไม่มีเสียงอ่านภาษาไทย (เบราว์เซอร์ใช้เสียงที่ติดตั้งในเครื่อง ถ้าไม่มีเสียงไทย จะอ่านข้ามไปเงียบๆ)
+
+วิธีแก้บนคอม (เลือกอย่างใดอย่างหนึ่ง):
+• ง่ายที่สุด: เปิดแอพนี้ด้วย Microsoft Edge ซึ่งมีเสียงไทยออนไลน์ในตัว (Premwadee / Niwat)
+• ติดตั้งเสียงไทยใน Windows: ตั้งค่า → เวลาและภาษา → คำพูด → เพิ่มเสียง → ภาษาไทย แล้วปิดเปิดเบราว์เซอร์ใหม่ (Chrome บางรุ่นอาจยังไม่เห็นเสียงนี้ ถ้าไม่เห็นให้ใช้ Edge)
+
+มือถือ Android / iPhone มีเสียงไทยอยู่แล้ว`;
+
+/** รายชื่อเสียงโหลดช้าในบางเบราว์เซอร์ (Chrome/Edge โหลดเสียงออนไลน์ทีหลัง) รอสักครู่ก่อนตัดสินว่าไม่มี */
+async function waitForTtsVoices(timeout = 1500) {
+  if (getTtsVoices().length) return getTtsVoices();
+  await new Promise(resolve => {
+    const done = () => { window.speechSynthesis.removeEventListener?.('voiceschanged', done); resolve(); };
+    window.speechSynthesis.addEventListener?.('voiceschanged', done);
+    setTimeout(done, timeout);
+  });
+  return getTtsVoices();
+}
+
 /** เริ่มอ่านจากย่อหน้าที่ระบุ หรือจากย่อหน้าบนสุดที่เห็นบนจอ */
-function startTts(chapIdx = null, paraIdx = null) {
+async function startTts(chapIdx = null, paraIdx = null) {
   if (!ttsSupported()) return alert('เบราว์เซอร์นี้ไม่รองรับการอ่านออกเสียง ลองใช้ Chrome, Edge หรือ Safari รุ่นใหม่');
+  const voices = await waitForTtsVoices();
+  // ไม่มีเสียงไทย: บอกวิธีแก้ก่อน แทนที่จะอ่านข้ามไปเงียบๆ (เสียงภาษาอื่นอ่านได้แค่ตัวเลข/คำอังกฤษ)
+  if (!getThaiVoices(voices).length) {
+    alert(TTS_NO_THAI_HELP);
+    return;
+  }
+  tts.silentCount = 0;
   let pos = chapIdx !== null ? { chapIdx, paraIdx: paraIdx || 0 } : findTopVisibleParagraph();
   if (!pos || !chapters[pos.chapIdx]) pos = { chapIdx: currentChapterIndex, paraIdx: 0 };
   tts.active = true;
@@ -348,6 +376,9 @@ function setTtsVoice(uri) {
 async function speakParagraph(chapId, paraIdx) {
   const token = ++tts.token;
   window.speechSynthesis.cancel();
+  // Chrome บนคอม: speak() ทันทีหลัง cancel() บางครั้งเงียบไปเลย เว้นจังหวะนิดหนึ่ง
+  await new Promise(r => setTimeout(r, 60));
+  if (token !== tts.token) return;
   const chapIdx = chapters.findIndex(c => c.id === chapId);
   const chap = chapters[chapIdx];
   if (!chap) return stopTts();
@@ -385,7 +416,22 @@ function speakChunks(chunks, k, token, onDone) {
     u.lang = voice.lang;
   }
   u.rate = getTtsRate();
-  u.onend = () => speakChunks(chunks, k + 1, token, onDone);
+  // เก็บอ้างอิงไว้: Chrome อาจเก็บกวาด utterance ระหว่างอ่าน แล้ว onend ไม่ถูกเรียก (อ่านค้าง)
+  tts.utterance = u;
+  let startedAt = 0;
+  u.onstart = () => { startedAt = performance.now(); };
+  u.onend = () => {
+    if (token !== tts.token) return;
+    // เสียงที่อ่านภาษาไทยไม่ได้ "อ่านจบ" ทันที (ไม่มี error) ถ้าเป็นแบบนี้ติดกันหลายครั้ง หยุดแล้วบอกผู้ใช้
+    const tooFast = chunks[k].length >= 15 && startedAt && performance.now() - startedAt < 150;
+    tts.silentCount = tooFast ? (tts.silentCount || 0) + 1 : 0;
+    if (tts.silentCount >= 3) {
+      stopTts();
+      alert(`เสียงที่ใช้อยู่ (${voice ? voice.name : 'เสียงเริ่มต้นของเครื่อง'}) อ่านภาษาไทยไม่ได้\n\n${TTS_NO_THAI_HELP}`);
+      return;
+    }
+    speakChunks(chunks, k + 1, token, onDone);
+  };
   u.onerror = (ev) => {
     if (token !== tts.token || ev.error === 'interrupted' || ev.error === 'canceled') return;
     renderTtsBar(`อ่านไม่สำเร็จ (${ev.error || 'ไม่ทราบสาเหตุ'}) ข้ามไปย่อหน้าถัดไป`);
