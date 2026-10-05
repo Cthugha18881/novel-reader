@@ -236,6 +236,7 @@ async function renderBibleTab() {
   else if (bibleActiveTab === 'style') document.getElementById('bible-style-notes').value = bibleDraft.bible.styleNotes || '';
   else if (bibleActiveTab === 'rules') renderReplaceRules();
   else if (bibleActiveTab === 'examples') renderStyleExamples();
+  else if (bibleActiveTab === 'log') await renderStoryLogTab();
 }
 
 function formatAddressing(list) {

@@ -62,6 +62,22 @@ function snapshotTerm(item) {
   return { src: item.src, tgt: item.tgt, scope: item.scope, books: [...(item.books || [])], overrides: { ...(item.overrides || {}) } };
 }
 
+const MAX_PREVIOUS_TGTS = 6;
+
+/**
+ * จำชื่อไทยเดิมของคำศัพท์ที่ถูกแก้ ให้ผู้ช่วย AI ยังหาเจอเมื่อผู้ใช้ถามด้วยชื่อเก่า (และบอกว่าตอนนี้เรียกว่าอะไร)
+ * ไม่ใช้กับการแปล/ไฮไลต์ ชื่อที่ใช้จริงยังเป็นชื่อปัจจุบันเสมอ
+ */
+async function rememberPreviousTgt(src, oldTgt) {
+  const item = inMemoryGlossaryCache.find(x => x.src === src);
+  const old = cleanTermString(oldTgt);
+  if (!item || !old) return;
+  const current = new Set([item.tgt, ...Object.values(item.overrides || {})].map(cleanTermString));
+  const list = (Array.isArray(item.previousTgts) ? item.previousTgts : []).filter(t => t !== old && !current.has(t));
+  if (current.has(old)) return;
+  item.previousTgts = [...list, old].slice(-MAX_PREVIOUS_TGTS);
+  await dbSaveGlossaryItem(item);
+}
 // เทียบคำแปลก่อน/หลังแก้ของแต่ละเรื่อง แล้วแทนที่ในบทที่แปลไว้เฉพาะเรื่องที่คำแปลเปลี่ยนจริง
 async function syncTermChange(before, after) {
   const allBookIds = (await dbGetAllBooks()).map(b => b.bookId);
@@ -74,6 +90,7 @@ async function syncTermChange(before, after) {
     const newTgt = resolveTermForBook(after, bookId);
     if (oldTgt && newTgt && oldTgt !== newTgt) {
       await syncUpdatedTermAcrossChapters(after.src, oldTgt, newTgt, [bookId]);
+      await rememberPreviousTgt(after.src, oldTgt);
       // ตัวอย่างสำนวนต้องเปลี่ยนชื่อตามด้วย ไม่งั้นจะสอนชื่อเก่าให้ AI
       await syncStyleExamplesForTerm(bookId, oldTgt, newTgt);
     }

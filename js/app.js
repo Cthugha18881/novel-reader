@@ -27,12 +27,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v3.3.0",
+    title: "คู่มือเริ่มต้น v3.4.0",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.3.0", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.4.0", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.3.0"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.4.0"
   }];
 }
 
@@ -875,6 +875,9 @@ async function applyTranslationToChapter(chapter, result, { updateTitle = false,
   if (result.lockInfo) chapter.lockInfo = result.lockInfo;
   else delete chapter.lockInfo;
   delete chapter.pendingLockInfo;
+  // บันทึกเหตุการณ์: ได้ใหม่ใช้ใหม่ / ตอนที่ไม่มีเนื้อเรื่องแล้วลบ / ไม่ได้ใหม่ (ทำพลาด) คงของเดิม ระบบรู้เองว่าเก่าจากต้นฉบับที่เปลี่ยน
+  if (result.storyLog) chapter.storyLog = result.storyLog;
+  else if (chapter.chapterType === 'placeholder') delete chapter.storyLog;
   if (result.previewOnly) chapter.previewOnly = true;
   else delete chapter.previewOnly;
   delete chapter.status;

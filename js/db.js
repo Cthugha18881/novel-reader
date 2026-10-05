@@ -671,45 +671,52 @@ async function dbDeleteMultipleGlossaryItems(srcList) {
   });
 }
 
+/** แทนคำแบบทั้งคำ (ใช้ตัวตัดคำภาษาไทย) เพื่อไม่ให้แทนตรงที่เป็นส่วนหนึ่งของคำอื่น */
+function replaceWholeThaiPhrase(text, cleanOld, cleanNew) {
+  if (!text || !cleanOld || !text.includes(cleanOld)) return text;
+  let boundaries = null;
+  if (typeof Intl !== 'undefined' && Intl.Segmenter) {
+    const segmenter = new Intl.Segmenter('th', { granularity: 'word' });
+    boundaries = new Set([0, text.length]);
+    for (const part of segmenter.segment(text)) {
+      boundaries.add(part.index);
+      boundaries.add(part.index + part.segment.length);
+    }
+  }
+  let result = '';
+  let cursor = 0;
+  let at = text.indexOf(cleanOld, cursor);
+  while (at !== -1) {
+    const end = at + cleanOld.length;
+    const leftBoundary = boundaries
+      ? boundaries.has(at)
+      : (at === 0 || !/[\p{L}\p{N}]/u.test(text[at - 1]));
+    const rightBoundary = boundaries
+      ? boundaries.has(end)
+      : (end === text.length || !/[\p{L}\p{N}]/u.test(text[end]));
+    result += text.slice(cursor, at);
+    if (leftBoundary && rightBoundary) {
+      result += cleanNew;
+      cursor = end;
+    } else {
+      result += text[at];
+      cursor = at + 1;
+    }
+    at = text.indexOf(cleanOld, cursor);
+  }
+  return result + text.slice(cursor);
+}
+
+/**
+ * เปลี่ยนชื่อไทยของคำศัพท์ในทุกที่ที่เก็บเป็นภาษาไทย: เนื้อเรื่อง, สรุปรายตอน, บันทึกเหตุการณ์ และสรุปช่วงเรื่องของผู้ช่วย
+ * (บันทึกเหตุการณ์ใช้ชื่อต้นฉบับเป็นตัวอ้างอิง จึงแก้แค่ข้อความอธิบาย)
+ */
 async function syncUpdatedTermAcrossChapters(src, oldTgt, newTgt, bookIds = [currentBookId]) {
   const cleanOld = cleanTermString(oldTgt);
   const cleanNew = cleanTermString(newTgt);
   if (!cleanOld || !cleanNew || cleanOld === cleanNew) return;
+  const replaceWholePhrase = (text) => replaceWholeThaiPhrase(text, cleanOld, cleanNew);
 
-  const replaceWholePhrase = (text) => {
-    if (!text || !text.includes(cleanOld)) return text;
-    let boundaries = null;
-    if (typeof Intl !== 'undefined' && Intl.Segmenter) {
-      const segmenter = new Intl.Segmenter('th', { granularity: 'word' });
-      boundaries = new Set([0, text.length]);
-      for (const part of segmenter.segment(text)) {
-        boundaries.add(part.index);
-        boundaries.add(part.index + part.segment.length);
-      }
-    }
-    let result = '';
-    let cursor = 0;
-    let at = text.indexOf(cleanOld, cursor);
-    while (at !== -1) {
-      const end = at + cleanOld.length;
-      const leftBoundary = boundaries
-        ? boundaries.has(at)
-        : (at === 0 || !/[\p{L}\p{N}]/u.test(text[at - 1]));
-      const rightBoundary = boundaries
-        ? boundaries.has(end)
-        : (end === text.length || !/[\p{L}\p{N}]/u.test(text[end]));
-      result += text.slice(cursor, at);
-      if (leftBoundary && rightBoundary) {
-        result += cleanNew;
-        cursor = end;
-      } else {
-        result += text[at];
-        cursor = at + 1;
-      }
-      at = text.indexOf(cleanOld, cursor);
-    }
-    return result + text.slice(cursor);
-  };
   let changedChapCount = 0;
   for (const bookId of [...new Set((bookIds || []).filter(Boolean))]) {
     const targetBookChaps = await dbGetChaptersByBook(bookId);
@@ -725,16 +732,35 @@ async function syncUpdatedTermAcrossChapters(src, oldTgt, newTgt, bookIds = [cur
           }
         });
       }
+      const newSummary = replaceWholePhrase(chap.summary || '');
+      if (newSummary !== (chap.summary || '')) {
+        chap.summary = newSummary;
+        isModified = true;
+      }
+      if (chap.storyLog && typeof renameInStoryLog === 'function' && renameInStoryLog(chap.storyLog, replaceWholePhrase)) isModified = true;
 
       if (isModified) {
         await dbSaveChapter(chap);
         changedChapCount++;
         const memChap = chapters.find(c => c.id === chap.id);
-        if (memChap) memChap.paragraphs = chap.paragraphs;
+        if (memChap) {
+          memChap.paragraphs = chap.paragraphs;
+          memChap.summary = chap.summary;
+          if (chap.storyLog) memChap.storyLog = chap.storyLog;
+        }
       }
     }
+    // สรุปช่วงเรื่องที่ผู้ช่วยเก็บไว้: แทนชื่อเลย ไม่ต้องสร้างใหม่ (ประหยัด token)
+    const data = await dbGetBookData(bookId);
+    if (data.assistantArcs && typeof data.assistantArcs === 'object') {
+      let arcChanged = false;
+      Object.values(data.assistantArcs).forEach(arc => {
+        const next = replaceWholePhrase(arc?.text || '');
+        if (arc && next !== arc.text) { arc.text = next; arcChanged = true; }
+      });
+      if (arcChanged) await dbSaveBookData(data);
+    }
   }
-
   document.querySelectorAll('.inline-term-highlight').forEach(el => {
     if (el.getAttribute('data-src') !== encodeURIComponent(src)) return;
     el.innerText = cleanNew;

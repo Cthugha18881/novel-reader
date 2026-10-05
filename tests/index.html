@@ -31,6 +31,7 @@
   <script src="../js/cleanup.js"></script>
   <script src="../js/glossary.js"></script>
   <script src="../js/bible.js"></script>
+  <script src="../js/storylog.js"></script>
   <script src="../js/shelf.js"></script>
   <script src="../js/updates.js"></script>
   <script src="../js/assistant.js"></script>
@@ -724,6 +725,96 @@
       const html = formatAssistantAnswer('**ตัวหนา** <img src=x onerror=alert(1)> ดู [#3]', 'b1');
       return html.includes('<b>ตัวหนา</b>') && !html.includes('<img') && html.includes('&lt;img') && html.includes('assistant-cite') && html.includes('jumpToAssistantCitation(&quot;b1&quot;, 3)') &&
         !formatAssistantAnswer('[#9]', 'b1', [9]).includes('jumpToAssistantCitation');
+    });
+    // ---------- Story log ----------
+    function logChap(n, paras, log) {
+      const c = { id: 'L' + n, order: n, title: 'บท ' + n, paragraphs: paras.map(([src, th]) => ({ src, th })) };
+      if (log) c.storyLog = { v: 1, srcHash: computeStorySrcHash(c), summary: log.summary || '', entities: log.entities || [], events: log.events || [] };
+      return c;
+    }
+    function logData() {
+      const ev = (type, subject, object = '', value = '', detail = '', flag = '') => ({ type, subject, object, value, detail, flag });
+      const all = [
+        logChap(1, [['林动得到炎龙剑', 'หลินต้งได้ดาบมังกรเพลิง']], { entities: [{ src: '林动', aliases: ['小动'] }], events: [ev('item_gain', '林动', '炎龙剑', '', 'หลินต้งได้ดาบมังกรเพลิง'), ev('level', '林动', '', '淬体境')] }),
+        logChap(2, [['黑衣人出手', 'ชายชุดดำลงมือ'], ['剑断了', 'ดาบหักไปพร้อมกับเกราะ']], { entities: [{ src: '黑衣人', aliases: [] }], events: [ev('item_damage', '林动', '炎龙剑', '', 'ดาบหักในการต่อสู้'), ev('item_destroy', '林动', '铠甲', '', 'เกราะพังไปพร้อมกัน'), ev('level', '林动', '', '天元境', 'ฝันว่าทะลวง', 'dream')] }),
+        logChap(3, [['黑衣人就是张三', 'ที่แท้ชายชุดดำคือจางซาน']], { events: [ev('identity', '黑衣人', '张三', '', 'เปิดเผยตัวตน'), ev('title', '张三', '', '剑王', 'ได้ฉายาราชันย์ดาบ'), ev('item_restore', '林动', '炎龙剑', '', 'ซ่อมดาบแล้ว'), ev('level', '林动', '', '元丹境'), ev('identity', '路人', '林动', '', 'ข่าวลือ', 'claim')] }),
+        logChap(4, [['张三死了', 'จางซานตาย']], { events: [ev('status', '张三', '', '死亡')] })
+      ];
+      const activeTerms = {
+        '林动': { src: '林动', resolvedTgt: 'หลินต้ง', category: 'character', previousTgts: ['หลินตง'] },
+        '炎龙剑': { src: '炎龙剑', resolvedTgt: 'ดาบมังกรเพลิง', category: 'equipment' },
+        '张三': { src: '张三', resolvedTgt: 'จางซาน', category: 'character' },
+        '剑王': { src: '剑王', resolvedTgt: 'ราชันย์ดาบ', category: 'title' },
+        '元丹境': { src: '元丹境', resolvedTgt: 'ขั้นแก่นปราณ', category: 'realm' },
+        '大哥A': { src: '大哥A', resolvedTgt: 'ท่านพี่', category: 'character' },
+        '大哥B': { src: '大哥B', resolvedTgt: 'ท่านพี่', category: 'character' }
+      };
+      const extras = { bible: { characters: [{ src: '林动', aliases: [], role: 'ตัวเอก' }] } };
+      const allowed = all.slice(0, 3);
+      return { book: { bookId: 'b' }, all, allowed, numberOf: new Map(all.map((c, i) => [c.id, i + 1])), activeTerms, extras, groups: buildEntityGroups(allowed, extras, activeTerms) };
+    }
+    test('replaceWholeThaiPhrase: แทนทั้งคำ ไม่แทนกลางคำอื่น', () => eq([replaceWholeThaiPhrase('หลินตงเดินไป', 'หลินตง', 'หลินต้ง'), replaceWholeThaiPhrase('abc', 'x', 'y')], ['หลินต้งเดินไป', 'abc']));
+    test('normalizeStoryLog: ตัดค่าแปลก จำกัดจำนวน ชนิดไม่รู้จักเป็น other', () => {
+      const n = normalizeStoryLog({ summary: 5, entities: [{ src: '' }, { src: 'A', aliases: ['B', 'B', 3] }], events: [{ type: 'weird', subject: 'A', flag: 'x' }, { type: 'level' }, ...Array(40).fill({ type: 'other', subject: 'Z' })] });
+      return n.summary === '' && eq(n.entities, [{ src: 'A', aliases: ['B'] }]) && n.events[0].type === 'other' && n.events[0].flag === '' && n.events.length === STORY_LOG_MAX_EVENTS;
+    });
+    test('isStoryLogFresh: ต้นฉบับเปลี่ยน = บันทึกเก่า', () => {
+      const c = logChap(1, [['甲', 'ก']], { events: [] });
+      const fresh = isStoryLogFresh(c);
+      c.paragraphs[0].src = '乙';
+      return fresh && !isStoryLogFresh(c) && !isStoryLogFresh({ paragraphs: [] });
+    });
+    test('buildEntityGroups: รวมชื่อเรียกอื่น ตัวตนที่เปิดเผย และฉายา (ไม่รวมข่าวลือ และตอนที่ยังไม่อ่าน)', () => {
+      const d = logData();
+      const g = (src) => d.groups.find(x => x.srcs.has(src));
+      return g('黑衣人') === g('张三') && g('剑王') === g('张三') && g('小动') === g('林动') && g('路人') !== g('林动') && g('林动').key === '林动' && g('张三').label === 'จางซาน';
+    });
+    test('deriveGroupState: ของได้→หัก→ซ่อม, ของที่ถูกทำลาย, ระดับล่าสุดไม่นับความฝัน', () => {
+      const d = logData();
+      const group = d.groups.find(x => x.srcs.has('林动'));
+      const events = collectGroupEvents(group, d.allowed, d.numberOf);
+      const state = deriveGroupState(group, events, d.activeTerms).join(' | ');
+      return state.includes('ระดับ/พลังล่าสุด: ขั้นแก่นปราณ [#3]') && state.includes('ดาบมังกรเพลิง (มีอยู่ (ได้คืน/ซ่อมแล้ว), #3)') && state.includes('铠甲 (ถูกทำลายแล้ว, #2)') && !state.includes('天元境');
+    });
+    test('findQuestionEntities: ถามด้วยชื่อไทยเก่า / ฉายา / ชื่อกำกวม', () => {
+      const d = logData();
+      const old = findQuestionEntities('หลินตงได้ดาบตอนไหน', d);
+      const title = findQuestionEntities('ราชันย์ดาบคือใคร', d);
+      const amb = findQuestionEntities('ท่านพี่เป็นใคร', d);
+      return old[0]?.key === '林动' && eq(old[0].askedWithOldName, ['หลินตง']) && title[0]?.key === '张三' && amb.ambiguous.length === 1 && amb.ambiguous[0].labels.length === 2;
+    });
+    test('findQuestionEntities: ชื่อสั้นที่เป็นส่วนหนึ่งของชื่อยาวที่ถาม ไม่นับซ้ำ', () => {
+      const d = logData();
+      d.activeTerms['剑'] = { src: '剑', resolvedTgt: 'ดาบ', category: 'equipment' };
+      d.groups = buildEntityGroups(d.allowed, d.extras, d.activeTerms);
+      const keys = findQuestionEntities('ดาบมังกรเพลิงอยู่ไหน', d).map(e => e.key);
+      return eq(keys, ['炎龙剑']);
+    });
+    test('computeEntityFacts: มีเส้นเวลา สถานะ ชื่ออื่น และชื่อไทยเดิม (ไม่สปอยล์ตอน 4)', () => {
+      const d = logData();
+      const [lin] = findQuestionEntities('หลินตง', d);
+      const [zhang] = findQuestionEntities('จางซาน', d);
+      const f1 = computeEntityFacts(lin, d), f2 = computeEntityFacts(zhang, d);
+      return f1.includes('เส้นเวลาจากบันทึกเหตุการณ์') && f1.includes('[#2] เสียหาย') && f1.includes('ชื่อไทยเดิม') && f1.includes('ฝัน/ภาพลวง') &&
+        f2.includes('ฉายา/ตำแหน่ง: ราชันย์ดาบ') && f2.includes('黑衣人') && !f2.includes('ตาย') && f2.includes('โผล่ครั้งแรก #2');
+    });
+    test('searchStoryEvents: หาเหตุการณ์ที่ไม่ได้เอ่ยชื่อด้วยคำค้น', () => {
+      const hits = searchStoryEvents(logData(), ['เกราะ']);
+      return hits.length === 1 && hits[0].object === '铠甲' && hits[0].number === 2;
+    });
+    test('renameInStoryLog: แก้ชื่อไทยในสรุป/รายละเอียด ไม่แตะชื่อต้นฉบับ', () => {
+      const log = { summary: 'หลินตงสู้', events: [{ subject: '林动', detail: 'หลินตงได้ดาบ' }] };
+      const changed = renameInStoryLog(log, s => replaceWholeThaiPhrase(s, 'หลินตง', 'หลินต้ง'));
+      return changed && log.summary === 'หลินต้งสู้' && log.events[0].detail === 'หลินต้งได้ดาบ' && log.events[0].subject === '林动';
+    });
+    test('relevantCorrections: เลือกที่เกี่ยวกับคำถามก่อน', () => {
+      const extras = { assistantCorrections: [{ question: 'จางซานคือใคร', correction: 'จางซานคืออาจารย์' }, { question: 'ดาบ', correction: 'ดาบหักตอน 5' }] };
+      return eq(relevantCorrections(extras, 'ดาบอยู่ไหน').map(c => c.correction), ['ดาบหักตอน 5']) && relevantCorrections({}, 'x').length === 0;
+    });
+    test('buildKnownEntityList: ส่งเฉพาะคำที่อยู่ในตอนนั้น + ตัวละครในคู่มือ', () => {
+      const d = logData();
+      const list = buildKnownEntityList(d.extras, d.activeTerms, '张三拔出炎龙剑');
+      return list.includes('林动') && list.includes('炎龙剑 = ดาบมังกรเพลิง') && list.includes('张三') && !list.includes('元丹境');
     });
     const passed = results.filter(r => r.ok).length;
     const summary = document.getElementById('summary');

@@ -256,6 +256,7 @@ function buildChapterRecord({ bookId, order, title, result, sourceUrl = '', next
     nextUrl,
     ...(result.placeholderReason ? { placeholderReason: result.placeholderReason } : {}),
     ...(result.lockInfo ? { lockInfo: result.lockInfo } : {}),
+    ...(result.storyLog ? { storyLog: result.storyLog } : {}),
     translationMeta: result.translationMeta || buildTranslationMeta()
   };
 }
@@ -1514,6 +1515,15 @@ async function translateChapter(rawText, ctx, { onStatus = null, signal = null, 
     prevChapterTail: buildChapterTail(prevChapter),
     sourceParas, ruleKinds, chapterRule, noteMode
   });
+  // บันทึกเหตุการณ์ของตอน (สำหรับผู้ช่วย AI) ทำพลาดไม่เป็นไร การแปลยังสำเร็จ
+  if (!noteMode && typeof isStoryLogEnabled === 'function' && isStoryLogEnabled() && ['story', 'side_story'].includes(result.chapterType)) {
+    try {
+      result.storyLog = await extractStoryLog({ title: result.chapterTitle || rawChapTitle, paragraphs: result.paragraphs }, ctx, { signal, onStatus, prevLog: prevChapter?.storyLog || null });
+    } catch (err) {
+      if (isAbortError(err)) throw err;
+      console.warn('Story log skipped:', err.message);
+    }
+  }
   if (!noteMode) await recordChapterAverage(signal, getQualityMode());
   return result;
 }

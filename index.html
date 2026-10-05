@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/csp.js"></script>
-  <title>NovelTranslate AI v3.3.0</title>
+  <title>NovelTranslate AI v3.4.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -305,6 +305,7 @@
         <button class="cat-tab-btn bible-tab-btn" data-tab="style" onclick="switchBibleTab('style')">🖋️ แนวทางสำนวน</button>
         <button class="cat-tab-btn bible-tab-btn" data-tab="rules" onclick="switchBibleTab('rules')">🔁 กฎแทนคำ</button>
         <button class="cat-tab-btn bible-tab-btn" data-tab="examples" onclick="switchBibleTab('examples')">⭐ ตัวอย่างสำนวน</button>
+        <button class="cat-tab-btn bible-tab-btn" data-tab="log" onclick="switchBibleTab('log')">📜 บันทึกเหตุการณ์</button>
       </div>
       <div class="modal-scrollable-body" style="max-height: 55vh;">
         <div class="bible-tab-panel" data-tab="characters">
@@ -330,6 +331,7 @@
             <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="applyReplaceRulesToBook()">ใช้กฎกับตอนที่แปลแล้วทั้งหมด</button>
           </div>
         </div>
+        <div class="bible-tab-panel" data-tab="log" style="display: none;"><div id="bible-log-panel"></div></div>
         <div class="bible-tab-panel" data-tab="examples" style="display: none;">
           <div style="font-size: 11px; opacity: 0.7; margin-bottom: 8px;">คำแปลที่คุณแก้เองในหน้าอ่าน จะถูกเก็บไว้ที่นี่ และส่งให้ AI เป็นตัวอย่างสำนวนในตอนถัดๆ ไป (เลือกตัวอย่างที่ใกล้เคียงกับเนื้อหาที่กำลังแปล)</div>
           <div id="bible-examples-list"></div>
@@ -982,6 +984,7 @@
   <script src="js/cleanup.js"></script>
   <script src="js/glossary.js"></script>
   <script src="js/bible.js"></script>
+  <script src="js/storylog.js"></script>
   <script src="js/shelf.js"></script>
   <script src="js/updates.js"></script>
   <script src="js/assistant.js"></script>
