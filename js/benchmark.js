@@ -43,6 +43,10 @@ function benchmarkRowHtml(row = {}, i = 0) {
       ${providers.map(p => `<option value="${p}" ${p === row.provider ? 'selected' : ''}>${escapeHtml(LLM_PROVIDERS[p].label)}</option>`).join('')}
     </select>
     <input class="form-input" data-bench="model" list="bench-models-${escapeHtml(row.provider || providers[0] || '')}" value="${escapeHtml(row.model || '')}" placeholder="ชื่อโมเดล เช่น xiaomi/mimo-v2.6-flash">
+    <select class="form-input" data-bench="reasoning" title="การคิดก่อนตอบ (ใช้กับ OpenRouter เท่านั้น)">
+      <option value="">คิด: ตามตั้งค่า</option>
+      ${REASONING_LEVELS.map(l => `<option value="${l}" ${row.reasoning === l ? 'selected' : ''}>คิด: ${({ none: 'ปิด', low: 'น้อย', medium: 'กลาง', high: 'มาก', default: 'ค่าของโมเดล' })[l]}</option>`).join('')}
+    </select>
     <input class="form-input" data-bench="in" type="number" min="0" step="0.001" value="${Number.isFinite(prices.in) ? prices.in : ''}" placeholder="$ ขาเข้า/1M" title="ราคา token ขาเข้า (ดอลลาร์ต่อ 1 ล้าน token)">
     <input class="form-input" data-bench="out" type="number" min="0" step="0.001" value="${Number.isFinite(prices.out) ? prices.out : ''}" placeholder="$ ขาออก/1M" title="ราคา token ขาออก (ดอลลาร์ต่อ 1 ล้าน token)">
     <button class="btn btn-danger" style="padding: 2px 8px;" onclick="this.closest('.bench-row').remove()" title="เอาออก">✕</button>
@@ -62,7 +66,7 @@ function renderBenchmarkSetup(rows) {
   box.innerHTML = `
     <div class="quality-hint" style="margin-bottom: 6px;">แปลตอนที่เปิดอยู่ด้วยแต่ละโมเดล แล้วเทียบคำแปล เวลา token จริง และราคา ใช้โควตาของแต่ละผู้ให้บริการ (ประมาณเท่าแปล 1 ตอนต่อโมเดล) ไม่แตะคลังศัพท์และตอนจริง</div>
     <div style="font-size: 12px; margin-bottom: 6px;">ตอน: <b>${usable ? escapeHtml(chap.title) : 'ยังไม่ได้เปิดตอนที่มีต้นฉบับ'}</b>${usable ? ` · ${(chap.paragraphs || []).filter(p => p.src).length} ย่อหน้า` : ''}</div>
-    <div class="bench-row bench-row-head"><span>ผู้ให้บริการ</span><span>โมเดล</span><span>$ ขาเข้า/1M</span><span>$ ขาออก/1M</span><span></span></div>
+    <div class="bench-row bench-row-head"><span>ผู้ให้บริการ</span><span>โมเดล</span><span>การคิด</span><span>$ ขาเข้า/1M</span><span>$ ขาออก/1M</span><span></span></div>
     <div id="bench-rows">${(rows.length ? rows : [{}]).map(benchmarkRowHtml).join('')}</div>
     ${datalists}
     <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px;">
@@ -89,7 +93,7 @@ function readBenchmarkRows() {
   return [...document.querySelectorAll('#bench-rows .bench-row')].map(row => {
     const v = (k) => row.querySelector(`[data-bench="${k}"]`)?.value?.trim() || '';
     const num = (k) => (v(k) === '' ? null : Number(v(k)));
-    return { provider: v('provider'), model: v('model'), priceIn: num('in'), priceOut: num('out') };
+    return { provider: v('provider'), model: v('model'), reasoning: v('reasoning'), priceIn: num('in'), priceOut: num('out') };
   }).filter(r => r.provider && r.model);
 }
 
@@ -110,7 +114,7 @@ async function runBenchmark() {
   if (!confirm(`จะแปลตอน "${chap.title}" ด้วย ${rows.length} โมเดล (โหมด ${qualityMode})\nใช้โควตา/ค่าใช้จ่ายประมาณเท่าแปล ${rows.length} ตอน\n\nเริ่มเลยหรือไม่?`)) return;
 
   // จำโมเดลที่เลือกไว้ และราคาที่ใส่ (หน้าการใช้งาน AI ใช้ราคาเดียวกันคำนวณค่าใช้จ่าย)
-  localStorage.setItem('nov_benchmark_models', JSON.stringify(rows.map(r => ({ provider: r.provider, model: r.model }))));
+  localStorage.setItem('nov_benchmark_models', JSON.stringify(rows.map(r => ({ provider: r.provider, model: r.model, reasoning: r.reasoning }))));
   const prices = getModelPrices();
   rows.forEach(r => { if (Number.isFinite(r.priceIn) && Number.isFinite(r.priceOut)) prices[r.model] = { ...(prices[r.model] || {}), in: r.priceIn, out: r.priceOut }; });
   saveModelPrices(prices);
@@ -134,9 +138,11 @@ async function runBenchmark() {
       const ctrl = new AbortController();
       main.signal.addEventListener('abort', () => ctrl.abort(), { once: true });
       tagTask(ctrl.signal, { task: 'benchmark', manual: true });
-      setModelOverride(ctrl.signal, { provider: r.provider, model: r.model });
+      setModelOverride(ctrl.signal, { provider: r.provider, model: r.model, ...(r.reasoning ? { reasoning: r.reasoning } : {}) });
       const started = performance.now();
-      const label = `${LLM_PROVIDERS[r.provider].label} · ${r.model}`;
+      const effectiveReasoning = r.reasoning || getProviderReasoning(r.provider);
+      const reasoningNote = r.provider === 'openai' && isOpenRouterUrl(getProviderBaseUrl('openai')) ? ` · คิด: ${({ none: 'ปิด', low: 'น้อย', medium: 'กลาง', high: 'มาก', default: 'ค่าของโมเดล' })[effectiveReasoning]}` : '';
+      const label = `${LLM_PROVIDERS[r.provider].label} · ${r.model}${reasoningNote}`;
       progress.innerHTML = `<span class="spinner-icon"></span> (${i + 1}/${rows.length}) ${escapeHtml(label)}...`;
       const entry = { ...r, label };
       try {
@@ -148,7 +154,7 @@ async function runBenchmark() {
         Object.assign(entry, {
           ok: true,
           seconds: (performance.now() - started) / 1000,
-          input: usage.input || 0, output: usage.output || 0, cacheRead: usage.cacheRead || 0, cacheWrite: usage.cacheWrite || 0, calls: usage.calls || 0,
+          input: usage.input || 0, output: usage.output || 0, cacheRead: usage.cacheRead || 0, cacheWrite: usage.cacheWrite || 0, calls: usage.calls || 0, reasoningTokens: usage.reasoning || 0,
           title: result.chapterTitle || '',
           paragraphs: result.paragraphs.map(p => ({ th: p.th || '', kind: p.kind || 'story', ...(p.fidelityIssue ? { fidelityIssue: p.fidelityIssue } : {}) })),
           missing: result.missingCount || 0,
@@ -194,7 +200,7 @@ function renderBenchmarkResults() {
     return `<tr>
       <td>${escapeHtml(r.label)}</td>
       <td>${r.seconds.toFixed(0)} วิ</td>
-      <td>${formatTokenCount(r.input)} / ${formatTokenCount(r.output)}${r.cacheRead ? `<br><small>cache ${formatTokenCount(r.cacheRead)}</small>` : ''}</td>
+      <td>${formatTokenCount(r.input)} / ${formatTokenCount(r.output)}${r.reasoningTokens ? `<br><small title="token ที่โมเดลใช้คิดก่อนตอบ รวมอยู่ในขาออกแล้ว คิดเงินเป็นขาออก">ใช้คิด ${formatTokenCount(r.reasoningTokens)} (${Math.round(r.reasoningTokens / Math.max(1, r.output) * 100)}%)</small>` : ''}${r.cacheRead ? `<br><small>cache ${formatTokenCount(r.cacheRead)}</small>` : ''}</td>
       <td>${formatUsd(cost)}<br><small>${cost !== null ? `1,000 ตอน ≈ $${(cost * 1000).toFixed(2)}` : 'ใส่ราคาเพื่อคำนวณ'}</small></td>
       <td>${r.suspicious}${r.missing ? ` · ขาด ${r.missing}` : ''}</td>
       <td>${sameChapter ? `<button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="applyBenchmarkResult(${i})" title="ใช้คำแปลของโมเดลนี้กับตอนนี้ (ฉบับเดิมเก็บไว้ในประวัติ)">ใช้ผลนี้</button>` : ''}</td>
@@ -205,7 +211,7 @@ function renderBenchmarkResults() {
     const cells = ok.map(r => {
       const p = r.paragraphs[i];
       if (!p || p.kind === 'site_junk') return '<td class="bench-cell muted">—</td>';
-      return `<td class="bench-cell">${escapeHtml(p.th)}${p.fidelityIssue ? '<div class="quality-reason">⚠️ ตรวจความหมายไม่ผ่าน</div>' : ''}</td>`;
+      return `<td class="bench-cell">${escapeHtml(p.th)}${p.fidelityIssue ? `<div class="quality-reason">⚠️ ตรวจความหมายไม่ผ่าน: ${escapeHtml(p.fidelityIssue)}</div>` : ''}</td>`;
     }).join('');
     return `<tr><td class="bench-cell bench-src">${escapeHtml(src)}</td>${cells}</tr>`;
   }).join('');

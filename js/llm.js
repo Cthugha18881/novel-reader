@@ -155,6 +155,31 @@ function getFallbackProvider() {
   return LLM_PROVIDERS[p] ? p : '';
 }
 
+// ---------- การคิดก่อนตอบ (reasoning) ของ OpenAI-compatible ----------
+// โมเดลอย่าง MiMo / GPT-6 คิดก่อนตอบ token ที่ใช้คิดคิดเงินเป็นขาออก และช้ามาก งานแปลไม่จำเป็นต้องคิดนาน
+// 'default' = ไม่ส่งค่า (ใช้ค่าของผู้ให้บริการ) ส่งได้เฉพาะ OpenRouter (พารามิเตอร์ reasoning ของ OpenRouter)
+const REASONING_LEVELS = ['none', 'low', 'medium', 'high', 'default'];
+const REASONING_LABELS = { none: 'ปิด (เร็วและถูกสุด แนะนำสำหรับงานแปล)', low: 'น้อย', medium: 'ปานกลาง', high: 'มาก', default: 'ตามค่าเริ่มต้นของโมเดล' };
+
+function getProviderReasoning(provider) {
+  const v = localStorage.getItem(`nov_llm_reasoning_${provider}`);
+  return REASONING_LEVELS.includes(v) ? v : 'none';
+}
+
+function isOpenRouterUrl(url) {
+  try {
+    return /(^|\.)openrouter\.ai$/i.test(new URL(url).host);
+  } catch (e) {
+    return false;
+  }
+}
+
+/** จำนวน token ขาออกสูงสุดต่อคำขอ: พอสำหรับคำแปล 1 ส่วน (ตอนยาวแบ่งส่วนอยู่แล้ว) + เผื่อการคิดถ้าเปิดไว้
+ * ต้องกำหนดเอง ไม่งั้น OpenRouter จะจองวงเงินเท่าค่าสูงสุดของโมเดล (เช่น 65,536) จนคำขอถูกปฏิเสธเมื่อเครดิตเหลือน้อย */
+function getMaxOutputTokens(reasoning) {
+  return ({ none: 16384, low: 24576, medium: 32768, high: 49152, default: 32768 })[reasoning] || 16384;
+}
+
 /**
  * @param {'main'|'aux'} role งานแปล/เกลาใช้ main, งานตรวจและสกัดข้อมูลใช้ aux
  * @param {string} [providerOverride] ใช้ผู้ให้บริการอื่นแทนตัวหลัก (ใช้ตอนส่งต่อให้ผู้ให้บริการสำรอง)
@@ -169,7 +194,8 @@ function getActiveLlmConfig(role = 'main', providerOverride = '') {
     model: role === 'aux' && auxModel ? auxModel : mainModel,
     mainModel,
     auxModel,
-    baseUrl: getProviderBaseUrl(provider)
+    baseUrl: getProviderBaseUrl(provider),
+    reasoning: getProviderReasoning(provider)
   };
 }
 
@@ -209,6 +235,8 @@ function errorFromStatus(status, message) {
   const msg = message || `HTTP ${status}`;
   if (status === 401 || status === 403) return new LLMError(`API Key ไม่ถูกต้องหรือไม่มีสิทธิ์: ${msg}`, 'auth', status);
   if (status === 429) return new LLMError(`โควต้าเต็ม / ติด Rate Limit: ${msg}`, 'rate', status);
+  // เครดิตในบัญชีหรือวงเงินของคีย์ไม่พอ (OpenRouter ฯลฯ) ลองซ้ำไม่ช่วย ต้องเติมเครดิตหรือเพิ่มวงเงิน
+  if (status === 402) return new LLMError(`เครดิตในบัญชีหรือวงเงินของคีย์ไม่พอ กรุณาเติมเครดิต หรือเพิ่มวงเงินของคีย์ที่หน้าเว็บผู้ให้บริการ (${msg})`, 'quota', status);
   if (status === 408 || status === 409 || status >= 500) return new LLMError(`เซิร์ฟเวอร์ AI ไม่พร้อม (${status}): ${msg}`, 'server', status);
   return new LLMError(`คำขอไม่ถูกต้อง (${status}): ${msg}`, 'bad_request', status);
 }
@@ -424,6 +452,14 @@ async function callOpenAIOnce(cfg, key, prompt, opts, signal, jsonMode = null) {
   };
   if (mode === 'schema') body.response_format = { type: 'json_schema', json_schema: { name: 'result', strict: true, schema: opts.schema } };
   else if (mode === 'object') body.response_format = { type: 'json_object' };
+  const reasoning = cfg.reasoning || 'none';
+  const maxOut = getMaxOutputTokens(reasoning);
+  // OpenAI ตัวจริง: โมเดลรุ่นใหม่ใช้ max_completion_tokens (ปฏิเสธ max_tokens) / ที่อื่นใช้ max_tokens
+  if (!opts.skipMaxTokens) {
+    if (/(^|\.)api\.openai\.com$/i.test((() => { try { return new URL(cfg.baseUrl).host; } catch (e) { return ''; } })())) body.max_completion_tokens = maxOut;
+    else body.max_tokens = maxOut;
+  }
+  if (isOpenRouterUrl(cfg.baseUrl) && reasoning !== 'default' && !opts.skipReasoningParam) body.reasoning = { effort: reasoning };
 
   const res = await guardedFetch(`${cfg.baseUrl}/chat/completions`, {
     method: 'POST',
@@ -438,6 +474,14 @@ async function callOpenAIOnce(cfg, key, prompt, opts, signal, jsonMode = null) {
     if (body.response_format && res.status === 400 && /response_format|json|schema/i.test(msg || '')) {
       return callOpenAIOnce(cfg, key, prompt, opts, signal, mode === 'schema' ? 'object' : 'none');
     }
+    // โมเดลที่ปิด/ปรับการคิดไม่ได้ (บังคับคิด หรือไม่รองรับระดับนี้): ลองใหม่โดยไม่ส่ง reasoning
+    if (body.reasoning && res.status === 400 && /reason|effort|thinking/i.test(msg || '')) {
+      return callOpenAIOnce(cfg, key, prompt, { ...opts, skipReasoningParam: true }, signal, mode);
+    }
+    // ผู้ให้บริการที่จำกัด token ขาออกต่ำกว่านี้ (เช่น DeepSeek 8,192): ลองใหม่โดยไม่กำหนด ให้ใช้ค่าของผู้ให้บริการ
+    if ((body.max_tokens || body.max_completion_tokens) && res.status === 400 && /max_(completion_)?tokens/i.test(msg || '')) {
+      return callOpenAIOnce(cfg, key, prompt, { ...opts, skipMaxTokens: true }, signal, mode);
+    }
     throw classifyModelError(errorFromStatus(res.status, msg), cfg.model);
   }
   // OpenAI: prompt_tokens รวมส่วนที่อ่านจาก cache แล้ว
@@ -446,6 +490,8 @@ async function callOpenAIOnce(cfg, key, prompt, opts, signal, jsonMode = null) {
       input: data.usage.prompt_tokens || 0,
       output: data.usage.completion_tokens || 0,
       cacheRead: data.usage.prompt_tokens_details?.cached_tokens || 0,
+      // token ที่ใช้คิด (รวมอยู่ใน output แล้ว แยกไว้ให้เห็นว่าจ่ายไปกับการคิดเท่าไร)
+      reasoning: data.usage.completion_tokens_details?.reasoning_tokens || 0,
       raw: data.usage
     });
   }
@@ -486,7 +532,7 @@ async function callLLM(prompt, options = {}) {
 async function callLLMWithProvider(prompt, { json = true, schema = null, system = '', signal = null, onStatus = null, maxRetries = getRetryLimit(), role = 'main', providerOverride = '' } = {}) {
   const override = getModelOverride(signal);
   const cfg = override
-    ? { ...getActiveLlmConfig(role, override.provider), model: override.model, mainModel: override.model, auxModel: override.model }
+    ? { ...getActiveLlmConfig(role, override.provider), model: override.model, mainModel: override.model, auxModel: override.model, ...(override.reasoning ? { reasoning: override.reasoning } : {}) }
     : getActiveLlmConfig(role, providerOverride);
   if (cfg.keys.length === 0) throw new LLMError(`กรุณาใส่ API Key ของ ${LLM_PROVIDERS[cfg.provider].label} ในเมนู 'ตั้งค่า' ก่อน`, 'config');
   if (!cfg.model) throw new LLMError("กรุณาเลือกโมเดลในเมนู 'ตั้งค่า' ก่อน", 'config');

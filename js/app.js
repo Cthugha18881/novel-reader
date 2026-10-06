@@ -1988,6 +1988,11 @@ function showSettingsForProvider(provider) {
   modelInput.placeholder = meta.defaultModel || 'ชื่อโมเดล เช่น ที่ได้จากปุ่มตรวจเช็กโมเดล';
   document.getElementById('llm-baseurl-input').value = draft.baseUrl || meta.defaultBaseUrl || '';
   document.getElementById('llm-baseurl-group').style.display = provider === 'openai' ? 'block' : 'none';
+  const reasoningSelect = document.getElementById('llm-reasoning-select');
+  if (reasoningSelect) {
+    reasoningSelect.innerHTML = REASONING_LEVELS.map(l => `<option value="${l}">${REASONING_LABELS[l]}</option>`).join('');
+    reasoningSelect.value = getProviderReasoning('openai');
+  }
   document.getElementById('fetch-status-text').style.display = 'none';
   populateModelSuggestions(provider);
 }

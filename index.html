@@ -931,6 +931,11 @@
           <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
             * เช่น https://openrouter.ai/api/v1, https://api.deepseek.com/v1 หรือ http://localhost:1234/v1 (ต้องรองรับ /chat/completions และอนุญาต CORS จากเบราว์เซอร์)
           </div>
+          <label class="form-label" for="llm-reasoning-select" style="margin-top: 10px;">🧠 การคิดก่อนตอบ (reasoning) — ใช้กับ OpenRouter</label>
+          <select id="llm-reasoning-select" class="form-input" onchange="localStorage.setItem('nov_llm_reasoning_openai', this.value)"></select>
+          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
+            * โมเดลอย่าง MiMo / GPT-6 คิดก่อนตอบ token ที่ใช้คิดคิดเงินเป็นขาออก และช้ามาก งานแปลปิดไว้ได้ (โมเดลที่ปิดไม่ได้ ระบบจะใช้ค่าเริ่มต้นของโมเดลแทนเอง)
+          </div>
         </div>
 
         <div class="form-group">
