@@ -199,13 +199,31 @@ function setupPopoverDelegation() {
 async function openGlossaryModal() {
   const bookContextEl = document.getElementById('glossary-book-context');
   if (bookContextEl) {
-    const authorLabel = currentAuthor ? ` | ผู้แต่ง: ${currentAuthor}` : '';
+    const authorLabel = currentAuthor ? ` · ${currentAuthor}` : '';
     const genreLabel = getGenreThaiName(currentBookGenre);
-    bookContextEl.innerText = `เรื่องปัจจุบัน: ${currentBookTitle}${authorLabel} (แนว: ${genreLabel})`;
+    bookContextEl.innerText = currentBookId === 'default_novel'
+      ? 'ยังไม่ได้เปิดเรื่องไหน แสดงคำทั้งหมดในคลัง'
+      : `${currentBookTitle}${authorLabel} · ${genreLabel}`;
   }
+  toggleGlossaryAddForm(false);
   await refreshGlossaryScopeDropdown();
   await renderGlossaryUI();
   openModal('glossary-modal');
+}
+
+/** ฟอร์มเพิ่มคำ: ซ่อนไว้ตอนเปิด (หน้าจอมือถือเหลือที่ให้รายการคำ) เปิดเมื่อกด "+ เพิ่มคำ" หรือเลือกคำจากหน้าอ่าน */
+function toggleGlossaryAddForm(force) {
+  const form = document.getElementById('gloss-add-form');
+  const btn = document.querySelector('.gloss-add-toggle');
+  if (!form) return;
+  const open = force !== undefined ? force : form.hidden;
+  form.hidden = !open;
+  if (btn) {
+    btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+    btn.textContent = open ? '✕ ปิดฟอร์ม' : '+ เพิ่มคำ';
+    btn.classList.toggle('btn-primary', !open);
+  }
+  if (open && force === undefined) setTimeout(() => document.getElementById('gloss-src')?.focus(), 0);
 }
 
 async function refreshGlossaryScopeDropdown() {
@@ -218,20 +236,21 @@ async function refreshGlossaryScopeDropdown() {
   let optionsHtml = '';
   books.forEach(b => {
     const isCurrent = (b.bookId === currentBookId);
-    const label = isCurrent ? `📚 ${b.title} (เรื่องปัจจุบัน)` : `📚 ${b.title}`;
+    const label = isCurrent ? `📚 ${b.title} (เรื่องที่อ่านอยู่)` : `📚 ${b.title}`;
     optionsHtml += `<option value="book_${escapeHtml(b.bookId)}">${escapeHtml(label)}</option>`;
   });
 
   optionsHtml += `
-    <option value="global">🌐 คำสากลเท่านั้น (Global)</option>
-    <option value="all">📦 คำทั้งหมดในคลัง (All Terms)</option>
+    <option value="global">🌐 เฉพาะคำสากล (ใช้ทุกเรื่อง)</option>
+    <option value="all">📦 ทุกคำในคลัง</option>
   `;
 
   selectEl.innerHTML = optionsHtml;
-  if (previousVal && selectEl.querySelector(`option[value="${previousVal}"]`)) {
+  const hasOption = (v) => [...selectEl.options].some(o => o.value === v);
+  if (previousVal && hasOption(previousVal)) {
     selectEl.value = previousVal;
   } else {
-    selectEl.value = `book_${currentBookId}`;
+    selectEl.value = hasOption(`book_${currentBookId}`) ? `book_${currentBookId}` : 'all';
   }
 }
 
@@ -306,39 +325,69 @@ async function renderGlossaryUI() {
       bookTagsHtml = `<span class="gloss-scope-tag gloss-scope-global" onclick="openBookAssignModal(${jsArg(data.src)})" title="คำนี้ใช้ได้กับทุกเรื่อง (คลิกเพื่อแก้ไข)">🌐 สากล</span>`;
     } else {
       const bookNames = (data.books || []).map(bId => bookMap.get(bId) || 'ไม่ทราบชื่อเรื่อง');
-      const labelText = bookNames.length > 0 ? (bookNames.length === 1 ? bookNames[0] : `${bookNames[0]} (+${bookNames.length - 1})`) : 'ไม่มีแท็ก';
+      const onlyCurrent = data.books?.length === 1 && data.books[0] === currentBookId;
+      const labelText = onlyCurrent ? 'เรื่องนี้' : bookNames.length > 0 ? (bookNames.length === 1 ? bookNames[0] : `${bookNames[0]} (+${bookNames.length - 1})`) : 'ไม่มีแท็ก';
       bookTagsHtml = `<span class="gloss-scope-tag gloss-scope-local" onclick="openBookAssignModal(${jsArg(data.src)})" title="คลิกเพื่อจัดการเรื่องที่ใช้งาน: ${escapeHtml(bookNames.join(', '))}">🏷️ ${escapeHtml(labelText)}</span>`;
     }
 
-    const attachBtn = (!isGlobal && !isCurrentAttached) ?
-      `<button class="btn" style="padding:1px 4px; font-size:9px; background:rgba(37,99,235,0.1); color: var(--accent-text);" onclick="quickAttachCurrentBook(${jsArg(data.src)})" title="ดึงคำนี้มาใช้กับเรื่องปัจจุบัน">+ ใช้กับเรื่องนี้</button>` : '';
+    const attachBtn = (!isGlobal && !isCurrentAttached && currentBookId !== 'default_novel') ?
+      `<button class="gloss-chip gloss-chip-action" onclick="quickAttachCurrentBook(${jsArg(data.src)})" title="ดึงคำนี้มาใช้กับเรื่องปัจจุบัน">+ ใช้กับเรื่องนี้</button>` : '';
 
+    // 2 บรรทัด: คำ ➔ คำแปล (อ่านง่าย) / ป้ายเล็ก (หมวด ขอบเขต จำนวนครั้ง) ปุ่มอื่นอยู่ในเมนู ⋯ ไม่ล้นจอมือถือ
     const row = document.createElement('div');
     row.className = 'gloss-item-row';
     row.innerHTML = `
-      <div style="display:flex; align-items:center; gap:8px; flex:1; overflow:hidden;">
-        <input type="checkbox" class="gloss-item-chk" value="${escapeHtml(data.src)}" onchange="updateGlossaryBatchToolbar()" style="cursor:pointer; accent-color:#2563eb;">
-        <div style="flex: 1; overflow: hidden;">
-          <div style="display:flex; align-items:center; gap:5px; flex-wrap: wrap;">
-            <span class="gloss-badge">${getCategoryLabel(data.category)}</span>
-            ${bookTagsHtml}
-            ${attachBtn}
-            <b>${escapeHtml(data.src)}</b> ➔ <span id="gloss-tgt-val-${escapeHtml(data.src)}" style="color: var(--accent-text); font-weight:600;">${escapeHtml(data.tgt)}</span>
-            ${hasBookOverride(data, currentBookId) ? `<span class="gloss-override-tag" title="เรื่องปัจจุบันใช้คำแปลเฉพาะเรื่องนี้">📌 เรื่องนี้: ${escapeHtml(data.overrides[currentBookId])}</span>` : ''}
-            <span style="font-size:10px; opacity:0.4;">(${escapeHtml(data.count || 1)})</span>
-          </div>
+      <input type="checkbox" class="gloss-item-chk" value="${escapeHtml(data.src)}" onchange="updateGlossaryBatchToolbar()" aria-label="เลือก ${escapeHtml(data.src)}">
+      <div class="gloss-item-main">
+        <div class="gloss-item-term">
+          <span class="gloss-src" lang="${escapeHtml(data.lang || 'zh')}">${escapeHtml(data.src)}</span>
+          <span class="gloss-arrow" aria-hidden="true">➔</span>
+          <span class="gloss-tgt" id="gloss-tgt-val-${escapeHtml(data.src)}">${escapeHtml(data.tgt)}</span>
+          ${hasBookOverride(data, currentBookId) ? `<span class="gloss-override-tag" title="เรื่องปัจจุบันใช้คำแปลเฉพาะเรื่องนี้">📌 เรื่องนี้: ${escapeHtml(data.overrides[currentBookId])}</span>` : ''}
+        </div>
+        <div class="gloss-item-meta">
+          <span class="gloss-badge">${getCategoryLabel(data.category)}</span>
+          ${bookTagsHtml}
+          <span class="gloss-count" title="จำนวนครั้งที่พบ">พบ ${escapeHtml(data.count || 1)} ครั้ง</span>
+          ${attachBtn}
         </div>
       </div>
-      <div style="display:flex; gap:4px; align-items:center; flex-shrink: 0;">
-        <button class="btn" style="padding:2px 6px; font-size:10px;" id="btn-research-${escapeHtml(data.src)}" onclick="researchGlossaryTerm(${jsArg(data.src)})" title="ค้นหาคำแปลยอดนิยมตามลำดับขั้น 3-Tier">🔄</button>
-        <button class="btn" style="padding:2px 6px; font-size:10px;" onclick="openEditTermModal(${jsArg(data.src)})">✎</button>
-        <button class="btn btn-danger" style="padding:2px 6px; font-size:10px;" onclick="delGloss(${jsArg(data.src)})">✕</button>
+      <div class="gloss-item-actions">
+        <button class="btn" onclick="openEditTermModal(${jsArg(data.src)})" title="แก้คำแปล">✎</button>
+        <button class="btn" id="btn-research-${escapeHtml(data.src)}" onclick="openGlossaryItemMenu(this, ${jsArg(data.src)})" title="เมนูของคำนี้">⋯</button>
       </div>
     `;
     list.appendChild(row);
   });
 
   updateGlossaryBatchToolbar();
+}
+
+function openGlossaryItemMenu(anchor, src) {
+  openActionMenu(anchor, [
+    { icon: '✎', label: 'แก้คำแปล / หมวด', onSelect: () => openEditTermModal(src) },
+    { icon: '🔄', label: 'ให้ AI ค้นหาคำแปลใหม่', hint: 'ใช้โควตา AI', onSelect: () => researchGlossaryTerm(src) },
+    { icon: '🏷️', label: 'เลือกเรื่องที่ใช้คำนี้', hint: 'สากล หรือเฉพาะบางเรื่อง', onSelect: () => openBookAssignModal(src) },
+    { icon: '🗑️', label: 'ลบคำนี้', danger: true, onSelect: () => delGloss(src) }
+  ], { title: src });
+}
+
+/** เมนู ⋯ ของคลังศัพท์: งานที่ไม่ได้ใช้ทุกครั้ง (AI จัดหมวด ไฟล์ เลือกทั้งหมด) */
+function openGlossaryToolsMenu(anchor) {
+  const hasBook = currentBookId !== 'default_novel';
+  const exportAs = (format, scope) => () => {
+    const sel = document.getElementById('gloss-io-scope');
+    if (sel) sel.value = scope;
+    exportGlossaryFile(format);
+  };
+  openActionMenu(anchor, [
+    { icon: '☑️', label: 'เลือกทั้งหมดที่แสดง', onSelect: toggleSelectAllGlossary },
+    { icon: '✨', label: 'ให้ AI จัดหมวดหมู่', hint: 'ย้ายคำที่ยังไม่แยกหมวดเข้า 7 หมวด · ใช้โควตา AI', onSelect: autoOrganizeGlossaryWithAI },
+    { icon: '⬇️', label: 'ส่งออก CSV — เฉพาะเรื่องนี้', hint: 'เปิดใน Excel / Google Sheets ได้', hidden: !hasBook, onSelect: exportAs('csv', 'book') },
+    { icon: '⬇️', label: 'ส่งออก CSV — ทั้งคลัง', onSelect: exportAs('csv', 'all') },
+    { icon: '⬇️', label: 'ส่งออก JSON — ทั้งคลัง', onSelect: exportAs('json', 'all') },
+    { icon: '⬆️', label: 'นำเข้าไฟล์คำศัพท์', hint: 'CSV / TSV / JSON ดูตัวอย่างก่อนนำเข้า', onSelect: triggerGlossaryImport }
+  ], { title: 'คลังศัพท์' });
 }
 
 function updateGlossaryBatchToolbar() {

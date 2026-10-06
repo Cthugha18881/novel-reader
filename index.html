@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/csp.js"></script>
-  <title>NovelTranslate AI v3.7.0</title>
+  <title>NovelTranslate AI v3.8.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -29,10 +29,10 @@
 
   <!-- TOP HEADER -->
   <header>
-    <div class="brand-box">
-      <div class="brand-icon">N</div>
-      <div class="brand-title">NovelTranslate AI</div>
-    </div>
+    <button class="brand-box" onclick="openHome()" title="หน้าแรก: ชั้นหนังสือ">
+      <span class="brand-icon" aria-hidden="true">N</span>
+      <span class="brand-title">NovelTranslate AI</span>
+    </button>
 
     <div class="header-actions">
       <div class="desktop-controls">
@@ -44,7 +44,7 @@
 
       <div id="prefetch-badge">ตอนถัดไปพร้อม</div>
       <button class="btn hdr-secondary" id="install-app-btn" style="display: none;" onclick="promptInstallApp()" title="ติดตั้งเป็นแอพบนเครื่อง ใช้อ่านแบบออฟไลน์ได้">📲 ติดตั้งแอพ</button>
-      <button class="btn hdr-secondary" onclick="openBookshelfModal()">ชั้นหนังสือ</button>
+      <button class="btn hdr-secondary" data-home-toggle onclick="toggleHome()">📚 ชั้นหนังสือ</button>
       <button class="btn hdr-secondary" onclick="openGlossaryModal()">คลังศัพท์</button>
       <button class="btn hdr-secondary" onclick="openBibleModal()" title="ตัวละคร สรรพนาม แนวทางสำนวน กฎแทนคำ และตัวอย่างสำนวนของเรื่องนี้">คู่มือเรื่อง</button>
       <button class="btn hdr-secondary" onclick="openSettingsModal()">ตั้งค่า</button>
@@ -141,11 +141,12 @@
 
   <!-- MOBILE BOTTOM DOCK -->
   <nav class="mobile-dock">
-    <button class="btn" onclick="openBookshelfModal()">ชั้นหนังสือ</button>
-    <button class="btn" data-reader-panel-toggle onclick="toggleReaderPanel()" title="ตั้งค่าการอ่าน (ธีม ขนาด ฟอนต์)">Aa</button>
-    <button class="btn" onclick="openReaderTools('search')" title="ค้นหา / บุ๊กมาร์ก">🔎</button>
-    <button class="btn" onclick="toggleTts()" title="ฟังเสียงอ่าน">🎧</button>
-    <button class="btn" onclick="openMoreMenu(this)" title="เมนู: คลังศัพท์ คู่มือเรื่อง ตั้งค่า">⋯ เมนู</button>
+    <button class="btn" data-home-toggle onclick="toggleHome()">📚 ชั้นหนังสือ</button>
+    <button class="btn dock-home-only" onclick="closeHome()">📖 กลับไปอ่าน</button>
+    <button class="btn dock-reading-only" data-reader-panel-toggle onclick="toggleReaderPanel()" title="ตั้งค่าการอ่าน (ธีม ขนาด ฟอนต์)">Aa</button>
+    <button class="btn dock-reading-only" onclick="openReaderTools('search')" title="ค้นหา / บุ๊กมาร์ก">🔎</button>
+    <button class="btn dock-reading-only" onclick="toggleTts()" title="ฟังเสียงอ่าน">🎧</button>
+    <button class="btn dock-reading-only" onclick="toggleFullscreenMode()" title="อ่านเต็มจอ (ซ่อนแถบบน/ล่าง กด 🗗 มุมขวาบนเพื่อออก)">⛶ เต็มจอ</button>
   </nav>
 
   <!-- ตั้งค่าการอ่าน (ไม่บังหน้าอ่าน ดูผลได้ทันที) -->
@@ -165,34 +166,31 @@
     <div id="tts-bar-body"></div>
   </div>
 
-  <!-- MODAL: BOOKSHELF -->
-  <div class="modal-overlay" id="bookshelf-modal">
-    <div class="modal-box">
-      <div class="modal-head">
-        <div class="modal-title">ชั้นหนังสือของฉัน (ในเครื่อง)</div>
-        <button class="modal-close" onclick="closeModal('bookshelf-modal')">✕</button>
-      </div>
-
-      <div class="progress-box" id="batch-progress-box">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-          <b id="batch-progress-title">กำลังแปลล่วงหน้า...</b>
-          <button class="btn btn-danger" id="batch-action-btn" style="padding: 2px 8px; font-size: 10px;" onclick="handleBatchActionClick()">หยุดแปล</button>
+  <!-- HOME: หน้าแรก / ชั้นหนังสือ (js/home.js) -->
+  <section id="home-view" class="home-view" hidden aria-label="ชั้นหนังสือ">
+    <div class="home-inner">
+      <div id="home-grid-view">
+        <div class="home-head">
+          <h1 class="home-title">ชั้นหนังสือ</h1>
+          <div class="home-head-actions">
+            <button class="btn" onclick="checkNewChaptersForAllBooks()" title="เช็กตอนใหม่ของทุกเรื่อง (ไม่ใช้โควตา AI)">🔔 เช็กตอนใหม่</button>
+            <button class="btn" onclick="openHomeMenu(this)" title="เมนูชั้นหนังสือ: สำรองข้อมูล นำเข้า การใช้งาน AI" aria-label="เมนูชั้นหนังสือ">⋯</button>
+          </div>
         </div>
-        <div id="batch-progress-desc" aria-live="polite">เตรียมคิว...</div>
+        <div id="home-hero"></div>
+        <div class="home-toolbar">
+          <input type="search" id="home-search" class="form-input" placeholder="🔍 ค้นหาชื่อเรื่อง / ผู้แต่ง" oninput="renderHomeCards()">
+          <select id="home-sort" class="form-input" onchange="setHomeSort(this.value)" aria-label="เรียงหนังสือตาม">
+            <option value="recent">อ่านล่าสุด</option>
+            <option value="title">ชื่อเรื่อง ก-ฮ</option>
+            <option value="chapters">ตอนมากสุด</option>
+          </select>
+        </div>
+        <div id="home-grid" class="home-grid"></div>
       </div>
-
-      <div id="bookshelf-list" class="modal-scrollable-body" style="max-height: 400px; margin-bottom: 12px;"></div>
-      <div style="display: flex; gap: 6px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px;">
-        <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="exportBackup()" title="ดาวน์โหลดนิยาย ตอน และคลังศัพท์ทั้งหมดเป็นไฟล์ .json (ไม่รวม API Key)">⬇️ สำรองข้อมูลทั้งหมด</button>
-        <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="checkNewChaptersForAllBooks()" title="เช็กตอนใหม่ของทุกเรื่องบนชั้นหนังสือ (ไม่ใช้โควตา AI)">🔔 เช็กตอนใหม่ทุกเรื่อง</button>
-        <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="openUsageModal()" title="token ที่ใช้จริง เพดานค่าใช้จ่าย และบันทึกข้อผิดพลาด">📊 การใช้งาน AI</button>
-        <button class="btn" style="padding: 4px 10px; font-size: 11px;" onclick="triggerBackupImport()" title="นำเข้าไฟล์สำรอง .json (เลือกได้ว่าจะรวมกับของเดิมหรือแทนที่ทั้งหมด)">⬆️ นำเข้าไฟล์สำรอง</button>
-        <input type="file" id="backup-file-input" accept=".json,application/json" style="display: none;" onchange="handleBackupFileSelected(this)">
-      </div>
-      <div id="bookshelf-backup-note" style="font-size: 11px; text-align: center; margin-bottom: 6px; opacity: 0.8;"></div>
-      <p style="font-size: 11px; opacity: 0.6; text-align: center;">*กด 🔄 บนมุมขวาของหน้าอ่านเพื่อแปลบทปัจจุบันใหม่ตามคลังศัพท์ล่าสุดได้ทันที<br>*ข้อมูลทั้งหมดเก็บอยู่ในเบราว์เซอร์เครื่องนี้เท่านั้น ควรสำรองข้อมูลเป็นระยะ</p>
+      <div id="home-detail-view" hidden></div>
     </div>
-  </div>
+  </section>
 
   <!-- MODAL: AI USAGE & BUDGET -->
   <div class="modal-overlay" id="usage-modal" style="z-index: 62;">
@@ -788,94 +786,82 @@
     </div>
   </div>
 
-  <!-- MODAL 2: UNIVERSAL CATEGORIZED GLOSSARY -->
+  <!-- MODAL 2: คลังศัพท์ -->
   <div class="modal-overlay" id="glossary-modal">
-    <div class="modal-box">
+    <div class="modal-box modal-large gloss-box">
       <div class="modal-head">
-        <div>
-          <div class="modal-title">คลังคำศัพท์สากล (Smart Glossary Engine)</div>
-          <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;" id="glossary-book-context">เรื่องปัจจุบัน: ...</div>
+        <div style="min-width: 0;">
+          <div class="modal-title">คลังศัพท์</div>
+          <div class="modal-subtitle" id="glossary-book-context">เรื่องปัจจุบัน: ...</div>
         </div>
         <button class="modal-close" onclick="closeModal('glossary-modal')">✕</button>
       </div>
 
-      <div class="glossary-filter-bar">
-        <select id="gloss-scope-filter" class="form-input" style="width: auto; max-width: 210px; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
-        </select>
-
-        <select id="gloss-sort-select" class="form-input" style="width: auto; padding: 4px 8px; font-size: 11px;" onchange="renderGlossaryUI()">
-          <option value="count_desc">ความถี่มากสุด ↓</option>
-          <option value="time_desc">เพิ่มล่าสุด ↓</option>
-          <option value="time_asc">เก่าสุด ↑</option>
-          <option value="th_asc">ชื่อไทย ก-ฮ ↓</option>
-          <option value="th_desc">ชื่อไทย ฮ-ก ↑</option>
-          <option value="len_desc">อักษรจีนยาวสุด ↓</option>
-        </select>
-
-        <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px;" onclick="autoOrganizeGlossaryWithAI()" title="ให้ AI วิเคราะห์คำที่ยังไม่แยกหมวด แล้วย้ายเข้า 7 หมวดให้อัตโนมัติ">
-          ✨ AI จัดหมวดหมู่
-        </button>
-        <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-left: auto;" onclick="toggleSelectAllGlossary()">
-          เลือกทั้งหมด
-        </button>
+      <div class="gloss-top">
+        <input type="search" id="gloss-search-input" class="form-input" placeholder="🔍 ค้นหาคำ (ไทยหรือต้นฉบับ)" oninput="renderGlossaryUI()">
+        <button class="btn btn-primary gloss-add-toggle" onclick="toggleGlossaryAddForm()" aria-expanded="false" aria-controls="gloss-add-form">+ เพิ่มคำ</button>
+        <button class="btn gloss-tools-btn" onclick="openGlossaryToolsMenu(this)" title="เมนูคลังศัพท์: AI จัดหมวด ส่งออก นำเข้า เลือกทั้งหมด">⋯</button>
       </div>
 
-      <div class="glossary-filter-bar gloss-io-bar">
-        <span style="font-size: 11px; opacity: 0.75;">ไฟล์คำศัพท์:</span>
-        <select id="gloss-io-scope" class="form-input" style="width: auto; padding: 4px 8px; font-size: 11px;" title="ส่งออกคำไหนบ้าง">
-          <option value="book">เฉพาะคำที่เรื่องนี้ใช้</option>
-          <option value="all">ทั้งคลัง</option>
+      <div class="gloss-add-form" id="gloss-add-form" hidden>
+        <input type="text" id="gloss-src" class="form-input" placeholder="คำต้นฉบับ (เช่น 光海)">
+        <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปลไทย (เช่น ทะเลแสง)">
+        <select id="gloss-cat" class="form-input" aria-label="หมวด">
+          <option value="character" selected>👤 บุคคล/สิ่งมีชีวิต</option>
+          <option value="title">🎖 ตำแหน่ง/ฐานะ</option>
+          <option value="location">🏔️ สถานที่/องค์กร</option>
+          <option value="skill">📜 ทักษะ/วิชา</option>
+          <option value="equipment">🗡️ อุปกรณ์/เทคโน</option>
+          <option value="resource">💊 ทรัพยากร/โอสถ</option>
+          <option value="realm">🧬 ลำดับขั้น/สเตตัส</option>
         </select>
-        <button class="btn" style="padding: 4px 8px; font-size: 11px;" onclick="exportGlossaryFile('csv')" title="เปิดแก้ใน Excel / Google Sheets ได้">⬇ ส่งออก CSV</button>
-        <button class="btn" style="padding: 4px 8px; font-size: 11px;" onclick="exportGlossaryFile('json')">⬇ JSON</button>
-        <button class="btn" style="padding: 4px 8px; font-size: 11px;" onclick="triggerGlossaryImport()" title="นำเข้า CSV / TSV / JSON ดูตัวอย่างและเลือกวิธีจัดการคำที่ชนกันก่อน">⬆ นำเข้า</button>
-        <input type="file" id="gloss-import-file" accept=".csv,.tsv,.txt,.json,text/csv,application/json" style="display: none;" onchange="handleGlossaryImportFile(this)">
-      </div>
-
-      <div class="gloss-batch-toolbar" id="gloss-batch-toolbar">
-        <span id="gloss-batch-count" style="font-weight: 600;">เลือกไว้ 0 คำ</span>
-        <div style="display: flex; gap: 4px; flex-wrap: wrap;">
-          <button class="btn btn-primary" style="padding: 2px 7px; font-size: 10px;" onclick="batchResearchSelectedTerms()">🔄 รีเสิร์ชที่เลือก</button>
-          <button class="btn" style="padding: 2px 7px; font-size: 10px;" onclick="batchSetScopeGlobal(true)">🌐 ตั้งเป็นสากล</button>
-          <button class="btn" style="padding: 2px 7px; font-size: 10px;" onclick="openBatchBookAssignModal()">🏷️ กำหนดเรื่องที่เลือก</button>
-          <button class="btn btn-danger" style="padding: 2px 7px; font-size: 10px;" onclick="batchDeleteSelectedTerms()">🗑️ ลบที่เลือก</button>
+        <div class="gloss-add-actions">
+          <button class="btn" id="lookup-manual-term-btn" onclick="lookupManualTermTranslation()" title="พิมพ์คำต้นฉบับแล้วให้ AI หาคำแปลไทยที่นิยมใช้ (ใช้โควตา AI)">🔍 ให้ AI หาคำแปล</button>
+          <button class="btn btn-primary" onclick="addGlossary()">บันทึกคำนี้</button>
         </div>
       </div>
 
-      <div style="margin-bottom: 8px;">
-        <input type="text" id="gloss-search-input" class="form-input" placeholder="🔍 ค้นหาคำศัพท์ (พิมพ์ได้ทั้งภาษาไทยและจีน)..." oninput="renderGlossaryUI()">
-      </div>
-
-      <div class="gloss-category-tabs">
-        <button class="cat-tab-btn active" onclick="switchGlossaryCategory('all', event)">ทั้งหมด</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('character', event)">👤 บุคคล/สิ่งมีชีวิต</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('title', event)">🎖 ตำแหน่ง/ฐานะ</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('location', event)">🏔️ สถานที่/องค์กร</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('skill', event)">📜 ทักษะ/วิชา</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('equipment', event)">🗡️ อุปกรณ์/เทคโน</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('resource', event)">💊 ทรัพยากร/โอสถ</button>
-        <button class="cat-tab-btn" onclick="switchGlossaryCategory('realm', event)">🧬 ลำดับขั้น/สเตตัส</button>
-      </div>
-
-      <div style="display: flex; gap: 6px; margin-bottom: 8px; flex-wrap: wrap; align-items: center;">
-        <input type="text" id="gloss-src" class="form-input" placeholder="คำจีน (เช่น 光海)" style="flex: 1; min-width: 90px;">
-        <input type="text" id="gloss-tgt" class="form-input" placeholder="คำแปลไทย (เช่น ทะเลแสง)" style="flex: 1; min-width: 90px;">
-        <select id="gloss-cat" class="form-input" style="width: 120px;">
-          <option value="character" selected>บุคคล/สิ่งมีชีวิต</option>
-          <option value="title">ตำแหน่ง/ฐานะ</option>
-          <option value="location">สถานที่/องค์กร</option>
-          <option value="skill">ทักษะ/วิชา</option>
-          <option value="equipment">อุปกรณ์/เทคโน</option>
-          <option value="resource">ทรัพยากร/โอสถ</option>
-          <option value="realm">ลำดับขั้น/สเตตัส</option>
+      <div class="gloss-filters">
+        <select id="gloss-scope-filter" class="form-input" onchange="renderGlossaryUI()" aria-label="แสดงคำของเรื่องไหน"></select>
+        <select id="gloss-sort-select" class="form-input" onchange="renderGlossaryUI()" aria-label="เรียงตาม">
+          <option value="count_desc">พบบ่อยสุด</option>
+          <option value="time_desc">เพิ่มล่าสุด</option>
+          <option value="time_asc">เก่าสุด</option>
+          <option value="th_asc">ชื่อไทย ก-ฮ</option>
+          <option value="th_desc">ชื่อไทย ฮ-ก</option>
+          <option value="len_desc">คำต้นฉบับยาวสุด</option>
         </select>
-        <button class="btn btn-secondary" id="lookup-manual-term-btn" onclick="lookupManualTermTranslation()" title="พิมพ์คำจีนแล้วกดปุ่มนี้เพื่อให้ AI ค้นหาคำแปลไทยมาตรฐาน 3-Tier ให้อัตโนมัติ" style="white-space: nowrap;">
-          🔍 ค้นหาคำแปล
-        </button>
-        <button class="btn btn-primary" onclick="addGlossary()">+ เพิ่ม</button>
       </div>
 
-      <div id="glossary-list" class="modal-scrollable-body" style="max-height: 250px;"></div>
+      <div class="gloss-category-tabs" role="toolbar" aria-label="หมวดคำศัพท์">
+        <button class="cat-tab-btn active" onclick="switchGlossaryCategory('all', event)">ทั้งหมด</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('character', event)">👤 บุคคล</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('title', event)">🎖 ตำแหน่ง</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('location', event)">🏔️ สถานที่</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('skill', event)">📜 วิชา</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('equipment', event)">🗡️ อุปกรณ์</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('resource', event)">💊 ทรัพยากร</button>
+        <button class="cat-tab-btn" onclick="switchGlossaryCategory('realm', event)">🧬 ลำดับขั้น</button>
+      </div>
+
+      <!-- ส่งออก: ขอบเขตตั้งจากเมนู ⋯ (ซ่อนไว้ ใช้โดย exportGlossaryFile) -->
+      <select id="gloss-io-scope" hidden aria-hidden="true" tabindex="-1">
+        <option value="book">เฉพาะคำที่เรื่องนี้ใช้</option>
+        <option value="all">ทั้งคลัง</option>
+      </select>
+      <input type="file" id="gloss-import-file" accept=".csv,.tsv,.txt,.json,text/csv,application/json" style="display: none;" onchange="handleGlossaryImportFile(this)">
+
+      <div id="glossary-list" class="modal-scrollable-body gloss-list"></div>
+
+      <div class="gloss-batch-toolbar" id="gloss-batch-toolbar">
+        <span id="gloss-batch-count" style="font-weight: 600;">เลือกไว้ 0 คำ</span>
+        <div class="gloss-batch-actions">
+          <button class="btn" onclick="batchResearchSelectedTerms()" title="ให้ AI ค้นหาคำแปลใหม่ของคำที่เลือก (ใช้โควตา AI)">🔄 หาคำแปลใหม่</button>
+          <button class="btn" onclick="batchSetScopeGlobal(true)">🌐 ตั้งเป็นสากล</button>
+          <button class="btn" onclick="openBatchBookAssignModal()">🏷️ เลือกเรื่อง</button>
+          <button class="btn btn-danger" onclick="batchDeleteSelectedTerms()">🗑️ ลบ</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -899,13 +885,22 @@
 
   <!-- MODAL 3: SETTINGS -->
   <div class="modal-overlay" id="settings-modal">
-    <div class="modal-box">
+    <div class="modal-box modal-large settings-box">
       <div class="modal-head">
-        <div class="modal-title">ตั้งค่าระบบและการแปล</div>
+        <div class="modal-title">ตั้งค่า</div>
         <button class="modal-close" onclick="closeModal('settings-modal')">✕</button>
       </div>
 
-      <div class="modal-scrollable-body">
+      <div class="settings-tabs" role="tablist" aria-label="หมวดการตั้งค่า" onkeydown="onTabListKey(event)">
+        <button class="settings-tab" role="tab" data-settings-tab="ai" onclick="switchSettingsTab('ai')"><span class="settings-tab-icon" aria-hidden="true">🤖</span><span>AI</span></button>
+        <button class="settings-tab" role="tab" data-settings-tab="translate" onclick="switchSettingsTab('translate')"><span class="settings-tab-icon" aria-hidden="true">📝</span><span>การแปล</span></button>
+        <button class="settings-tab" role="tab" data-settings-tab="reading" onclick="switchSettingsTab('reading')"><span class="settings-tab-icon" aria-hidden="true">📖</span><span>การอ่าน</span></button>
+        <button class="settings-tab" role="tab" data-settings-tab="data" onclick="switchSettingsTab('data')"><span class="settings-tab-icon" aria-hidden="true">💾</span><span>ข้อมูล</span></button>
+        <button class="settings-tab" role="tab" data-settings-tab="tools" onclick="switchSettingsTab('tools')"><span class="settings-tab-icon" aria-hidden="true">🧰</span><span>เครื่องมือ</span></button>
+      </div>
+
+      <div class="modal-scrollable-body settings-body">
+        <div class="settings-panel" role="tabpanel" data-settings-panel="ai">
         <div class="form-group">
           <label class="form-label">ผู้ให้บริการ AI (Provider)</label>
           <select id="llm-provider-select" class="form-input" onchange="onProviderSelectChange()">
@@ -976,33 +971,13 @@
         </div>
 
         <div class="form-group">
-          <button class="btn btn-secondary" style="width: 100%;" onclick="openUsageModal()">📊 การใช้งาน AI, เพดานค่าใช้จ่าย และบันทึกข้อผิดพลาด</button>
-        </div>
-        <div class="form-group">
-          <button class="btn btn-secondary" style="width: 100%;" onclick="openBenchmarkModal()">🧪 เทียบโมเดล (แปลตอนเดียวกันหลายโมเดล เทียบคำแปลและราคา)</button>
-        </div>
-        <div class="form-group">
-          <button class="btn btn-secondary" style="width: 100%;" onclick="openSiteProfilesModal()">🌐 ตั้งค่าเว็บต้นฉบับ (โปรไฟล์เว็บ, Jina Key, AI ช่วยแยกเนื้อหา)</button>
-        </div>
-        <div class="form-group">
-          <label class="form-label">ลิมิตส่งซ้ำเมื่อเซิร์ฟเวอร์หนาแน่น (รอบ)</label>
+          <label class="form-label" for="retry-limit">ส่งซ้ำได้กี่รอบเมื่อเซิร์ฟเวอร์ AI หนาแน่น</label>
           <input type="number" id="retry-limit" class="form-input" min="1" max="50" value="10" placeholder="10">
         </div>
-
-        <!-- TOGGLES -->
-        <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
-          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
-            <input type="checkbox" id="enable-deep-ner-scan" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
-            <div>
-              <span>🔍 สแกนคำศัพท์เชิงลึก (Deep Dual-Pass NER)</span>
-              <div style="font-size: 11px; font-weight: normal; opacity: 0.65; margin-top: 2px;">
-                กวาดจับทั้งชื่อเฉพาะ, ระดับพลังทุกขั้น (ขอบเขต/หลอม/ปราณ), ฉายา และวิชา ป้องกันคำเฉพาะหลุดรอด
-              </div>
-            </div>
-          </label>
         </div>
 
-        <div class="form-group" style="margin-top: 10px;">
+        <div class="settings-panel" role="tabpanel" data-settings-panel="translate">
+        <div class="form-group">
           <label class="form-label" for="quality-mode-select">🛡️ โหมดคุณภาพการแปล</label>
           <select id="quality-mode-select" class="form-input">
             <option value="fast">เร็ว — แปลรอบเดียว (ประหยัดสุด)</option>
@@ -1016,50 +991,57 @@
           </div>
         </div>
 
-        <div class="form-group" style="margin-top: 10px;">
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 600;">
-            <input type="checkbox" id="enable-infinite-scroll" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
-            <span>เปิดใช้งานโหมดอ่านต่อเนื่องไร้รอยต่อ (Infinite Scroll)</span>
-          </label>
+        <label class="settings-check">
+          <input type="checkbox" id="enable-live-prefetch" checked>
+          <span><b>แปลตอนถัดไปล่วงหน้า 1 ตอนระหว่างอ่าน</b><small>อ่านจบแล้วไปต่อได้ทันที ไม่ต้องรอ</small></span>
+        </label>
+        <label class="settings-check">
+          <input type="checkbox" id="enable-auto-glossary" checked>
+          <span><b>เก็บชื่อเฉพาะเข้าคลังศัพท์อัตโนมัติ</b><small>AI หาชื่อคน สถานที่ วิชา ในแต่ละตอน แล้วใช้คำแปลเดิมทุกตอน</small></span>
+        </label>
+        <label class="settings-check">
+          <input type="checkbox" id="enable-deep-ner-scan">
+          <span><b>สแกนคำศัพท์เชิงลึก</b><small>สแกน 2 รอบ จับระดับพลังทุกขั้น ฉายา และวิชาได้ครบขึ้น (ใช้โควตาเพิ่ม)</small></span>
+        </label>
         </div>
 
-        <div class="form-group" style="margin-top: 8px;">
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
-            <input type="checkbox" id="enable-live-prefetch" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
-            <span>แปลบทถัดไปล่วงหน้า 1 ตอนในเบื้องหลังขณะอ่านสด</span>
-          </label>
+        <div class="settings-panel" role="tabpanel" data-settings-panel="reading">
+        <div class="form-group">
+          <button class="btn btn-secondary settings-wide-btn" onclick="closeModal('settings-modal'); setTimeout(() => toggleReaderPanel(true), 0)">Aa ตั้งค่าหน้าอ่าน (ธีม ขนาดตัวอักษร ฟอนต์ ระยะบรรทัด เพลงประกอบ)</button>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="start-page-select">เปิดแอพแล้วไปที่</label>
+          <select id="start-page-select" class="form-input" onchange="setStartPage(this.value)">
+            <option value="home">หน้าแรก (ชั้นหนังสือ มีปุ่มอ่านต่อ)</option>
+            <option value="reading">ตอนที่อ่านค้างไว้ทันที</option>
+          </select>
+        </div>
+        <label class="settings-check">
+          <input type="checkbox" id="enable-infinite-scroll" checked>
+          <span><b>อ่านต่อเนื่อง</b><small>เลื่อนลงแล้วต่อตอนถัดไปเอง (ปิด = อ่านทีละตอน กดปุ่มตอนถัดไป)</small></span>
+        </label>
+        <label class="settings-check">
+          <input type="checkbox" id="show-junk-paras">
+          <span><b>แสดงข้อความจากหน้าเว็บที่ระบบซ่อนไว้</b><small>เช่น "收藏本站" ลิงก์เว็บ เมนูนำทาง ระบบไม่แปลข้อความเหล่านี้เพื่อประหยัดโควตา</small></span>
+        </label>
+        <label class="settings-check">
+          <input type="checkbox" id="export-include-notes">
+          <span><b>รวมประกาศและข้อความผู้เขียนเมื่อส่งออก TXT / EPUB</b><small>ตอนพิเศษ (番外) รวมเสมอ ส่วนตอนกันก๊อปและข้อความจากหน้าเว็บไม่รวม</small></span>
+        </label>
         </div>
 
-        <div class="form-group" style="margin-top: 8px;">
-          <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
-            <input type="checkbox" id="enable-auto-glossary" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb;" checked>
-            <span>เปิดใช้งานระบบ Auto-Glossary (สกัดชื่อเฉพาะอัตโนมัติ)</span>
-          </label>
+        <div class="settings-panel" role="tabpanel" data-settings-panel="data">
+        <div class="form-group">
+          <div class="form-label">สำรองข้อมูล</div>
+          <div class="settings-btn-row">
+            <button class="btn btn-secondary" onclick="exportBackup()" title="ดาวน์โหลดนิยาย ตอน และคลังศัพท์ทั้งหมดเป็นไฟล์ .json (ไม่รวม API Key)">⬇️ สำรองข้อมูลทั้งหมด</button>
+            <button class="btn btn-secondary" onclick="triggerBackupImport()" title="นำเข้าไฟล์สำรอง .json (เลือกได้ว่าจะรวมกับของเดิมหรือแทนที่ทั้งหมด)">⬆️ นำเข้าไฟล์สำรอง</button>
+          </div>
+          <input type="file" id="backup-file-input" accept=".json,application/json" style="display: none;" onchange="handleBackupFileSelected(this)">
+          <div id="bookshelf-backup-note" class="settings-note"></div>
         </div>
-
-        <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
-          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
-            <input type="checkbox" id="show-junk-paras" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
-            <div>
-              <span>แสดงข้อความจากหน้าเว็บที่ระบบซ่อนไว้</span>
-              <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">เช่น "收藏本站", ลิงก์เว็บ, เมนูนำทาง ระบบไม่แปลข้อความเหล่านี้เพื่อประหยัดโควตา</div>
-            </div>
-          </label>
-        </div>
-
-        <div class="form-group" style="margin-top: 8px;">
-          <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
-            <input type="checkbox" id="export-include-notes" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
-            <div>
-              <span>รวมประกาศและข้อความผู้เขียนเมื่อส่งออก TXT / EPUB</span>
-              <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">ตอนพิเศษ (番外) จะถูกรวมเสมอ ส่วนตอนกันก๊อปและข้อความจากหน้าเว็บจะไม่ถูกรวม</div>
-            </div>
-          </label>
-        </div>
-
-        <!-- DATA & SECURITY -->
-        <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 14px;">
-          <div class="form-label">💾 ข้อมูลและความปลอดภัย</div>
+        <div class="form-group">
+          <div class="form-label">พื้นที่จัดเก็บ</div>
           <div id="storage-status" style="font-size: 12px; line-height: 1.6;"></div>
           <button class="btn btn-secondary" id="persist-storage-btn" style="display: none; margin-top: 6px; padding: 3px 10px; font-size: 11px;" onclick="requestPersistFromSettings()">ขอพื้นที่จัดเก็บแบบถาวร</button>
         </div>
@@ -1098,9 +1080,16 @@
             <li>แนะนำ: ตั้งวงเงินใช้จ่ายของ API Key ที่หน้าเว็บผู้ให้บริการ และอย่าใช้ Key เดียวกับงานสำคัญอื่น</li>
           </ul>
         </details>
+        </div>
+
+        <div class="settings-panel" role="tabpanel" data-settings-panel="tools">
+        <button class="settings-tool" onclick="openUsageModal()"><span>📊</span><span><b>การใช้งาน AI</b><small>token ที่ใช้ เพดานค่าใช้จ่าย บันทึกข้อผิดพลาด</small></span></button>
+        <button class="settings-tool" onclick="openBenchmarkModal()"><span>🧪</span><span><b>เทียบโมเดล</b><small>แปลตอนเดียวกันหลายโมเดล เทียบคำแปล เวลา และราคา</small></span></button>
+        <button class="settings-tool" onclick="openSiteProfilesModal()"><span>🌐</span><span><b>ตั้งค่าเว็บต้นฉบับ</b><small>โปรไฟล์เว็บ Jina Key proxy สำรอง AI ช่วยแยกเนื้อหา</small></span></button>
+        </div>
       </div>
 
-      <div style="margin-top: 14px; flex-shrink: 0;">
+      <div class="settings-footer">
         <button class="btn btn-primary" style="width: 100%;" onclick="saveSettings()">บันทึกการตั้งค่า</button>
       </div>
     </div>
@@ -1121,6 +1110,7 @@
   <script src="js/storylog.js"></script>
   <script src="js/shelf.js"></script>
   <script src="js/updates.js"></script>
+  <script src="js/home.js"></script>
   <script src="js/assistant.js"></script>
   <script src="js/reader.js"></script>
   <script src="js/bgm.js"></script>

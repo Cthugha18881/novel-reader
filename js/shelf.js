@@ -1,7 +1,12 @@
-// ==================== BOOKSHELF & BATCH ENGINE ====================
+// ==================== BOOKSHELF DATA & BATCH ENGINE ====================
+// หน้าตาชั้นหนังสืออยู่ใน home.js ไฟล์นี้เป็นงานแปลล่วงหน้า (คิวหลายเรื่อง) และรายการตอนของแต่ละเรื่อง
 let isBatchRunning = false;
-let isBatchComplete = false;
 let bookSortModes = {};
+
+// คิวแปลล่วงหน้า: แปลทีละเรื่อง เรื่องที่กดทีหลังรอคิว (ยืนยันค่าใช้จ่ายตอนกดแล้ว จึงเริ่มต่อได้เลย)
+let batchQueue = [];          // [{ bookId, count, title }]
+let batchCurrent = null;      // { bookId, count, done, desc, title }
+const batchResults = {};      // bookId -> { kind: 'done' | 'stopped' | 'error' | 'locked', desc, count, done }
 
 function getGenreThaiName(g) {
   switch(g) {
@@ -23,19 +28,71 @@ function getGenreThaiName(g) {
   }
 }
 
-function handleBatchActionClick() {
-  if (isBatchComplete) {
-    document.getElementById('batch-progress-box').style.display = 'none';
-  } else {
-    cancelBatchTranslate();
+/** หยุดเรื่องที่กำลังแปล หรือเอาเรื่องที่รอคิวออก (ไม่ระบุ = หยุดเรื่องที่กำลังแปล) */
+function cancelBatchTranslate(bookId) {
+  if (bookId && batchQueue.some(j => j.bookId === bookId)) {
+    batchQueue = batchQueue.filter(j => j.bookId !== bookId);
+    renderBatchProgress(bookId);
+    batchQueue.forEach(j => renderBatchProgress(j.bookId));
+    return;
+  }
+  if (batchCurrent && (!bookId || batchCurrent.bookId === bookId)) {
+    abortTask('batch');
+    batchCurrent.desc = 'กำลังสั่งหยุด...';
+    renderBatchProgress(batchCurrent.bookId);
   }
 }
 
-function cancelBatchTranslate() {
-  if (isBatchRunning) {
-    abortTask('batch');
-    document.getElementById('batch-progress-desc').innerText = "กำลังสั่งหยุด...";
+function dismissBatchResult(bookId) {
+  delete batchResults[bookId];
+  renderBatchProgress(bookId);
+}
+
+function setBatchProgress(patch) {
+  if (!batchCurrent) return;
+  Object.assign(batchCurrent, patch);
+  renderBatchProgress(batchCurrent.bookId);
+}
+
+/** สถานะแปลล่วงหน้าของเรื่องนี้ (ใช้วาดแถบบนการ์ดและหน้ารายละเอียด) */
+function getBatchStatus(bookId) {
+  if (batchCurrent?.bookId === bookId) return { kind: 'running', ...batchCurrent };
+  const qi = batchQueue.findIndex(j => j.bookId === bookId);
+  if (qi >= 0) return { kind: 'queued', position: qi + 1, ...batchQueue[qi] };
+  if (batchResults[bookId]) return { ...batchResults[bookId] };
+  return null;
+}
+
+function batchProgressHtml(bookId, { compact = false } = {}) {
+  const s = getBatchStatus(bookId);
+  if (!s) return '';
+  const id = jsArg(bookId);
+  const desc = s.desc ? `<div class="bp-desc">${escapeHtml(compact ? s.desc.split('\n')[0] : s.desc)}</div>` : '';
+  if (s.kind === 'running') {
+    const pct = s.count ? Math.round(100 * s.done / s.count) : 0;
+    return `<div class="batch-progress running">
+      <div class="bp-top"><b>⚡ กำลังแปล ${s.done}/${s.count} ตอน</b><button class="btn bp-btn" onclick="event.stopPropagation(); cancelBatchTranslate(${id})">หยุด</button></div>
+      <div class="bp-bar" role="progressbar" aria-label="แปลล่วงหน้า" aria-valuemin="0" aria-valuemax="${s.count}" aria-valuenow="${s.done}"><span style="width: ${Math.max(4, pct)}%"></span></div>
+      ${desc}</div>`;
   }
+  if (s.kind === 'queued') {
+    return `<div class="batch-progress queued">
+      <div class="bp-top"><b>⏳ รอคิวแปล ${s.count} ตอน${s.position > 1 ? ` (คิวที่ ${s.position})` : ''}</b><button class="btn bp-btn" onclick="event.stopPropagation(); cancelBatchTranslate(${id})">ยกเลิก</button></div>
+      <div class="bp-bar"><span style="width: 0"></span></div></div>`;
+  }
+  const head = { done: `✓ แปลเสร็จ ${s.done} ตอน`, stopped: `หยุดแล้ว (แปลไป ${s.done} ตอน)`, locked: '🔒 หยุดที่ตอนที่ต้องซื้อ', error: `⚠️ หยุดกลางคัน (แปลไป ${s.done} ตอน)` }[s.kind] || '';
+  return `<div class="batch-progress ${s.kind}">
+    <div class="bp-top"><b>${head}</b><button class="btn bp-btn" onclick="event.stopPropagation(); dismissBatchResult(${id})" aria-label="ปิดข้อความนี้">✕</button></div>
+    ${desc}</div>`;
+}
+
+/** วาดแถบความคืบหน้าใหม่ทุกที่ที่แสดงเรื่องนี้ (การ์ดบนหน้าแรก + หน้ารายละเอียด) */
+function renderBatchProgress(bookId) {
+  document.querySelectorAll('[data-batch-for]').forEach(el => {
+    if (el.dataset.batchFor !== bookId) return;
+    el.innerHTML = batchProgressHtml(bookId, { compact: el.dataset.compact === '1' });
+    el.closest('.home-card')?.classList.toggle('is-batching', !!getBatchStatus(bookId) && ['running', 'queued'].includes(getBatchStatus(bookId).kind));
+  });
 }
 
 // ---------- Token estimate ----------
@@ -91,59 +148,109 @@ async function estimateBatchTokens(bookId, bookChaps, lang) {
   return avg ? { ...est, input: avg.input, output: avg.output, fromHistory: avg.chapters } : est;
 }
 
-async function startBatchTranslateForBook(bookId) {
-  if (isBatchRunning) return appAlert("กำลังมีกระบวนการแปลล่วงหน้าทำงานอยู่ กรุณารอหรือกดยกเลิกก่อน");
+/** ปุ่ม "⚡ แปลล่วงหน้า": เลือกจำนวนตอนก่อน */
+async function chooseBatchCount(bookId) {
+  const status = getBatchStatus(bookId);
+  if (status && ['running', 'queued'].includes(status.kind)) return appAlert(status.kind === 'running' ? 'เรื่องนี้กำลังแปลล่วงหน้าอยู่' : 'เรื่องนี้อยู่ในคิวแปลแล้ว');
+  const book = (await dbGetAllBooks()).find(b => b.bookId === bookId);
+  const pending = (await dbGetChaptersByBook(bookId)).filter(isPendingChapter).length;
+  const pick = await appChoose(
+    `แปลต่อจากตอนล่าสุดที่มีในเครื่อง${pending ? ` (มีตอนที่รอแปล ${pending} ตอน จะแปลก่อน)` : ''}\nใช้โควตา AI · จะบอกค่าใช้จ่ายโดยประมาณก่อนเริ่ม`,
+    [
+      { label: '3 ตอน', value: 3 }, { label: '5 ตอน', value: 5, variant: 'primary' }, { label: '10 ตอน', value: 10 },
+      { label: '20 ตอน', value: 20 }, { label: 'กำหนดเอง…', value: 'custom' }
+    ],
+    { title: `แปลล่วงหน้า: ${book?.title || 'นิยาย'}` });
+  if (pick === null) return;
+  let count = pick;
+  if (pick === 'custom') {
+    const raw = await appPrompt('จำนวนตอน (1-50)', '5', { title: 'แปลล่วงหน้ากี่ตอน', confirmLabel: 'ต่อไป' });
+    if (raw === null) return;
+    count = parseInt(raw, 10);
+  }
+  await startBatchTranslateForBook(bookId, count);
+}
 
-  const input = document.getElementById(`batch-input-${bookId}`);
-  const count = parseInt(input.value || "5", 10);
-  if (isNaN(count) || count < 1 || count > 50) return appAlert("กรุณาระบุจำนวนบทระหว่าง 1 ถึง 50");
+async function startBatchTranslateForBook(bookId, count) {
+  if (!Number.isInteger(count) || count < 1 || count > 50) return appAlert("กรุณาระบุจำนวนตอนระหว่าง 1 ถึง 50");
+  if (batchCurrent?.bookId === bookId || batchQueue.some(j => j.bookId === bookId)) return appAlert('เรื่องนี้กำลังแปลล่วงหน้าหรืออยู่ในคิวแล้ว');
+  if (!hasActiveApiKey()) return appAlert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
 
-  let bookChaps = await dbGetChaptersByBook(bookId);
-  bookChaps.sort((a, b) => a.order - b.order);
-  if (bookChaps.length === 0) return appAlert("ไม่พบบทตั้งต้นของนิยายเรื่องนี้");
+  const bookChaps = (await dbGetChaptersByBook(bookId)).sort((a, b) => a.order - b.order);
+  if (bookChaps.length === 0) return appAlert("ไม่พบตอนตั้งต้นของนิยายเรื่องนี้");
 
-  let lastChap = bookChaps[bookChaps.length - 1];
-  let targetUrl = lastChap.nextUrl;
-  // ตอนที่รอแปล (จากการวางข้อความ/ไฟล์ หรือสร้างจากสารบัญ) แปลก่อนตามลำดับ แล้วค่อยไล่ตอนถัดไปจาก URL
-  const pendingQueue = bookChaps.filter(isPendingChapter);
-
-  if (!targetUrl && pendingQueue.length === 0) {
+  const lastChap = bookChaps[bookChaps.length - 1];
+  if (!lastChap.nextUrl && !bookChaps.some(isPendingChapter)) {
     const inputUrl = await appPrompt(`ไม่พบลิงก์ตอนถัดไปของ "${lastChap.title}" วางลิงก์ของตอนถัดไปเพื่อแปลต่อ`, '', { title: 'วาง URL ตอนถัดไป', confirmLabel: 'ใช้ลิงก์นี้', placeholder: 'https://...' });
     if (!inputUrl || !inputUrl.trim()) return;
-    targetUrl = inputUrl.trim();
-    lastChap.nextUrl = targetUrl;
+    lastChap.nextUrl = inputUrl.trim();
     await dbSaveChapter(lastChap);
   }
 
-  // context ของเรื่องที่แปลล่วงหน้า แยกจากเรื่องที่ผู้ใช้กำลังอ่านอยู่โดยสมบูรณ์
-  const knownBooks = await dbGetAllBooks();
-  const ctx = makeBookContext(knownBooks.find(b => b.bookId === bookId) || { bookId });
+  const book = (await dbGetAllBooks()).find(b => b.bookId === bookId) || { bookId };
+  if (count >= 3 && !(await appConfirm(formatBatchEstimate(await estimateBatchTokens(bookId, bookChaps, getBookSourceLang(book)), count), { title: `แปลล่วงหน้า ${count} ตอน`, confirmLabel: `เริ่มแปล ${count} ตอน` }))) return;
 
-  if (count >= 3 && !(await appConfirm(formatBatchEstimate(await estimateBatchTokens(bookId, bookChaps, ctx.sourceLang), count), { title: `แปลล่วงหน้า ${count} ตอน`, confirmLabel: `เริ่มแปล ${count} ตอน` }))) return;
+  delete batchResults[bookId];
+  const job = { bookId, count, title: book.title || 'นิยาย' };
+  if (batchCurrent) {
+    batchQueue.push(job);
+    renderBatchProgress(bookId);
+    showGlobalToast(`"${job.title}" เข้าคิวแล้ว จะเริ่มแปลเมื่อเรื่องก่อนหน้าเสร็จ`);
+    setTimeout(hideGlobalToast, 2500);
+    return;
+  }
+  runBatchQueue(job);
+}
+
+/** แปลงานแรก แล้วทำงานในคิวต่อจนหมด */
+async function runBatchQueue(firstJob) {
+  let job = firstJob;
+  while (job) {
+    await runBatchJob(job);
+    job = batchQueue.shift() || null;
+  }
+  checkAndRefreshBottomStatus();
+  // แปลเสร็จหลายตอน: สำรองลงโฟลเดอร์อัตโนมัติ (ถ้าตั้งไว้และได้รับอนุญาตแล้ว)
+  maybeRunAutoBackup().then(() => { renderSafetyBanner(); renderBookshelfBackupNote(); });
+}
+
+async function runBatchJob({ bookId, count }) {
+  const finish = (kind, desc, done) => {
+    batchResults[bookId] = { kind, desc, count, done };
+  };
+
+  const knownBooks = await dbGetAllBooks();
+  const bookRecord = knownBooks.find(b => b.bookId === bookId);
+  if (!bookRecord) return; // ลบเรื่องไปแล้วระหว่างรอคิว
+
+  let bookChaps = (await dbGetChaptersByBook(bookId)).sort((a, b) => a.order - b.order);
+  let lastChap = bookChaps[bookChaps.length - 1];
+  let targetUrl = lastChap?.nextUrl;
+  // ตอนที่รอแปล (จากการวางข้อความ/ไฟล์ หรือสร้างจากสารบัญ) แปลก่อนตามลำดับ แล้วค่อยไล่ตอนถัดไปจาก URL
+  const pendingQueue = bookChaps.filter(isPendingChapter);
+
+  // context ของเรื่องที่แปลล่วงหน้า แยกจากเรื่องที่ผู้ใช้กำลังอ่านอยู่โดยสมบูรณ์
+  const ctx = makeBookContext(bookRecord);
 
   // แปลล่วงหน้าเรื่องเดียวกันได้ทีละแท็บ
   const releaseBatch = await acquireLock(lockNames.batch(bookId), { ifAvailable: true });
-  if (!releaseBatch) return appAlert('อีกแท็บกำลังแปลล่วงหน้าเรื่องนี้อยู่ กรุณารอให้เสร็จ หรือกดหยุดในแท็บนั้นก่อน');
+  if (!releaseBatch) {
+    finish('error', 'อีกแท็บกำลังแปลล่วงหน้าเรื่องนี้อยู่ กรุณารอให้เสร็จ หรือกดหยุดในแท็บนั้นก่อน', 0);
+    renderBatchProgress(bookId);
+    return;
+  }
 
   const controller = beginTask('batch');
   const signal = controller.signal;
   isBatchRunning = true;
-  isBatchComplete = false;
-
-  const progressBox = document.getElementById('batch-progress-box');
-  const progressTitle = document.getElementById('batch-progress-title');
-  const progressDesc = document.getElementById('batch-progress-desc');
-  const actionBtn = document.getElementById('batch-action-btn');
-
-  progressBox.className = 'progress-box';
-  progressBox.style.display = 'block';
-  progressTitle.innerText = "กำลังแปลล่วงหน้า...";
-  actionBtn.className = 'btn btn-danger';
-  actionBtn.innerText = "หยุดแปล";
+  batchCurrent = { bookId, count, done: 0, desc: 'เตรียมคิว...', title: bookRecord.title };
+  renderBatchProgress(bookId);
 
   let successCount = 0;
   let finishedAll = false;
   let stoppedByLock = false;
+  let stopDesc = '';
+  const progress = (desc) => setBatchProgress({ desc, done: successCount });
 
   try {
     for (let i = 1; i <= count; i++) {
@@ -151,11 +258,11 @@ async function startBatchTranslateForBook(bookId) {
 
       if (pendingQueue.length) {
         const pendingChap = pendingQueue.shift();
-        progressDesc.innerText = `กำลังแปลตอนที่รอแปล ${i}/${count}: ${pendingChap.title}`;
+        progress(`กำลังแปลตอนที่รอแปล ${i}/${count}: ${pendingChap.title}`);
         try {
           await translatePendingChapterCore(pendingChap, ctx, {
             signal,
-            onStatus: (msg) => { progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 60)}`; }
+            onStatus: (msg) => progress(`[${i}/${count}] ${msg.substring(0, 60)}`)
           });
           successCount++;
           if (i === count) finishedAll = true;
@@ -164,14 +271,14 @@ async function startBatchTranslateForBook(bookId) {
           if (isAbortError(err)) break;
           // อีกแท็บกำลังแปลตอนนี้อยู่: ข้ามไปตอนถัดไป
           if (err instanceof LockBusyError) continue;
-          progressDesc.innerText = `หยุดที่ "${pendingChap.title}": ${err.message}`;
+          stopDesc = `หยุดที่ "${pendingChap.title}": ${err.message}`;
           break;
         }
         continue;
       }
 
       if (!targetUrl) {
-        progressDesc.innerText = `แปลครบ ${successCount} ตอนแล้ว แต่ยังไม่มี URL ของตอนถัดไป กรุณากด “แก้ URL ถัดไป”`;
+        stopDesc = `แปลครบ ${successCount} ตอนแล้ว แต่ยังไม่มี URL ของตอนถัดไป กรุณากด "แก้ URL ถัดไป"`;
         break;
       }
 
@@ -195,7 +302,7 @@ async function startBatchTranslateForBook(bookId) {
         }
 
         const urlSegment = targetUrl.substring(targetUrl.lastIndexOf('/'));
-        progressDesc.innerText = `กำลังดึงและแปลตอนที่ ${i}/${count}... (URL: ${urlSegment})`;
+        progress(`กำลังดึงและแปลตอนที่ ${i}/${count}... (${urlSegment})`);
 
         try {
           const { text, nextUrl, rawChapTitle, rawBookTitle, author, lockInfo } = await scrapePage(targetUrl, signal, { bookId });
@@ -207,7 +314,7 @@ async function startBatchTranslateForBook(bookId) {
             rawBookTitle,
             lockInfo,
             prevChapter: findPrevStoryChapter(existingAll),
-            onStatus: (msg) => { progressDesc.innerText = `[${i}/${count}] ${msg.substring(0, 60)}`; }
+            onStatus: (msg) => progress(`[${i}/${count}] ${msg.substring(0, 60)}`)
           });
 
           const currentAll = await dbGetChaptersByBook(bookId);
@@ -265,22 +372,22 @@ async function startBatchTranslateForBook(bookId) {
 
           // ตอนที่ต้องซื้อ/อ่านต่อในแอพ: ตอนถัดจากนี้มักล็อกต่อกัน หยุดไว้ก่อน ไม่ดึงหน้าเว็บต่อเปล่าๆ
           if (result.lockInfo) {
-            progressDesc.innerText = `หยุดที่ "${chapTitle}": ${describeLockInfo(result.lockInfo).short}\n(บันทึกตอนนี้ไว้แล้วโดยไม่แปลตัวอย่าง ดูรายละเอียดได้ในหน้าอ่าน)`;
+            stopDesc = `หยุดที่ "${chapTitle}": ${describeLockInfo(result.lockInfo).short}\n(บันทึกตอนนี้ไว้แล้วโดยไม่แปลตัวอย่าง ดูรายละเอียดได้ในหน้าอ่าน)`;
             stoppedByLock = true;
             break;
           }
           if (i === count) finishedAll = true;
 
           if (i < count) {
-            progressDesc.innerText = `บันทึก "${chapTitle}" สำเร็จ พักระบบ 2.5 วิก่อนเริ่มบทถัดไป...`;
+            progress(`บันทึก "${chapTitle}" แล้ว พัก 2.5 วินาทีก่อนตอนถัดไป...`);
             await sleepAbortable(2500, signal);
           }
         } catch (err) {
           if (isAbortError(err)) break;
           // ปัญหาจาก AI/เพดาน/การตั้งค่า ไม่เกี่ยวกับ URL จึงไม่ต้องแนะนำให้แก้ลิงก์
           const urlProblem = isMissingPageError(err) || !(err instanceof LLMError);
-          progressDesc.innerText = `หยุดที่ตอนที่ ${i}: ${isMissingPageError(err) ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}` +
-            (urlProblem ? `\n(กรุณากดปุ่ม 'แก้ URL ถัดไป' เพื่อใส่ลิงก์ใหม่)` : '');
+          stopDesc = `หยุดที่ตอนที่ ${i}: ${isMissingPageError(err) ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}` +
+            (urlProblem ? `\n(กดปุ่ม "แก้ URL ถัดไป" เพื่อใส่ลิงก์ใหม่)` : '');
           break;
         }
       } finally {
@@ -291,180 +398,68 @@ async function startBatchTranslateForBook(bookId) {
     releaseBatch();
     endTask('batch', controller);
     isBatchRunning = false;
-    isBatchComplete = true;
+    batchCurrent = null;
   }
 
-  actionBtn.className = 'btn btn-secondary';
-  actionBtn.innerText = "ปิดการแจ้งเตือน";
-
-  if (stoppedByLock) {
-    progressTitle.innerText = '🔒 หยุดที่ตอนที่ต้องซื้อ / อ่านต่อในแอพ';
-  } else if (signal.aborted) {
-    progressDesc.innerText = `หยุดการแปลตามคำสั่งแล้ว (แปลและบันทึกเสร็จสิ้น ${successCount} ตอน)`;
-  } else if (finishedAll) {
-    progressBox.className = 'progress-box success';
-    progressTitle.innerText = "✓ แปลล่วงหน้าเสร็จสมบูรณ์!";
-    progressDesc.innerText = `บันทึกเนื้อหาเรียบร้อยแล้วทั้งหมด ${successCount} ตอน พร้อมให้อ่านแบบออฟไลน์`;
-  }
-
-  openBookshelfModal();
-  checkAndRefreshBottomStatus();
-  // แปลเสร็จหลายตอน: สำรองลงโฟลเดอร์อัตโนมัติ (ถ้าตั้งไว้และได้รับอนุญาตแล้ว)
-  maybeRunAutoBackup().then(() => { renderSafetyBanner(); renderBookshelfBackupNote(); });
+  if (stoppedByLock) finish('locked', stopDesc, successCount);
+  else if (signal.aborted) finish('stopped', `หยุดตามคำสั่งแล้ว (บันทึกไว้ ${successCount} ตอน)`, successCount);
+  else if (finishedAll) finish('done', `บันทึกครบ ${successCount} ตอน อ่านแบบออฟไลน์ได้`, successCount);
+  else finish('error', stopDesc || 'หยุดก่อนครบจำนวนที่ตั้งไว้', successCount);
+  renderBatchProgress(bookId);
+  refreshShelfViewOnly(bookId);
 }
+
+// ---------- รายการตอนของเรื่อง (หน้ารายละเอียดในชั้นหนังสือ) ----------
+const SHELF_SORT_LABELS = { time_desc: 'ตอนล่าสุดก่อน', time_asc: 'ตอนแรกก่อน', title_asc: 'ชื่อ ก-ฮ', title_desc: 'ชื่อ ฮ-ก' };
 
 function renderChaptersHtml(bookId, bookChaps, readingChapId) {
   if (!bookChaps || bookChaps.length === 0) {
-    return '<div style="padding:8px 14px; font-size:11px; opacity:0.5;">ไม่มีตอน</div>';
+    return '<div class="shelf-empty">ยังไม่มีตอนในเครื่อง</div>';
   }
+  const numberOf = computeChapterNumbers([...bookChaps].sort((a, b) => (a.order || 0) - (b.order || 0)));
+  const activeId = bookId === currentBookId && chapters[currentChapterIndex] ? chapters[currentChapterIndex].id : readingChapId;
 
-  let chapsHtml = '';
-  bookChaps.forEach((ch) => {
-    let isActive = false;
-    if (bookId === currentBookId && chapters[currentChapterIndex]) {
-      isActive = (ch.id === chapters[currentChapterIndex].id);
-    } else if (readingChapId) {
-      isActive = (ch.id === readingChapId);
-    }
-
-    const activeClass = isActive ? 'active' : '';
+  return bookChaps.map((ch) => {
+    const isActive = ch.id === activeId;
     const chapterType = ch.chapterType || 'story';
-    const typeIcon = (CHAPTER_TYPE_LABELS[chapterType] || CHAPTER_TYPE_LABELS.story).split(' ')[0];
-    const typeOptions = CHAPTER_TYPES.map(t => `<option value="${t}" ${t === chapterType ? 'selected' : ''}>${CHAPTER_TYPE_LABELS[t]}</option>`).join('');
-
-    chapsHtml += `
-      <div class="chap-subitem ${activeClass}${chapterType !== 'story' ? ' chap-nonstory' : ''}">
-          <input type="checkbox" class="chap-chk" data-book-id="${escapeHtml(bookId)}" value="${escapeHtml(ch.id)}" onchange="updateSelectedDeleteBtn(${jsArg(bookId)})">
-        <div class="chap-name-btn" onclick="jumpToChapterById(${jsArg(bookId)}, ${jsArg(ch.id)})" title="${escapeHtml(CHAPTER_TYPE_LABELS[chapterType] || '')}">
-          ${typeIcon} ${escapeHtml(ch.title)}
-        </div>
-        <div style="display:flex; gap:6px; align-items:center;">
-          <select class="chap-type-select" onchange="setChapterType(${jsArg(bookId)}, ${jsArg(ch.id)}, this.value)" title="ประเภทตอน (มีผลกับการต่อบริบทและการส่งออก)">${typeOptions}</select>
-          <button class="chap-action-btn" style="background:rgba(37,99,235,0.1); color: var(--accent-text);" onclick="jumpToChapterById(${jsArg(bookId)}, ${jsArg(ch.id)})">อ่าน</button>
-          <button class="chap-action-btn" style="background:rgba(16,185,129,0.1); color:#059669;" onclick="retranslateSpecificChapter(event, ${jsArg(bookId)}, ${jsArg(ch.id)})" title="แปลบทนี้ใหม่ตามคลังคำศัพท์ล่าสุด">🔄 แปลใหม่</button>
-        </div>
-      </div>
-    `;
-  });
-  return chapsHtml;
+    const typeLabel = CHAPTER_TYPE_LABELS[chapterType] || CHAPTER_TYPE_LABELS.story;
+    const typeIcon = chapterType !== 'story' ? `<span class="chap-type-icon" title="${escapeHtml(typeLabel)}">${escapeHtml(typeLabel.split(' ')[0])}</span>` : '';
+    const label = numberOf.get(ch.id);
+    const status = isPendingChapter(ch) ? '<span class="chap-status pending">รอแปล</span>' : (isActive ? '<span class="chap-status reading">อ่านอยู่</span>' : '');
+    return `
+      <div class="chap-subitem${isActive ? ' active' : ''}${chapterType !== 'story' ? ' chap-nonstory' : ''}">
+        <input type="checkbox" class="chap-chk" data-book-id="${escapeHtml(bookId)}" value="${escapeHtml(ch.id)}" onchange="updateSelectedDeleteBtn(${jsArg(bookId)})" aria-label="เลือก ${escapeHtml(ch.title)}">
+        <button class="chap-name-btn" onclick="jumpToChapterById(${jsArg(bookId)}, ${jsArg(ch.id)})">
+          ${label ? `<span class="chap-num">#${escapeHtml(label)}</span>` : ''}${typeIcon}<span class="chap-title-text">${escapeHtml(ch.title)}</span>
+        </button>
+        ${status}
+        <button class="btn chap-more" onclick="openChapterRowMenu(this, ${jsArg(bookId)}, ${jsArg(ch.id)})" title="เมนูของตอนนี้">⋯</button>
+      </div>`;
+  }).join('');
 }
 
-async function openBookshelfModal() {
-  const listContainer = document.getElementById('bookshelf-list');
-  if (!listContainer) return;
-  listContainer.innerHTML = '<div style="text-align:center; padding:15px; opacity:0.6;">กำลังเปิดคลังหนังสือ...</div>';
-  openModal('bookshelf-modal');
-  renderBookshelfBackupNote();
-
-  const books = await dbGetAllBooks();
-  books.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-
-  if (books.length === 0) {
-    listContainer.innerHTML = '<div style="text-align:center; padding:20px; opacity:0.6; font-size:13px;">ยังไม่มีนิยายในชั้นหนังสือ วางลิงก์เพื่อเริ่มอ่านตอนแรกได้เลย</div>';
-    return;
-  }
-
-  listContainer.innerHTML = "";
-  for (const b of books) {
-    const itemBox = document.createElement('div');
-    itemBox.className = 'book-item-container';
-
-    let bookChaps = await dbGetChaptersByBook(b.bookId);
-    if (!bookSortModes[b.bookId]) bookSortModes[b.bookId] = 'time_desc';
-    applySortToChapters(bookChaps, bookSortModes[b.bookId]);
-
-    const currentSort = bookSortModes[b.bookId];
-    const timeBtnLabel = currentSort === 'time_desc' ? 'ล่าสุด ↓' : (currentSort === 'time_asc' ? 'เก่าสุด ↑' : 'เวลา');
-    const titleBtnLabel = currentSort === 'title_asc' ? 'ชื่อ ก-ฮ ↓' : (currentSort === 'title_desc' ? 'ชื่อ ฮ-ก ↑' : 'ชื่อ');
-    const genreBadge = `${getGenreThaiName(b.genre || 'xianxia')} · ${getLangName(getBookSourceLang(b))}`;
-
-    itemBox.innerHTML = `
-      <div class="book-card-header">
-        <div class="book-info" onclick="toggleBookAccordion(${jsArg(b.bookId)})">
-          <div class="book-title">
-          📚 ${escapeHtml(b.title || 'นิยายเรื่องใหม่')}
-            <span class="btn" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; background: rgba(37,99,235,0.1); color: var(--accent-text);" onclick="openGenrePickerModal(event, ${jsArg(b.bookId)})" title="คลิกเพื่อเลือกแนวเรื่องจากรายการ">
-            🏷️ ${escapeHtml(genreBadge)} ✎
-            </span>
-            <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนย่อย)</span>
-          </div>
-          <div class="book-meta" id="shelf-meta-${escapeHtml(b.bookId)}">อ่านค้างไว้: <b>${escapeHtml(b.lastChapterTitle || 'ตอนที่ 1')}</b> | รวม ${bookChaps.length} ตอนที่บันทึกไว้</div>
-        </div>
-        <button class="btn btn-danger" style="padding:4px 8px; font-size:11px;" onclick="removeBookFromShelf(event, ${jsArg(b.bookId)})">ลบทั้งเรื่อง</button>
-      </div>
-      <div class="batch-bar">
-        <span>แปลล่วงหน้า</span>
-        <input type="number" id="batch-input-${escapeHtml(b.bookId)}" class="form-input" style="width: 56px; padding: 3px 6px; font-size: 12px;" min="1" max="50" value="5" aria-label="จำนวนตอนที่จะแปลล่วงหน้า">
-        <span>บท</span>
-        <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="startBatchTranslateForBook(${jsArg(b.bookId)})">
-          ⚡ เริ่มแปลล่วงหน้า
-        </button>
-        <button class="btn" style="padding: 3px 6px; font-size: 10px; margin-left: auto;" onclick="openTocModal(event, ${jsArg(b.bookId)})" title="ดึงสารบัญของเรื่อง เพื่อหาตอนถัดไปให้แม่นยำ เรียงตอน และเติมตอนที่ขาด">
-          📑 สารบัญ
-        </button>
-        <button class="btn" style="padding: 3px 6px; font-size: 10px;" onclick="fixBookNextUrl(${jsArg(b.bookId)})" title="แก้ไข URL สำหรับบทถัดไป">
-          🔗 แก้ URL ถัดไป
-        </button>
-      </div>
-      <div class="batch-bar" style="padding-top: 6px; padding-bottom: 6px;">
-        <span style="font-size: 11px; opacity: 0.75;">ส่งออกทั้งเรื่อง (${bookChaps.length} ตอน):</span>
-        <button class="btn" style="padding: 2px 8px; font-size: 10px;" onclick="exportBookTxt(${jsArg(b.bookId)})" title="ไฟล์ข้อความ .txt รวมทุกตอนเรียงตามลำดับ">📄 TXT</button>
-        <button class="btn" style="padding: 2px 8px; font-size: 10px;" onclick="exportBookEpub(${jsArg(b.bookId)})" title="ไฟล์ e-book .epub เปิดได้ในแอพอ่านหนังสือทั่วไป มีสารบัญ">📘 EPUB</button>
-      </div>
-      <div class="batch-bar" style="padding-top: 6px; padding-bottom: 6px; flex-wrap: wrap;">
-        <button class="btn" style="padding: 2px 8px; font-size: 10px;" onclick="checkNewChaptersForBook(${jsArg(b.bookId)})" title="เช็กว่าเว็บต้นฉบับมีตอนใหม่หรือยัง (ไม่ใช้โควตา AI)">🔔 เช็กตอนใหม่</button>
-        <button class="btn" style="padding: 2px 8px; font-size: 10px;" onclick="openQualityReport(${jsArg(b.bookId)})" title="รวมจุดที่ควรตรวจของเรื่องนี้: ย่อหน้าน่าสงสัย คำศัพท์ที่ยังไม่ยืนยัน ตอนที่แปลด้วยคำสั่งรุ่นเก่า (ไม่ใช้โควตา AI)">📋 รายงานคุณภาพ</button>
-        <span id="newchap-${escapeHtml(b.bookId)}" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">${newChapterBadgeHtml(b.bookId)}</span>
-      </div>
-
-      <div class="shelf-sub-toolbar" id="shelf-sub-bar-${b.bookId}" style="display: none;">
-        <div style="display: flex; gap: 4px; align-items: center;">
-          <span>เรียง:</span>
-          <button class="btn" id="sort-time-btn-${escapeHtml(b.bookId)}" style="padding: 2px 7px; font-size: 10px;" onclick="toggleSortMode(event, ${jsArg(b.bookId)}, 'time')">
-            ${timeBtnLabel}
-          </button>
-          <button class="btn" id="sort-title-btn-${escapeHtml(b.bookId)}" style="padding: 2px 7px; font-size: 10px;" onclick="toggleSortMode(event, ${jsArg(b.bookId)}, 'title')">
-            ${titleBtnLabel}
-          </button>
-        </div>
-        <div style="display: flex; gap: 6px; align-items: center;">
-          <button class="btn" style="padding: 2px 6px; font-size: 10px;" onclick="toggleSelectAllChaps(${jsArg(b.bookId)})">เลือกทั้งหมด</button>
-          <button class="btn" id="move-selected-btn-${escapeHtml(b.bookId)}" style="padding: 2px 6px; font-size: 10px; display: none;" onclick="openMoveChaptersModal(${jsArg(b.bookId)})" title="ย้ายตอนที่เลือกไปเรื่องอื่น หรือแยกออกเป็นเรื่องใหม่">↪ ย้ายไปเรื่องอื่น</button>
-          <button class="btn btn-danger" id="del-selected-btn-${escapeHtml(b.bookId)}" style="padding: 2px 6px; font-size: 10px; display: none;" onclick="deleteSelectedChapters(${jsArg(b.bookId)})">ลบที่เลือก</button>
-        </div>
-      </div>
-
-      <div class="book-chapters-list" id="shelf-chaps-${escapeHtml(b.bookId)}">
-        ${renderChaptersHtml(b.bookId, bookChaps, b.lastChapterId)}
-      </div>
-    `;
-    listContainer.appendChild(itemBox);
-  }
+async function openChapterRowMenu(anchor, bookId, chapId) {
+  const chap = (await dbGetChaptersByBook(bookId)).find(c => c.id === chapId);
+  if (!chap) return;
+  openActionMenu(anchor, [
+    { icon: '📖', label: 'อ่านตอนนี้', onSelect: () => jumpToChapterById(bookId, chapId) },
+    { icon: '🔄', label: isPendingChapter(chap) ? 'แปลตอนนี้' : 'แปลตอนนี้ใหม่', hint: 'ใช้โควตา AI · ถามก่อนเริ่ม', onSelect: () => retranslateSpecificChapterDirect(chapId) },
+    { icon: '🏷️', label: 'เปลี่ยนประเภทตอน', hint: CHAPTER_TYPE_LABELS[chap.chapterType || 'story'], onSelect: () => chooseChapterType(bookId, chap) },
+    { icon: '🕘', label: 'ประวัติคำแปล', hidden: !chap.hasVersions, onSelect: () => openVersionHistory(chapId) }
+  ], { title: chap.title });
 }
 
-async function toggleSortMode(e, bookId, type) {
-  e.stopPropagation();
-  let currentMode = bookSortModes[bookId] || 'time_desc';
+async function chooseChapterType(bookId, chap) {
+  const type = await appChoose('ประเภทตอนมีผลกับการต่อบริบทให้ AI และการส่งออก TXT / EPUB',
+    CHAPTER_TYPES.map(t => ({ label: CHAPTER_TYPE_LABELS[t], value: t, variant: t === (chap.chapterType || 'story') ? 'primary' : '' })),
+    { title: `ประเภทของ "${chap.title}"` });
+  if (type) await setChapterType(bookId, chap.id, type);
+}
 
-  if (type === 'time') bookSortModes[bookId] = (currentMode === 'time_desc') ? 'time_asc' : 'time_desc';
-  else if (type === 'title') bookSortModes[bookId] = (currentMode === 'title_asc') ? 'title_desc' : 'title_asc';
-
-  const currentSort = bookSortModes[bookId];
-  const timeBtn = document.getElementById(`sort-time-btn-${bookId}`);
-  const titleBtn = document.getElementById(`sort-title-btn-${bookId}`);
-
-  if (timeBtn) timeBtn.innerText = currentSort === 'time_desc' ? 'ล่าสุด ↓' : (currentSort === 'time_asc' ? 'เก่าสุด ↑' : 'เวลา');
-  if (titleBtn) titleBtn.innerText = currentSort === 'title_asc' ? 'ชื่อ ก-ฮ ↓' : (currentSort === 'title_desc' ? 'ชื่อ ฮ-ก ↑' : 'ชื่อ');
-
-  let bookChaps = await dbGetChaptersByBook(bookId);
-  applySortToChapters(bookChaps, currentSort);
-
-  const books = await dbGetAllBooks();
-  const b = books.find(x => x.bookId === bookId);
-
-  const listEl = document.getElementById(`shelf-chaps-${bookId}`);
-  if (listEl) listEl.innerHTML = renderChaptersHtml(bookId, bookChaps, b?.lastChapterId);
-  updateSelectedDeleteBtn(bookId);
+async function setShelfSort(bookId, mode) {
+  if (!SHELF_SORT_LABELS[mode]) return;
+  bookSortModes[bookId] = mode;
+  await refreshShelfViewOnly(bookId);
 }
 
 function applySortToChapters(chapsList, sortMode) {
@@ -474,29 +469,12 @@ function applySortToChapters(chapsList, sortMode) {
   else if (sortMode === 'title_desc') chapsList.sort((x, y) => y.title.localeCompare(x.title, 'th', { numeric: true }));
 }
 
-function toggleBookAccordion(bookId) {
-  const list = document.getElementById(`shelf-chaps-${bookId}`);
-  const bar = document.getElementById(`shelf-sub-bar-${bookId}`);
-  if (list && bar) {
-    const isShown = (list.style.display === 'block');
-    list.style.display = isShown ? 'none' : 'block';
-    bar.style.display = isShown ? 'none' : 'flex';
-  }
-}
-
 function updateSelectedDeleteBtn(bookId) {
   const chks = Array.from(document.querySelectorAll('.chap-chk:checked')).filter(c => c.dataset.bookId === bookId);
-  const delBtn = document.getElementById(`del-selected-btn-${bookId}`);
-  const moveBtn = document.getElementById(`move-selected-btn-${bookId}`);
-  if (delBtn) {
-    if (chks.length > 0) {
-      delBtn.style.display = 'inline-flex';
-      delBtn.innerText = `ลบที่เลือก (${chks.length})`;
-    } else {
-      delBtn.style.display = 'none';
-    }
-  }
-  if (moveBtn) moveBtn.style.display = chks.length > 0 ? 'inline-flex' : 'none';
+  const bar = document.getElementById(`shelf-select-bar-${bookId}`);
+  const countEl = document.getElementById(`shelf-select-count-${bookId}`);
+  if (bar) bar.hidden = chks.length === 0;
+  if (countEl) countEl.textContent = `เลือกไว้ ${chks.length} ตอน`;
 }
 
 function toggleSelectAllChaps(bookId) {
@@ -508,12 +486,12 @@ function toggleSelectAllChaps(bookId) {
 }
 
 async function retranslateSpecificChapter(e, bookId, chapId) {
-  e.stopPropagation();
+  e?.stopPropagation?.();
   await retranslateSpecificChapterDirect(chapId);
 }
 
 async function openGenrePickerModal(e, bookId) {
-  e.stopPropagation();
+  e?.stopPropagation?.();
   bookIdForGenreEdit = bookId;
   const books = await dbGetAllBooks();
   const b = books.find(x => x.bookId === bookId);
@@ -549,19 +527,9 @@ async function saveChosenBookGenre() {
   refreshShelfViewOnly(bookIdForGenreEdit);
 }
 
+/** ข้อมูลของเรื่องเปลี่ยน: วาดการ์ดบนหน้าแรก และหน้ารายละเอียด (ถ้าเปิดเรื่องนี้อยู่) ใหม่ */
 async function refreshShelfViewOnly(bookId) {
-  let liveChaps = await dbGetChaptersByBook(bookId);
-  applySortToChapters(liveChaps, bookSortModes[bookId] || 'time_desc');
-  const listEl = document.getElementById(`shelf-chaps-${bookId}`);
-  const metaEl = document.getElementById(`shelf-meta-${bookId}`);
-  const books = await dbGetAllBooks();
-  const targetBook = books.find(b => b.bookId === bookId);
-
-  if (listEl) listEl.innerHTML = renderChaptersHtml(bookId, liveChaps, targetBook?.lastChapterId);
-  if (metaEl && targetBook) {
-    metaEl.innerHTML = `อ่านค้างไว้: <b>${escapeHtml(targetBook.lastChapterTitle || 'ตอนที่ 1')}</b> | รวม ${liveChaps.length} ตอนที่บันทึกไว้`;
-  }
-  updateSelectedDeleteBtn(bookId);
+  if (typeof refreshHomeBook === 'function') await refreshHomeBook(bookId);
 }
 
 async function fixBookNextUrl(bookId) {
@@ -578,12 +546,17 @@ async function fixBookNextUrl(bookId) {
       nextUrlCalculated = lastChap.nextUrl;
       lastPrefetchError = '';
     }
-    appAlert("อัปเดต URL เรียบร้อยแล้ว ตอนนี้สามารถกด 'เริ่มแปลล่วงหน้า' ได้ทันที");
+    appAlert('อัปเดต URL เรียบร้อยแล้ว กด "⚡ แปลล่วงหน้า" เพื่อแปลต่อได้เลย');
     checkAndRefreshBottomStatus();
   }
 }
 
 async function jumpToChapterById(bookId, chapId) {
   await loadBookFromDB(bookId, chapId);
-  closeModal('bookshelf-modal');
+  if (typeof closeHome === 'function') closeHome();
+}
+
+/** เปิดชั้นหนังสือ (ชื่อเดิมที่หลายไฟล์เรียกใช้) */
+async function openBookshelfModal() {
+  return openHome();
 }

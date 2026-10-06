@@ -151,7 +151,7 @@ async function checkNewChaptersForBook(bookId) {
         const added = await queueNewChapters(bookId, result);
         renderNewChapterBadge(bookId);
         await refreshShelfViewOnly(bookId);
-        appAlert(`เพิ่มตอนที่รอแปล ${added} ตอนแล้ว กด "⚡ เริ่มแปลล่วงหน้า" เพื่อแปลต่อ${result.atLeast ? '\n(ตอนถัดจากนั้นจะหาต่อเองตอนแปล)' : ''}`);
+        appAlert(`เพิ่มตอนที่รอแปล ${added} ตอนแล้ว กด "⚡ แปลล่วงหน้า" เพื่อแปลต่อ${result.atLeast ? '\n(ตอนถัดจากนั้นจะหาต่อเองตอนแปล)' : ''}`);
       }
     } else {
       appAlert(describeNewChapterResult(result));
@@ -197,7 +197,7 @@ async function checkNewChaptersForAllBooks() {
     newChapterChecking = false;
     hideGlobalToast();
   }
-  appAlert(`เช็กตอนใหม่เสร็จแล้ว: มีตอนใหม่ ${found} เรื่อง${failed ? ` · เช็กไม่ได้ ${failed} เรื่อง` : ''}\nกด "เพิ่มเข้าคิว" บนการ์ดของเรื่องที่มีตอนใหม่ เพื่อเพิ่มเป็นตอนที่รอแปล`);
+  appAlert(`เช็กตอนใหม่เสร็จแล้ว: มีตอนใหม่ ${found} เรื่อง${failed ? ` · เช็กไม่ได้ ${failed} เรื่อง` : ''}\nเปิดเรื่องที่มีป้าย 🆕 บนปก แล้วกด "เพิ่มเข้าคิว" เพื่อเพิ่มเป็นตอนที่รอแปล`);
 }
 
 /** ปุ่ม "เพิ่มเข้าคิว" บนการ์ด: เช็กซ้ำอีกครั้ง (ได้ข้อมูลล่าสุด) แล้วเพิ่มเลย */
@@ -239,4 +239,6 @@ function newChapterBadgeHtml(bookId) {
 function renderNewChapterBadge(bookId) {
   const el = document.getElementById(`newchap-${bookId}`);
   if (el) el.innerHTML = newChapterBadgeHtml(bookId);
+  // ป้าย "ตอนใหม่" บนปกการ์ดในหน้าแรก
+  else if (typeof refreshHomeBook === 'function') refreshHomeBook(bookId);
 }

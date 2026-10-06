@@ -259,6 +259,21 @@ function dbGetBookData(bookId) {
   });
 }
 
+/** จำนวนตอนของเรื่อง (นับจาก index ไม่โหลดเนื้อหา ใช้กับการ์ดบนหน้าแรก) */
+function dbCountChaptersByBook(bookId) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    const req = db.transaction('chapters', 'readonly').objectStore('chapters').index('bookId').count(bookId);
+    req.onsuccess = () => resolve(req.result || 0);
+    req.onerror = () => reject(req.error || new Error('นับตอนไม่สำเร็จ'));
+  });
+}
+
+/** ภาพปกที่เก็บได้: data URL ของ jpeg/png/webp ไม่เกิน ~600KB (ไม่รับลิงก์ภายนอกหรือ SVG ที่ฝังสคริปต์ได้) */
+function isSafeCoverDataUrl(s) {
+  return typeof s === 'string' && s.length <= 600000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(s);
+}
+
 function dbSaveBookData(data) {
   return new Promise((resolve, reject) => {
     if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
@@ -589,6 +604,7 @@ function sanitizeBookDataRecord(raw) {
   if ('bible' in d && !isPlainRecord(d.bible)) delete d.bible;
   if (isPlainRecord(d.bible) && 'characters' in d.bible && !Array.isArray(d.bible.characters)) d.bible.characters = [];
   if ('toc' in d && !isPlainRecord(d.toc)) delete d.toc;
+  if ('cover' in d && !isSafeCoverDataUrl(d.cover)) delete d.cover;
   // บุ๊กมาร์ก/โน้ต: เก็บเฉพาะรายการที่รูปแบบถูก (ตอน + เลขย่อหน้า) ตัดข้อความที่ยาวเกิน
   if ('bookmarks' in d) {
     d.bookmarks = Array.isArray(d.bookmarks)

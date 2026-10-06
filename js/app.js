@@ -998,6 +998,7 @@ async function addFromSelectionBar() {
   const selected = selectedWordBuffer.trim();
   if (!selected) return appAlert('กรุณาเลือกข้อความก่อน');
   await openGlossaryModal();
+  toggleGlossaryAddForm(true);
   if (isSelectedChinese) {
     document.getElementById('gloss-src').value = selected;
     document.getElementById('gloss-tgt').focus();
@@ -1308,6 +1309,7 @@ ${neighbours.length ? `ต้นฉบับย่อหน้าข้างเ
       }
     }
     await openGlossaryModal();
+    toggleGlossaryAddForm(true);
     document.getElementById('gloss-src').value = candidate;
     document.getElementById('gloss-tgt').value = selectedWordBuffer;
     document.getElementById('gloss-cat').focus();
@@ -1447,7 +1449,7 @@ async function confirmMoveChapters() {
     await repairBookPointer(toBook.bookId);
     closeModal('move-chapters-modal');
     if (currentBookId === fromBookId || currentBookId === toBook.bookId) await loadBookFromDB(currentBookId);
-    await openBookshelfModal();
+    await refreshHome();
     appAlert(`ย้าย ${ids.length} ตอนไปที่ "${toBook.title}" เรียบร้อยแล้ว`);
   } catch (err) {
     appAlert(`ย้ายตอนไม่สำเร็จ: ${err.message}`);
@@ -1530,7 +1532,8 @@ async function removeBookFromShelf(e, bookId) {
     if (remainingBooks.length) await loadBookFromDB(remainingBooks[0].bookId);
     else resetToGuideBook();
   }
-  openBookshelfModal();
+  homeCoverCache.delete(bookId);
+  await refreshHome();
 }
 
 async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
@@ -2163,13 +2166,49 @@ function onProviderSelectChange() {
   showSettingsForProvider(document.getElementById('llm-provider-select').value);
 }
 
-function openSettingsModal() {
+function openSettingsModal(tab) {
   settingsDrafts = {};
   const provider = getActiveProvider();
   document.getElementById('llm-provider-select').value = provider;
   showSettingsForProvider(provider);
+  // ยังไม่มี API Key: เปิดหมวด AI เสมอ / อื่นๆ เปิดหมวดล่าสุดที่ดู
+  let last = null;
+  try { last = localStorage.getItem('nov_settings_tab'); } catch (e) {}
+  switchSettingsTab(tab || (!hasActiveApiKey() ? 'ai' : last) || 'ai', { remember: false });
+  const startSel = document.getElementById('start-page-select');
+  if (startSel) startSel.value = getStartPage();
   openModal('settings-modal');
   renderSafetySettings();
+  renderBookshelfBackupNote();
+}
+
+const SETTINGS_TABS = ['ai', 'translate', 'reading', 'data', 'tools'];
+
+/** แถบหมวด (role=tablist): ลูกศรซ้าย/ขวา Home End เลื่อนหมวด แล้วโฟกัสปุ่มหมวดนั้น */
+function onTabListKey(e) {
+  const tabs = [...e.currentTarget.querySelectorAll('[role="tab"]')];
+  const i = tabs.indexOf(document.activeElement);
+  if (i < 0) return;
+  const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: tabs.length - 1 }[e.key];
+  if (next === undefined) return;
+  e.preventDefault();
+  const tab = tabs[(next + tabs.length) % tabs.length];
+  tab.click();
+  tab.focus();
+}
+
+function switchSettingsTab(tab, { remember = true } = {}) {
+  if (!SETTINGS_TABS.includes(tab)) tab = 'ai';
+  document.querySelectorAll('[data-settings-tab]').forEach(b => {
+    const on = b.dataset.settingsTab === tab;
+    b.classList.toggle('active', on);
+    b.setAttribute('aria-selected', on ? 'true' : 'false');
+    b.tabIndex = on ? 0 : -1;
+  });
+  document.querySelectorAll('[data-settings-panel]').forEach(p => { p.hidden = p.dataset.settingsPanel !== tab; });
+  const body = document.querySelector('#settings-modal .settings-body');
+  if (body) body.scrollTop = 0;
+  if (remember) { try { localStorage.setItem('nov_settings_tab', tab); } catch (e) {} }
 }
 
 // รูปแบบคีย์ที่บอกได้ว่าเป็นของผู้ให้บริการไหน (ใช้เตือนเมื่อ Base URL ไม่ตรงกับคีย์)
@@ -2444,6 +2483,7 @@ async function confirmBackupImport() {
     const targetBookId = books.some(b => b.bookId === lastId) ? lastId : books[0]?.bookId;
     if (targetBookId) await loadBookFromDB(targetBookId);
     else resetToGuideBook();
+    homeCoverCache.clear();
     await openBookshelfModal();
 
     const needsReload = (applyBaseUrl && !isConnectAllowedByCsp(settings.baseUrl)) ||
@@ -2865,9 +2905,10 @@ async function handleRemoteDataChanges(changes) {
       await refreshBookmarkCache(currentBookId);
       refreshBookmarkMarkers();
     }
-    if (document.getElementById('bookshelf-modal')?.classList.contains('active')) {
+    if (homeOpen) {
       const bookIds = [...new Set(changes.map(c => c.bookId).filter(Boolean))];
-      if (changes.some(c => c.kind === 'books' && !c.bookId) || !bookIds.length) await openBookshelfModal();
+      bookIds.forEach(id => homeCoverCache.delete(id));
+      if (changes.some(c => c.kind === 'books' && !c.bookId) || !bookIds.length) await refreshHome();
       else for (const id of bookIds) await refreshShelfViewOnly(id);
     }
   } catch (err) {
@@ -2946,9 +2987,7 @@ function openMoreMenu(anchor) {
   openActionMenu(anchor, [
     { icon: '📖', label: 'คลังศัพท์', hint: 'ชื่อเฉพาะและคำแปลที่ล็อกไว้', onSelect: openGlossaryModal },
     { icon: '🧭', label: 'คู่มือเรื่อง', hint: 'ตัวละคร สรรพนาม แนวทางสำนวน', onSelect: openBibleModal },
-    { icon: '⚙️', label: 'ตั้งค่า', hint: 'API key โมเดล สำรองข้อมูล', onSelect: openSettingsModal },
-    { icon: '⛶', label: 'อ่านเต็มจอ', hint: 'ซ่อนแถบบน/ล่าง กด 🗗 มุมขวาบนเพื่อออก', hidden: currentBookId === 'default_novel', onSelect: toggleFullscreenMode },
-    { icon: '📲', label: 'ติดตั้งแอพ', hint: 'อ่านแบบออฟไลน์ได้', hidden: !deferredInstallPrompt, onSelect: promptInstallApp }
+    { icon: '⚙️', label: 'ตั้งค่า', hint: 'API key โมเดล สำรองข้อมูล', onSelect: openSettingsModal },    { icon: '📲', label: 'ติดตั้งแอพ', hint: 'อ่านแบบออฟไลน์ได้', hidden: !deferredInstallPrompt, onSelect: promptInstallApp }
   ], { title: 'เมนู' });
 }
 
@@ -3011,6 +3050,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   setupScrollMonitor();
   setupFullscreenListener();
   setupPopoverDelegation();
+  setupHome();
 
   const lastBookId = localStorage.getItem('nov_last_book_id');
   if (lastBookId) {
@@ -3018,5 +3058,6 @@ window.addEventListener('DOMContentLoaded', async () => {
   } else {
     renderVirtualWindow(0, true);
   }
+  await maybeOpenHomeOnStartup();
   initSafetyOnStartup();
 });

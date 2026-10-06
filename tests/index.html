@@ -35,6 +35,7 @@
   <script src="../js/storylog.js"></script>
   <script src="../js/shelf.js"></script>
   <script src="../js/updates.js"></script>
+  <script src="../js/home.js"></script>
   <script src="../js/assistant.js"></script>
   <script src="../js/reader.js"></script>
   <script src="../js/bgm.js"></script>
@@ -955,6 +956,27 @@
       const emptyNoMenu = !document.getElementById('action-menu');
       anchor.remove();
       return eq(labels, ['ก', 'ข']) && roleOk && picked === 'b' && closedAfterPick && toggledClosed && escOk && emptyNoMenu;
+    });
+    test('isSafeCoverDataUrl: รับเฉพาะ data URL ของ jpeg/png/webp', () => {
+      return isSafeCoverDataUrl('data:image/jpeg;base64,/9j/4AAQ') && isSafeCoverDataUrl('data:image/webp;base64,UklGR==') &&
+        !isSafeCoverDataUrl('data:image/svg+xml;base64,PHN2Zz4=') && !isSafeCoverDataUrl('https://x.com/a.jpg') &&
+        !isSafeCoverDataUrl('data:image/png;base64,abc"onerror="x') && !isSafeCoverDataUrl('data:image/png;base64,' + 'A'.repeat(600001)) &&
+        sanitizeBookDataRecord({ bookId: 'b', cover: 'javascript:alert(1)' }).cover === undefined;
+    });
+    test('sortHomeEntries / coverPalette: เรียงตามที่เลือก สีปกคงที่ต่อเรื่อง', () => {
+      const list = [{ b: { bookId: 'a', title: 'ข', updatedAt: 1 }, count: 5 }, { b: { bookId: 'b', title: 'ก', updatedAt: 3 }, count: 1 }, { b: { bookId: 'c', title: 'ค', updatedAt: 2 }, count: 9 }];
+      const ids = (m) => sortHomeEntries(list, m).map(x => x.b.bookId).join('');
+      return ids('recent') === 'bca' && ids('title') === 'bac' && ids('chapters') === 'cab' && list[0].b.bookId === 'a' &&
+        coverPalette('book_1') === coverPalette('book_1') && COVER_PALETTES.includes(coverPalette('อะไรก็ได้'));
+    });
+    test('batchProgressHtml: กำลังแปล / รอคิว / เสร็จ / ไม่มีงาน', () => {
+      const saved = { cur: batchCurrent, q: batchQueue };
+      batchCurrent = { bookId: 'x', count: 4, done: 1, desc: 'กำลังแปล <b>' };
+      batchQueue = [{ bookId: 'y', count: 2 }];
+      batchResults.z = { kind: 'done', desc: 'ครบ', count: 3, done: 3 };
+      const run = batchProgressHtml('x'), q = batchProgressHtml('y'), done = batchProgressHtml('z'), none = batchProgressHtml('w');
+      batchCurrent = saved.cur; batchQueue = saved.q; delete batchResults.z;
+      return run.includes('1/4') && run.includes('width: 25%') && run.includes('&lt;b&gt;') && q.includes('รอคิวแปล 2 ตอน') && done.includes('แปลเสร็จ 3 ตอน') && none === '';
     });
     test('setModelOverride/getModelOverride: ผูกกับ signal เท่านั้น', () => {
       const a = new AbortController(), b = new AbortController();
