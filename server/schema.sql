@@ -38,6 +38,29 @@ create table if not exists public.dt_profiles (
   created_at timestamptz not null default now()
 );
 
+-- ---------- การชำระเงิน (Stripe) ----------
+-- plan ในตาราง profiles = แพ็กเกจที่ผู้ดูแลตั้งเอง (ค่าเริ่มต้น free)
+-- sub_* = สมัครรายเดือนด้วยบัตร, pass_* = ซื้อ 30 วันด้วย PromptPay
+-- แพ็กเกจที่ใช้จริง = ระดับสูงสุดในสามทางนี้ (dt_effective_plan)
+alter table public.dt_profiles add column if not exists stripe_customer_id text;
+alter table public.dt_profiles add column if not exists sub_id text;
+alter table public.dt_profiles add column if not exists sub_status text;
+alter table public.dt_profiles add column if not exists sub_plan text;
+alter table public.dt_profiles add column if not exists sub_period_end timestamptz;
+alter table public.dt_profiles add column if not exists sub_cancel_at_period_end boolean not null default false;
+alter table public.dt_profiles add column if not exists pass_plan text;
+alter table public.dt_profiles add column if not exists pass_expires_at timestamptz;
+create unique index if not exists dt_profiles_customer on public.dt_profiles (stripe_customer_id) where stripe_customer_id is not null;
+
+-- ประวัติการซื้อ 30 วัน (ref = Checkout Session id กันให้สิทธิ์ซ้ำเมื่อ Stripe ส่ง webhook ซ้ำ)
+create table if not exists public.dt_billing_passes (
+  ref text primary key,
+  user_id uuid not null references auth.users (id) on delete cascade,
+  plan text not null,
+  days integer not null,
+  created_at timestamptz not null default now()
+);
+
 -- ---------- การใช้งาน (1 แถวต่อ 1 คำขอ ไม่เก็บเนื้อหา) ----------
 create table if not exists public.dt_usage (
   id bigserial primary key,
@@ -56,6 +79,9 @@ create index if not exists dt_usage_user_time on public.dt_usage (user_id, creat
 alter table public.dt_plans enable row level security;
 alter table public.dt_profiles enable row level security;
 alter table public.dt_usage enable row level security;
+alter table public.dt_billing_passes enable row level security;
+drop policy if exists "own passes" on public.dt_billing_passes;
+create policy "own passes" on public.dt_billing_passes for select to authenticated using (user_id = auth.uid());
 
 drop policy if exists "plans readable" on public.dt_plans;
 create policy "plans readable" on public.dt_plans for select to authenticated using (true);
@@ -75,6 +101,26 @@ end $$;
 drop trigger if exists dt_on_auth_user_created on auth.users;
 create trigger dt_on_auth_user_created after insert on auth.users
   for each row execute function public.dt_handle_new_user();
+
+-- ---------- แพ็กเกจที่ใช้จริง ----------
+-- สมัครรายเดือน: นับสถานะ active/trialing/past_due และให้เวลาเผื่อ 3 วันหลังสิ้นรอบ (ระหว่างรอตัดบัตรรอบใหม่)
+create or replace function public.dt_effective_plan(p_user uuid)
+returns text language sql stable security definer set search_path = public as $$
+  select coalesce((
+    select c.plan from (
+      select pr.plan from public.dt_profiles pr where pr.user_id = p_user
+      union all
+      select pr.sub_plan from public.dt_profiles pr
+        where pr.user_id = p_user and pr.sub_plan is not null
+          and pr.sub_status in ('active', 'trialing', 'past_due')
+          and pr.sub_period_end + interval '3 days' > now()
+      union all
+      select pr.pass_plan from public.dt_profiles pr
+        where pr.user_id = p_user and pr.pass_plan is not null and pr.pass_expires_at > now()
+    ) c join public.dt_plans pl on pl.id = c.plan
+    order by pl.sort desc limit 1
+  ), 'free');
+$$;
 
 -- ---------- token ที่ใช้ไปของเดือนนี้ ----------
 -- แถวที่จองไว้นานเกิน 15 นาที (เซิร์ฟเวอร์ล้มกลางทาง) ไม่นับ
@@ -105,7 +151,7 @@ begin
   -- ล็อกแถวของผู้ใช้: คำขอพร้อมกันหลายแท็บจองทีละคำขอ
   select pl.monthly_tokens, pl.max_output_tokens, pl.max_concurrent, pr.bonus_tokens
     into v_monthly, v_max_out, v_max_conc, v_bonus
-    from public.dt_profiles pr join public.dt_plans pl on pl.id = pr.plan
+    from public.dt_profiles pr join public.dt_plans pl on pl.id = public.dt_effective_plan(pr.user_id)
     where pr.user_id = p_user for update of pr;
   v_limit := v_monthly + coalesce(v_bonus, 0);
   v_used := public.dt_used_this_month(p_user);
@@ -136,7 +182,7 @@ begin
     returning user_id into v_user;
   if v_user is null then return jsonb_build_object('ok', false); end if;
   select pl.monthly_tokens + pr.bonus_tokens into v_limit
-    from public.dt_profiles pr join public.dt_plans pl on pl.id = pr.plan where pr.user_id = v_user;
+    from public.dt_profiles pr join public.dt_plans pl on pl.id = public.dt_effective_plan(pr.user_id) where pr.user_id = v_user;
   return jsonb_build_object('ok', true, 'used', public.dt_used_this_month(v_user), 'limit', v_limit);
 end $$;
 
@@ -153,10 +199,97 @@ begin
     'limit', pl.monthly_tokens + pr.bonus_tokens,
     'used', public.dt_used_this_month(p_user),
     'periodStart', date_trunc('month', now()),
-    'periodEnd', date_trunc('month', now()) + interval '1 month'
+    'periodEnd', date_trunc('month', now()) + interval '1 month',
+    'billing', jsonb_build_object(
+      'source', case
+        when pl.id = pr.sub_plan and pr.sub_status in ('active', 'trialing', 'past_due') then 'subscription'
+        when pl.id = pr.pass_plan and pr.pass_expires_at > now() then 'pass'
+        when pl.id <> 'free' then 'manual'
+        else 'free' end,
+      'subStatus', pr.sub_status,
+      'subPlan', pr.sub_plan,
+      'renewsAt', pr.sub_period_end,
+      'cancelAtPeriodEnd', pr.sub_cancel_at_period_end,
+      'passPlan', case when pr.pass_expires_at > now() then pr.pass_plan end,
+      'passExpiresAt', case when pr.pass_expires_at > now() then pr.pass_expires_at end,
+      'hasCustomer', pr.stripe_customer_id is not null
+    )
   ) into v
-  from public.dt_profiles pr join public.dt_plans pl on pl.id = pr.plan where pr.user_id = p_user;
+  from public.dt_profiles pr join public.dt_plans pl on pl.id = public.dt_effective_plan(pr.user_id) where pr.user_id = p_user;
   return v;
+end $$;
+
+-- ---------- ระบบชำระเงิน (เรียกจากเซิร์ฟเวอร์เท่านั้น) ----------
+create or replace function public.dt_billing_profile(p_user uuid)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v jsonb;
+begin
+  insert into public.dt_profiles (user_id) values (p_user) on conflict do nothing;
+  select jsonb_build_object('customerId', stripe_customer_id, 'subStatus', sub_status, 'subPlan', sub_plan, 'subPeriodEnd', sub_period_end)
+    into v from public.dt_profiles where user_id = p_user;
+  return v;
+end $$;
+
+create or replace function public.dt_billing_set_customer(p_user uuid, p_customer text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+begin
+  insert into public.dt_profiles (user_id) values (p_user) on conflict do nothing;
+  update public.dt_profiles set stripe_customer_id = p_customer
+    where user_id = p_user and (stripe_customer_id is null or stripe_customer_id = p_customer);
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- บันทึกสถานะการสมัครรายเดือน (หาเจ้าของจาก metadata.user_id หรือ customer id)
+create or replace function public.dt_billing_apply_subscription(
+  p_user uuid, p_customer text, p_sub text, p_status text, p_plan text, p_period_end timestamptz, p_cancel boolean)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_user uuid; v_old_sub text; v_old_status text;
+begin
+  v_user := p_user;
+  if v_user is null and p_customer is not null then
+    select user_id into v_user from public.dt_profiles where stripe_customer_id = p_customer;
+  end if;
+  if v_user is null then return jsonb_build_object('ok', false, 'reason', 'unknown user'); end if;
+  insert into public.dt_profiles (user_id) values (v_user) on conflict do nothing;
+  select sub_id, sub_status into v_old_sub, v_old_status from public.dt_profiles where user_id = v_user for update;
+  -- การสมัครเก่าที่ถูกยกเลิก ไม่ทับการสมัครใหม่ที่ยังใช้งานอยู่
+  if v_old_sub is not null and v_old_sub <> p_sub and v_old_status in ('active', 'trialing', 'past_due')
+     and p_status not in ('active', 'trialing', 'past_due') then
+    return jsonb_build_object('ok', true, 'ignored', true);
+  end if;
+  update public.dt_profiles set
+    stripe_customer_id = coalesce(stripe_customer_id, p_customer),
+    sub_id = p_sub,
+    sub_status = p_status,
+    sub_plan = case when p_plan in (select id from public.dt_plans) then p_plan else sub_plan end,
+    sub_period_end = p_period_end,
+    sub_cancel_at_period_end = coalesce(p_cancel, false)
+  where user_id = v_user;
+  return jsonb_build_object('ok', true);
+end $$;
+
+-- ให้สิทธิ์ซื้อ 30 วัน: ต่อจากวันหมดอายุเดิม (ซื้อล่วงหน้าได้ไม่เสียวัน) ซื้อระดับสูงกว่าใช้ระดับที่สูงกว่า
+create or replace function public.dt_billing_grant_pass(p_user uuid, p_plan text, p_days integer, p_ref text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_rows integer; v_cur_plan text; v_cur_exp timestamptz; v_new_plan text;
+begin
+  if p_plan not in (select id from public.dt_plans) or p_days is null or p_days <= 0 then
+    return jsonb_build_object('ok', false, 'reason', 'invalid');
+  end if;
+  insert into public.dt_billing_passes (ref, user_id, plan, days) values (p_ref, p_user, p_plan, p_days) on conflict do nothing;
+  get diagnostics v_rows = row_count;
+  if v_rows = 0 then return jsonb_build_object('ok', true, 'duplicate', true); end if;
+  insert into public.dt_profiles (user_id) values (p_user) on conflict do nothing;
+  select pass_plan, pass_expires_at into v_cur_plan, v_cur_exp from public.dt_profiles where user_id = p_user for update;
+  v_new_plan := p_plan;
+  if v_cur_plan is not null and v_cur_exp > now() then
+    select id into v_new_plan from public.dt_plans where id in (v_cur_plan, p_plan) order by sort desc limit 1;
+  end if;
+  update public.dt_profiles set
+    pass_plan = v_new_plan,
+    pass_expires_at = greatest(coalesce(v_cur_exp, now()), now()) + make_interval(days => p_days)
+  where user_id = p_user;
+  return jsonb_build_object('ok', true);
 end $$;
 
 -- ฟังก์ชันจัดการโควตาเรียกได้เฉพาะเซิร์ฟเวอร์ (service role) ผู้ใช้เรียกตรงไม่ได้
@@ -168,3 +301,14 @@ grant execute on function public.dt_reserve(uuid, integer, text) to service_role
 grant execute on function public.dt_settle(bigint, text, integer, integer, numeric) to service_role;
 grant execute on function public.dt_usage_summary(uuid) to service_role;
 grant execute on function public.dt_used_this_month(uuid) to service_role;
+
+revoke all on function public.dt_effective_plan(uuid) from public, anon, authenticated;
+revoke all on function public.dt_billing_profile(uuid) from public, anon, authenticated;
+revoke all on function public.dt_billing_set_customer(uuid, text) from public, anon, authenticated;
+revoke all on function public.dt_billing_apply_subscription(uuid, text, text, text, text, timestamptz, boolean) from public, anon, authenticated;
+revoke all on function public.dt_billing_grant_pass(uuid, text, integer, text) from public, anon, authenticated;
+grant execute on function public.dt_effective_plan(uuid) to service_role;
+grant execute on function public.dt_billing_profile(uuid) to service_role;
+grant execute on function public.dt_billing_set_customer(uuid, text) to service_role;
+grant execute on function public.dt_billing_apply_subscription(uuid, text, text, text, text, timestamptz, boolean) to service_role;
+grant execute on function public.dt_billing_grant_pass(uuid, text, integer, text) to service_role;

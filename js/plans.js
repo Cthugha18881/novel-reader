@@ -49,8 +49,12 @@ function readPlanCache() {
 /** เรียกจาก fetchHostedMe เมื่อได้ข้อมูลจากเซิร์ฟเวอร์ */
 function savePlanCache(me) {
   if (!me || typeof me.plan !== 'string') return;
+  // ซื้อ 30 วัน/สมัครรายเดือน: จำวันหมดสิทธิ์ไว้ด้วย ออฟไลน์เกินวันนั้นกลับเป็นสมาชิกฟรี
+  const b = me.billing || {};
+  const until = b.source === 'pass' ? Date.parse(b.passExpiresAt || '')
+    : b.source === 'subscription' ? Date.parse(b.renewsAt || '') + 3 * 86400000 : NaN;
   try {
-    localStorage.setItem(PLAN_CACHE_KEY, JSON.stringify({ plan: me.plan, planName: me.planName || '', features: me.features || null, at: Date.now() }));
+    localStorage.setItem(PLAN_CACHE_KEY, JSON.stringify({ plan: me.plan, planName: me.planName || '', features: me.features || null, at: Date.now(), until: Number.isFinite(until) ? until : null }));
   } catch (e) {}
   if (typeof renderPlanBox === 'function') renderPlanBox();
 }
@@ -59,7 +63,8 @@ function getPlanTier() {
   if (typeof isHostedConfigured !== 'function' || !isHostedConfigured()) return 'unlimited';
   if (typeof isHostedSignedIn !== 'function' || !isHostedSignedIn()) return 'guest';
   const cache = readPlanCache();
-  if (cache && Date.now() - (cache.at || 0) < PLAN_CACHE_MAX_AGE && PLAN_DEFAULTS[cache.plan] && cache.plan !== 'guest' && cache.plan !== 'unlimited') return cache.plan;
+  if (cache && Date.now() - (cache.at || 0) < PLAN_CACHE_MAX_AGE && PLAN_DEFAULTS[cache.plan] && cache.plan !== 'guest' && cache.plan !== 'unlimited' &&
+      !(cache.until && Date.now() > cache.until)) return cache.plan;
   return 'free';
 }
 
@@ -145,9 +150,9 @@ async function showPlanLimit(kind, { once = false } = {}) {
   const ent = getEntitlements();
   const msg = describePlanLimit(kind, ent);
   const choices = ent.tier === 'guest'
-    ? [{ label: 'เข้าสู่ระบบฟรี', value: 'login', variant: 'primary' }, { label: 'ดูแพ็กเกจ', value: 'plans' }, { label: 'ปิด', value: null }]
-    : [{ label: 'ดูแพ็กเกจ', value: 'plans', variant: 'primary' }, { label: 'ปิด', value: null }];
-  const pick = await appChoose(msg, choices, { title: 'ถึงขีดจำกัดของแพ็กเกจ' });
+    ? [{ label: 'เข้าสู่ระบบฟรี', value: 'login', variant: 'primary' }, { label: 'ดูแพ็กเกจ', value: 'plans' }]
+    : [{ label: 'ดูแพ็กเกจ', value: 'plans', variant: 'primary' }];
+  const pick = await appChoose(msg, choices, { title: 'ถึงขีดจำกัดของแพ็กเกจ', cancelLabel: 'ปิด' });
   if (pick === 'login' && typeof openHostedSignIn === 'function') openHostedSignIn();
   if (pick === 'plans') openPlansModal();
 }
@@ -240,14 +245,148 @@ function openPlansModal() {
   const body = document.getElementById('plans-modal-body');
   if (!body) return;
   body.innerHTML = `${buildPlansTableHtml(ent.tier)}
-    <p class="hint">ทุกระดับ: อ่านตอนที่แปลไว้ แก้คำแปล คลังศัพท์ สำรอง/กู้คืนข้อมูล และส่งออก TXT ได้เสมอ ไม่มีการล็อกข้อมูลของคุณ</p>
-    <p class="hint">แพ็กเกจ Plus และ Pro จะเปิดให้สมัครเร็วๆ นี้ · ซิงก์หลายเครื่องและแปลล่วงหน้าบนเซิร์ฟเวอร์ตามมาในรุ่นถัดไป</p>
-    ${ent.tier === 'guest' ? '<div class="modal-actions"><button class="btn btn-primary" onclick="closeModal(\'plans-modal\'); openHostedSignIn()">เข้าสู่ระบบฟรี</button></div>' : ''}`;
+    ${buildPurchaseHtml(ent)}
+    <p class="hint">ทุกระดับ: อ่านตอนที่แปลไว้ แก้คำแปล คลังศัพท์ สำรอง/กู้คืนข้อมูล และส่งออก TXT ได้เสมอ ไม่มีการล็อกข้อมูลของคุณ · ซิงก์หลายเครื่องและแปลล่วงหน้าบนเซิร์ฟเวอร์ตามมาในรุ่นถัดไป</p>`;
   openModal('plans-modal');
+}
+
+// ---------- ชำระเงิน (Stripe Checkout) ----------
+function billingAvailable() {
+  return typeof HOSTED !== 'undefined' && HOSTED.billingEnabled && typeof isHostedConfigured === 'function' && isHostedConfigured();
+}
+
+/** ส่วนสมัครแพ็กเกจใต้ตาราง: ผู้เยี่ยมชมต้องเข้าสู่ระบบก่อน / สมัครรายเดือนอยู่แล้วมีปุ่มจัดการการสมัคร */
+function buildPurchaseHtml(ent) {
+  if (ent.tier === 'unlimited') return '';
+  if (ent.tier === 'guest') {
+    return `<div class="plan-buy"><p class="hint">เข้าสู่ระบบฟรีด้วยอีเมลก่อน แล้วสมัคร Plus หรือ Pro ได้จากหน้านี้</p>
+      <div class="modal-actions"><button class="btn btn-primary" onclick="closeModal('plans-modal'); openHostedSignIn()">เข้าสู่ระบบฟรี</button></div></div>`;
+  }
+  if (!billingAvailable()) return '<p class="hint">แพ็กเกจ Plus และ Pro จะเปิดให้สมัครเร็วๆ นี้</p>';
+  const b = (typeof hostedMe !== 'undefined' && hostedMe?.billing) || {};
+  const subActive = ['active', 'trialing', 'past_due'].includes(b.subStatus);
+  const testBadge = HOSTED.billingTestMode ? '<span class="plan-test-badge">โหมดทดสอบ ไม่มีการตัดเงินจริง</span>' : '';
+  const status = describeBillingStatus(b);
+  const card = (plan) => {
+    const price = HOSTED.prices[plan];
+    const name = PLAN_DEFAULTS[plan].name;
+    return `<div class="plan-buy-card${ent.tier === plan ? ' plan-buy-current' : ''}">
+      <div class="plan-buy-name">${escapeHtml(name)} <span class="plan-buy-price">${price} บาท</span><span class="hint"> / 30 วัน</span></div>
+      ${subActive ? '' : `<button class="btn btn-primary btn-sm" onclick="startCheckout('${plan}', 'card')">สมัครรายเดือนด้วยบัตร</button>`}
+      <button class="btn btn-sm" onclick="startCheckout('${plan}', 'promptpay')">จ่าย PromptPay (30 วัน)</button>
+    </div>`;
+  };
+  return `<div class="plan-buy">
+    <div class="plan-buy-head"><b>สมัครแพ็กเกจ</b>${testBadge}</div>
+    ${status ? `<div class="hint">${status}</div>` : ''}
+    <div class="plan-buy-grid">${card('plus')}${card('pro')}</div>
+    <p class="hint">บัตร: ต่ออายุอัตโนมัติทุกเดือน ยกเลิกได้ทุกเมื่อ ใช้ได้จนครบรอบที่จ่ายแล้ว · PromptPay: จ่ายครั้งเดียวได้ 30 วัน ซื้อเพิ่มก่อนหมดได้ วันจะต่อจากเดิม</p>
+    ${b.hasCustomer ? '<div class="modal-actions"><button class="btn btn-sm" onclick="openBillingPortal()">จัดการการสมัคร / ใบเสร็จ</button></div>' : ''}
+    <div id="billing-msg" class="hint" aria-live="polite"></div>
+  </div>`;
+}
+
+function formatThaiDate(iso) {
+  const d = iso ? new Date(iso) : null;
+  return d && !isNaN(d) ? d.toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+}
+
+/** สถานะการสมัครเป็นข้อความสั้น (ใช้ทั้งในหน้าต่างแพ็กเกจและกล่องบัญชี) */
+function describeBillingStatus(b) {
+  if (!b) return '';
+  const name = (p) => PLAN_DEFAULTS[p]?.name || p;
+  if (['active', 'trialing'].includes(b.subStatus) && b.subPlan) {
+    return b.cancelAtPeriodEnd
+      ? `สมัคร ${name(b.subPlan)} รายเดือน · ยกเลิกแล้ว ใช้ได้ถึง ${formatThaiDate(b.renewsAt)}`
+      : `สมัคร ${name(b.subPlan)} รายเดือน · ต่ออายุอัตโนมัติ ${formatThaiDate(b.renewsAt)}`;
+  }
+  if (b.subStatus === 'past_due' && b.subPlan) return `ตัดบัตรรอบใหม่ของ ${name(b.subPlan)} ไม่สำเร็จ กรุณาอัปเดตบัตรในหน้าจัดการการสมัคร`;
+  if (b.passPlan && b.passExpiresAt) return `${name(b.passPlan)} (PromptPay) ใช้ได้ถึง ${formatThaiDate(b.passExpiresAt)}`;
+  return '';
+}
+
+async function billingPost(path, body) {
+  const token = await getHostedAccessToken();
+  const res = await fetch(`${HOSTED.apiBase}/billing/${path}`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error?.message || `HTTP ${res.status}`);
+  return data;
+}
+
+function setBillingMsg(text, tone = '') {
+  const el = document.getElementById('billing-msg');
+  if (!el) return;
+  el.textContent = text;
+  el.className = `hint${tone ? ` text-${tone}` : ''}`;
+}
+
+/** ไปหน้าชำระเงินของ Stripe (ข้อมูลบัตรกรอกที่ Stripe ไม่ผ่านแอพ/เซิร์ฟเวอร์ของเรา) */
+async function startCheckout(plan, method) {
+  setBillingMsg('กำลังเปิดหน้าชำระเงิน...');
+  document.querySelectorAll('.plan-buy button').forEach(b => { b.disabled = true; });
+  try {
+    const { url } = await billingPost('checkout', { plan, method });
+    if (!/^https:\/\/checkout\.stripe\.com\//.test(url || '')) throw new Error('ได้ลิงก์ชำระเงินที่ไม่ถูกต้อง');
+    location.href = url;
+  } catch (err) {
+    setBillingMsg(`เปิดหน้าชำระเงินไม่สำเร็จ: ${err.message}`, 'danger');
+    document.querySelectorAll('.plan-buy button').forEach(b => { b.disabled = false; });
+  }
+}
+
+async function openBillingPortal() {
+  setBillingMsg('กำลังเปิดหน้าจัดการการสมัคร...');
+  try {
+    const { url } = await billingPost('portal');
+    if (!/^https:\/\/billing\.stripe\.com\//.test(url || '')) throw new Error('ได้ลิงก์ที่ไม่ถูกต้อง');
+    location.href = url;
+  } catch (err) {
+    setBillingMsg(`เปิดไม่สำเร็จ: ${err.message}`, 'danger');
+  }
+}
+
+/** กลับมาจากหน้าชำระเงิน: รอ webhook อัปเดตแพ็กเกจ (ปกติไม่กี่วินาที) แล้วแจ้งผล */
+async function handleBillingReturn() {
+  let params;
+  try { params = new URLSearchParams(location.search); } catch (e) { return; }
+  const result = params.get('billing');
+  if (!result) return;
+  params.delete('billing');
+  const qs = params.toString();
+  history.replaceState(history.state, '', location.pathname + (qs ? `?${qs}` : '') + location.hash);
+  if (result === 'cancel') {
+    showGlobalToast('ยกเลิกการชำระเงินแล้ว ยังไม่มีการตัดเงิน');
+    setTimeout(hideGlobalToast, 3000);
+    return;
+  }
+  if (result !== 'success' || !isHostedSignedIn()) return;
+  const before = readPlanCache()?.plan || 'free';
+  showGlobalToast('ชำระเงินสำเร็จ กำลังอัปเดตแพ็กเกจ...');
+  for (let i = 0; i < 6; i++) {
+    try {
+      const me = await fetchHostedMe();
+      if (me.plan !== before || me.billing?.source === 'subscription' || me.billing?.source === 'pass') {
+        hideGlobalToast();
+        appAlert(`ขอบคุณที่สนับสนุน Dusktale แพ็กเกจของคุณตอนนี้: ${me.planName || me.plan}\n${describeBillingStatus(me.billing) || ''}`, { title: 'ชำระเงินสำเร็จ' });
+        return;
+      }
+    } catch (e) {}
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  hideGlobalToast();
+  appAlert('ได้รับการชำระเงินแล้ว แต่ระบบยังอัปเดตแพ็กเกจไม่เสร็จ (PromptPay อาจใช้เวลาสักครู่) ลองกด "รีเฟรชโควตา" ในหน้าตั้งค่าอีกครั้งภายหลัง ถ้าเกิน 1 ชั่วโมงแจ้งผู้ดูแลได้', { title: 'กำลังอัปเดตแพ็กเกจ' });
 }
 
 // สมาชิก: อัปเดตแพ็กเกจจากเซิร์ฟเวอร์เป็นระยะ (เปลี่ยนแพ็กเกจแล้วไม่ต้องออกจากระบบ)
 document.addEventListener('DOMContentLoaded', () => {
+  if (typeof location !== 'undefined' && /[?&]billing=/.test(location.search)) {
+    setTimeout(() => handleBillingReturn().catch(err => console.warn('billing return failed:', err)), 800);
+    return;
+  }
   setTimeout(() => {
     if (typeof isHostedSignedIn !== 'function' || !isHostedSignedIn()) return;
     const cache = readPlanCache();

@@ -14,7 +14,11 @@ const HOSTED = (() => {
     anonKey: String(c.supabaseAnonKey || '').trim(),
     emailHasCode: c.emailHasCode === true,
     freeTokens: Number(c.freeMonthlyTokens) || 400000,
-    tokensPerChapter: Number(c.tokensPerChapter) || 20000
+    tokensPerChapter: Number(c.tokensPerChapter) || 20000,
+    // ระบบชำระเงิน (Stripe): ปิดไว้จนกว่าจะตั้งค่าบนเซิร์ฟเวอร์ครบ ราคาใช้แสดงผลเท่านั้น (ราคาจริงอยู่ที่ Stripe)
+    billingEnabled: c.billingEnabled === true,
+    billingTestMode: c.billingTestMode === true,
+    prices: { plus: Number(c.prices?.plus) || 99, pro: Number(c.prices?.pro) || 249 }
   };
 })();
 const HOSTED_SESSION_KEY = 'nov_hosted_session';
@@ -227,9 +231,11 @@ async function renderHostedAccountBox(refresh = false) {
   };
   box.innerHTML = `<div class="hosted-card">${hostedBoxHead()}
     <div class="hosted-who">เข้าสู่ระบบเป็น <b>${escapeHtml(hostedMe?.email || session.email || 'ผู้ใช้ Dusktale')}</b>${hostedMe?.planName ? ` · แพ็กเกจ <b>${escapeHtml(hostedMe.planName)}</b>` : ''}</div>
+    <div class="hint hosted-billing" id="hosted-billing">${hostedMe && typeof describeBillingStatus === 'function' ? escapeHtml(describeBillingStatus(hostedMe.billing)) : ''}</div>
     <div class="hosted-quota" id="hosted-quota">${hostedMe && !refresh ? quotaHtml(hostedMe) : '<div class="hint">กำลังโหลดโควตา...</div>'}</div>
     <div class="hosted-row">
       <button class="btn btn-sm" onclick="renderHostedAccountBox(true)">รีเฟรชโควตา</button>
+      ${typeof openPlansModal === 'function' ? '<button class="btn btn-sm" onclick="openPlansModal()">แพ็กเกจ / สมัคร</button>' : ''}
       <button class="btn btn-sm" onclick="hostedSignOutFromUi()">ออกจากระบบ</button>
     </div>
     <div id="hosted-msg" class="hint" aria-live="polite"></div>
@@ -241,6 +247,8 @@ async function renderHostedAccountBox(refresh = false) {
     if (quota) quota.innerHTML = quotaHtml(me);
     const who = box.querySelector('.hosted-who');
     if (who) who.innerHTML = `เข้าสู่ระบบเป็น <b>${escapeHtml(me.email || session.email || 'ผู้ใช้ Dusktale')}</b>${me.planName ? ` · แพ็กเกจ <b>${escapeHtml(me.planName)}</b>` : ''}`;
+    const billingLine = document.getElementById('hosted-billing');
+    if (billingLine && typeof describeBillingStatus === 'function') billingLine.textContent = describeBillingStatus(me.billing);
   } catch (err) {
     const quota = document.getElementById('hosted-quota');
     if (quota) quota.innerHTML = '';

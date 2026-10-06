@@ -1024,6 +1024,21 @@
         describePlanLimit('epub', guest).includes('สมาชิกฟรี') && describePlanLimit('bestMode', free).includes('Plus') &&
         planDayKey(new Date(2026, 0, 5)) === 'plan_day_2026-01-05';
     });
+    test('billing: ข้อความสถานะการสมัคร (รายเดือน/ยกเลิกแล้ว/บัตรไม่ผ่าน/PromptPay)', () => {
+      const active = describeBillingStatus({ subStatus: 'active', subPlan: 'plus', renewsAt: '2026-11-07T00:00:00Z' });
+      const canceled = describeBillingStatus({ subStatus: 'active', subPlan: 'pro', renewsAt: '2026-11-07T00:00:00Z', cancelAtPeriodEnd: true });
+      const pastDue = describeBillingStatus({ subStatus: 'past_due', subPlan: 'plus' });
+      const pass = describeBillingStatus({ passPlan: 'pro', passExpiresAt: '2026-11-07T00:00:00Z' });
+      return active.includes('Plus') && active.includes('ต่ออายุอัตโนมัติ') && canceled.includes('ยกเลิกแล้ว') && canceled.includes('Pro') &&
+        pastDue.includes('ไม่สำเร็จ') && pass.includes('PromptPay') && pass.includes('ใช้ได้ถึง') &&
+        describeBillingStatus({}) === '' && describeBillingStatus(null) === '';
+    });
+    test('billing: ส่วนสมัคร — ผู้เยี่ยมชมต้องเข้าสู่ระบบ / ยังไม่เปิดรับชำระเงิน', () => {
+      const guest = buildPurchaseHtml({ tier: 'guest', ...PLAN_DEFAULTS.guest });
+      const free = buildPurchaseHtml({ tier: 'free', ...PLAN_DEFAULTS.free });
+      return guest.includes('เข้าสู่ระบบฟรี') && !guest.includes('startCheckout') && free.includes('เร็วๆ นี้') && !free.includes('startCheckout') &&
+        buildPurchaseHtml({ tier: 'unlimited' }) === '';
+    });
     test('plans: ตารางแพ็กเกจมีทุกระดับและไฮไลต์ระดับปัจจุบัน', () => {
       const html = buildPlansTableHtml('free');
       return PLAN_ORDER.every(t => html.includes(PLAN_DEFAULTS[t].name)) && (html.match(/plan-current/g) || []).length > 5 && html.includes('ระดับของคุณ');

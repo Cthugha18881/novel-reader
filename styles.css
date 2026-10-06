@@ -1162,3 +1162,14 @@ input.chap-chk, input.gloss-item-chk { width: 24px; height: 24px; }
   .plans-table tbody th { width: 118px; min-width: 118px; box-shadow: 1px 0 0 var(--border); }
   .plans-table thead th { font-size: 13px; }
 }
+/* ---------- สมัครแพ็กเกจ (หน้าต่างแพ็กเกจ) ---------- */
+.plan-buy { border-top: 1px solid var(--border); padding-top: 12px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 8px; }
+.plan-buy-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plan-test-badge { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: var(--warning-soft); color: var(--warning); border: 1px solid currentColor; }
+.plan-buy-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.plan-buy-card { border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+.plan-buy-card.plan-buy-current { border-color: var(--accent-line); background: var(--accent-soft); }
+.plan-buy-card .btn { width: 100%; min-height: 38px; }
+.plan-buy-name { font-weight: 600; }
+.plan-buy-price { font-size: 18px; color: var(--accent-text); margin-left: 4px; }
+.hosted-billing:empty { display: none; }

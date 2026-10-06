@@ -114,6 +114,45 @@ commit แล้ว push รอ GitHub Actions ผ่าน (ประมาณ 
 4. วางลิงก์นิยาย 1 ตอนแล้วแปล → กลับไปดูแถบโควตา ต้องเพิ่มขึ้น
 5. Supabase → Table Editor → `dt_usage` ต้องมีแถวสถานะ `done` พร้อมจำนวน token
 
+## 6. รับชำระเงินด้วย Stripe (เริ่มจากโหมดทดสอบ)
+
+ราคา: Plus 99 บาท / Pro 249 บาท ต่อ 30 วัน · บัตร = สมัครรายเดือนต่ออายุอัตโนมัติ · PromptPay = ซื้อ 30 วันทีละครั้ง (PromptPay ตัดเงินอัตโนมัติไม่ได้)
+ข้อมูลบัตรกรอกที่หน้าของ Stripe เท่านั้น ไม่ผ่านแอพหรือเซิร์ฟเวอร์ของเรา
+
+1. สมัคร [Stripe](https://dashboard.stripe.com/register) เลือกประเทศ **Thailand** (PromptPay ใช้ได้เฉพาะบัญชีไทย) แล้วอยู่ใน **Test mode / Sandbox** (สวิตช์มุมขวาบน) ระหว่างทดสอบ ยังไม่ต้องกรอกข้อมูลธุรกิจหรือบัญชีธนาคาร
+2. **Product catalog → Add product** สร้าง 2 รายการ:
+   - `Dusktale Plus` → Recurring · Monthly · **99 THB**
+   - `Dusktale Pro` → Recurring · Monthly · **249 THB**
+   เปิดแต่ละรายการ คัดลอก **Price ID** (`price_...`) ไว้
+3. **Settings → Payment methods** เปิด **PromptPay** (และ Cards ซึ่งเปิดอยู่แล้ว)
+4. **Settings → Billing → Customer portal** กด **Activate test link** / Save: อนุญาตยกเลิกการสมัคร อัปเดตบัตร ดูใบเสร็จ (ถ้าอยากให้เปลี่ยน Plus ↔ Pro เองได้ ให้เพิ่มสองราคานี้ในหัวข้อ Subscriptions)
+5. **Developers → Webhooks → Add endpoint**
+   - URL: `https://novel-reader-server.vercel.app/api/billing/webhook`
+   - Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
+   - กดเข้าไปที่ endpoint ที่สร้าง → **Signing secret** (`whsec_...`) คัดลอกไว้
+6. **Developers → API keys** → **Secret key** (`sk_test_...`) **ความลับ ห้ามส่งให้ใคร ห้ามใส่ในแอพ**
+7. Vercel → โปรเจกต์ → Settings → Environment Variables (ติ๊ก **Sensitive** สำหรับค่าลับ):
+
+   | Key | ค่า |
+   |---|---|
+   | `STRIPE_SECRET_KEY` | `sk_test_...` (ลับ) |
+   | `STRIPE_WEBHOOK_SECRET` | `whsec_...` (ลับ) |
+   | `STRIPE_PRICE_PLUS` | `price_...` ของ Plus |
+   | `STRIPE_PRICE_PRO` | `price_...` ของ Pro |
+   | `DT_PASS_PLUS_THB` / `DT_PASS_PRO_THB` | ไม่ต้องใส่ถ้าใช้ 99 / 249 (ราคา PromptPay 30 วัน) |
+
+   แล้ว **Deployments → Redeploy** · เปิด `/api/health` ต้องเห็น `"billing":{"ok":true,...,"testMode":true}`
+8. Supabase → SQL Editor → รัน `server/schema.sql` ทั้งไฟล์อีกครั้ง (เพิ่มคอลัมน์การชำระเงินและฟังก์ชัน `dt_billing_*`)
+9. แก้ `js/hosted-config.js` เป็น `billingEnabled: true` (หรือบอก Claude) แล้ว push
+
+**ทดสอบ (ไม่มีเงินจริง):** แอพ → ตั้งค่า → 🤖 AI → "แพ็กเกจ / สมัคร"
+- บัตร: `4242 4242 4242 4242` วันหมดอายุอนาคตใดก็ได้ CVC 3 หลักใดก็ได้ → กลับมาที่แอพ แพ็กเกจต้องเปลี่ยนภายในไม่กี่วินาที
+- PromptPay: หน้าทดสอบของ Stripe มีปุ่มจำลองการจ่ายสำเร็จ
+- ยกเลิก: "จัดการการสมัคร / ใบเสร็จ" → Cancel → แพ็กเกจยังใช้ได้จนครบรอบ
+- Stripe → Developers → Webhooks → endpoint ต้องเห็นคำขอสถานะ 200
+
+**ก่อนรับเงินจริง:** ยืนยันตัวตน/ธุรกิจและบัญชีธนาคารใน Stripe, สร้าง Product/Price/Webhook ชุดใหม่ใน Live mode แล้วเปลี่ยนค่าใน Vercel เป็นของ Live, ตั้ง `billingTestMode: false`, ย้ายเซิร์ฟเวอร์จาก Vercel Hobby (ห้ามใช้เชิงพาณิชย์) ไป Vercel Pro หรือ Cloudflare Workers และใส่ชื่อ/ที่ติดต่อผู้ให้บริการจริงในหน้ากฎหมาย
+
 ## งานดูแลระบบ (SQL Editor)
 
 ```sql
