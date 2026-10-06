@@ -865,12 +865,14 @@ async function syncUpdatedTermAcrossChapters(src, oldTgt, newTgt, bookIds = [cur
       if (isModified) {
         await dbSaveChapter(chap);
         changedChapCount++;
-        const memChap = chapters.find(c => c.id === chap.id);
-        if (memChap) {
-          memChap.paragraphs = chap.paragraphs;
-          memChap.summary = chap.summary;
-          if (chap.storyLog) memChap.storyLog = chap.storyLog;
-        }
+      }
+      // ตอนที่เปิดอยู่บนจอ: ใช้ฉบับในฐานข้อมูล (ซึ่งแทนคำแล้ว) เสมอ
+      // กันกรณีข้อความบนจอเก่ากว่าที่บันทึกไว้ (เช่นถูกบันทึกจากงานเบื้องหลัง/อีกแท็บ) แล้วชื่อบนจอไม่เปลี่ยนตาม
+      const memChap = chapters.find(c => c.id === chap.id);
+      if (memChap && (isModified || JSON.stringify(memChap.paragraphs) !== JSON.stringify(chap.paragraphs))) {
+        memChap.paragraphs = chap.paragraphs;
+        memChap.summary = chap.summary;
+        if (chap.storyLog) memChap.storyLog = chap.storyLog;
       }
     }
     // สรุปช่วงเรื่องที่ผู้ช่วยเก็บไว้: แทนชื่อเลย ไม่ต้องสร้างใหม่ (ประหยัด token)

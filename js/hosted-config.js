@@ -14,5 +14,5 @@ window.DUSKTALE_HOSTED = {
   emailHasCode: false,
   // ใช้แสดงผลในแอพเท่านั้น (โควตาจริงอยู่ที่ตาราง dt_plans ในฐานข้อมูล)
   freeMonthlyTokens: 400000,
-  tokensPerChapter: 11000
+  tokensPerChapter: 20000
 };

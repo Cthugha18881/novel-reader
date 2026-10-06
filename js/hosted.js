@@ -14,7 +14,7 @@ const HOSTED = (() => {
     anonKey: String(c.supabaseAnonKey || '').trim(),
     emailHasCode: c.emailHasCode === true,
     freeTokens: Number(c.freeMonthlyTokens) || 400000,
-    tokensPerChapter: Number(c.tokensPerChapter) || 11000
+    tokensPerChapter: Number(c.tokensPerChapter) || 20000
   };
 })();
 const HOSTED_SESSION_KEY = 'nov_hosted_session';

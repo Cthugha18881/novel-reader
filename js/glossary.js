@@ -684,11 +684,18 @@ async function saveEditedGlossaryTerm() {
   if (cur.auto) cur.confirmed = true;
 
   await dbSaveGlossaryItem(cur);
-  await syncTermChange(before, cur);
+  let syncError = null;
+  try {
+    await syncTermChange(before, cur);
+  } catch (err) {
+    syncError = err;
+    console.warn('[TermSync] failed:', err);
+  }
 
   closeModal('edit-term-modal');
   await renderGlossaryUI();
   renderVirtualWindow(currentChapterIndex);
+  if (syncError) appAlert(`บันทึกคำแปลใหม่แล้ว แต่เปลี่ยนชื่อในตอนที่แปลไว้ไม่ครบ: ${syncError.message || syncError}\nลองแก้คำนี้อีกครั้ง หรือเลือก "แปลตอนนี้ใหม่" ในเมนู ⋯ ของตอน`);
   // แก้จากรายงานคุณภาพ: อัปเดตรายการคำที่รอยืนยัน
   if (document.getElementById('reader-quality-panel')?.style.display === 'block' && typeof renderQualityReport === 'function') renderQualityReport();
 }
