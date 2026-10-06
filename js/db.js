@@ -794,9 +794,21 @@ async function dbDeleteMultipleGlossaryItems(srcList) {
   });
 }
 
-/** แทนคำแบบทั้งคำ (ใช้ตัวตัดคำภาษาไทย) เพื่อไม่ให้แทนตรงที่เป็นส่วนหนึ่งของคำอื่น */
-function replaceWholeThaiPhrase(text, cleanOld, cleanNew) {
+/**
+ * แทนคำแบบทั้งคำ (ใช้ตัวตัดคำภาษาไทย) เพื่อไม่ให้แทนตรงที่เป็นส่วนหนึ่งของคำอื่น
+ * ตัวตัดคำแต่ละเบราว์เซอร์ตัดต่างกัน (Firefox ตัดชื่อเฉพาะที่ไม่อยู่ในพจนานุกรมไม่ตรงขอบ) จึงยอมแทนด้วย
+ * ถ้าคำยาวตั้งแต่ 3 ตัวอักษรและไม่ได้อยู่ในคำศัพท์อื่นที่ยาวกว่า (longerTerms) ให้ตรงกับที่หน้าอ่านขีดเส้นใต้
+ */
+function replaceWholeThaiPhrase(text, cleanOld, cleanNew, longerTerms = []) {
   if (!text || !cleanOld || !text.includes(cleanOld)) return text;
+  // ช่วงที่เป็นคำศัพท์อื่นซึ่งยาวกว่าและมีคำนี้อยู่ข้างใน (เช่น "หลินเฟิง" กับ "หลิน") ห้ามแทนตรงนั้น
+  const covered = [];
+  longerTerms.filter(t => t && t.length > cleanOld.length && t.includes(cleanOld)).forEach(t => {
+    let i = text.indexOf(t);
+    while (i !== -1) { covered.push([i, i + t.length]); i = text.indexOf(t, i + 1); }
+  });
+  const isCovered = (s, e) => covered.some(([a, b]) => s >= a && e <= b);
+  const lenientOk = cleanOld.length >= 3;
   let boundaries = null;
   if (typeof Intl !== 'undefined' && Intl.Segmenter) {
     const segmenter = new Intl.Segmenter('th', { granularity: 'word' });
@@ -818,7 +830,7 @@ function replaceWholeThaiPhrase(text, cleanOld, cleanNew) {
       ? boundaries.has(end)
       : (end === text.length || !/[\p{L}\p{N}]/u.test(text[end]));
     result += text.slice(cursor, at);
-    if (leftBoundary && rightBoundary) {
+    if (!isCovered(at, end) && ((leftBoundary && rightBoundary) || lenientOk)) {
       result += cleanNew;
       cursor = end;
     } else {
@@ -838,7 +850,13 @@ async function syncUpdatedTermAcrossChapters(src, oldTgt, newTgt, bookIds = [cur
   const cleanOld = cleanTermString(oldTgt);
   const cleanNew = cleanTermString(newTgt);
   if (!cleanOld || !cleanNew || cleanOld === cleanNew) return;
-  const replaceWholePhrase = (text) => replaceWholeThaiPhrase(text, cleanOld, cleanNew);
+  // คำแปลไทยของคำศัพท์อื่นในคลัง: ตรงที่เป็นส่วนหนึ่งของชื่ออื่นที่ยาวกว่าจะไม่ถูกแทน
+  const otherTgts = (inMemoryGlossaryCache || [])
+    .filter(t => t.src !== src)
+    .flatMap(t => [t.tgt, ...Object.values(t.overrides || {})])
+    .map(cleanTermString)
+    .filter(t => t.length > cleanOld.length && t.includes(cleanOld));
+  const replaceWholePhrase = (text) => replaceWholeThaiPhrase(text, cleanOld, cleanNew, otherTgts);
 
   let changedChapCount = 0;
   for (const bookId of [...new Set((bookIds || []).filter(Boolean))]) {

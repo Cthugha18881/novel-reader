@@ -1046,6 +1046,18 @@
       return { book: { bookId: 'b' }, all, allowed, numberOf: new Map(all.map((c, i) => [c.id, i + 1])), activeTerms, extras, groups: buildEntityGroups(allowed, extras, activeTerms) };
     }
     test('replaceWholeThaiPhrase: แทนทั้งคำ ไม่แทนกลางคำอื่น', () => eq([replaceWholeThaiPhrase('หลินตงเดินไป', 'หลินตง', 'หลินต้ง'), replaceWholeThaiPhrase('abc', 'x', 'y')], ['หลินต้งเดินไป', 'abc']));
+    test('replaceWholeThaiPhrase: ตัวตัดคำตัดไม่ตรงขอบ (แบบ Firefox) ก็ยังแทน แต่ไม่แทนในชื่ออื่นที่ยาวกว่า', () => {
+      const Real = Intl.Segmenter;
+      // จำลองตัวตัดคำที่มองทั้งข้อความเป็นคำเดียว (ไม่มีขอบคำตรงชื่อเฉพาะ)
+      Intl.Segmenter = class { segment(t) { return [{ index: 0, segment: t }]; } };
+      try {
+        return eq([
+          replaceWholeThaiPhrase('‘ตำแหน่งผลยกระดับความเร้นลับขึ้น’', 'ตำแหน่งผล', 'มรรคผล'),
+          replaceWholeThaiPhrase('ดาวเหนือ', 'ดา', 'X'), // คำสั้นมาก ยังต้องตรงขอบคำ
+          replaceWholeThaiPhrase('หลินตงเห็นหลินตงเจียว', 'หลินตง', 'หลินต้ง', ['หลินตงเจียว'])
+        ], ['‘มรรคผลยกระดับความเร้นลับขึ้น’', 'ดาวเหนือ', 'หลินต้งเห็นหลินตงเจียว']);
+      } finally { Intl.Segmenter = Real; }
+    });
     test('normalizeStoryLog: ตัดค่าแปลก จำกัดจำนวน ชนิดไม่รู้จักเป็น other', () => {
       const n = normalizeStoryLog({ summary: 5, entities: [{ src: '' }, { src: 'A', aliases: ['B', 'B', 3] }], events: [{ type: 'weird', subject: 'A', flag: 'x' }, { type: 'level' }, ...Array(40).fill({ type: 'other', subject: 'Z' })] });
       return n.summary === '' && eq(n.entities, [{ src: 'A', aliases: ['B'] }]) && n.events[0].type === 'other' && n.events[0].flag === '' && n.events.length === STORY_LOG_MAX_EVENTS;

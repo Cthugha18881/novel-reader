@@ -693,11 +693,36 @@ async function saveEditedGlossaryTerm() {
   }
 
   closeModal('edit-term-modal');
+  if (!syncError) {
+    try { await offerFixLeftoverOldNames(cur.src); } catch (err) { console.warn('[TermSync] leftover check failed:', err); }
+  }
   await renderGlossaryUI();
   renderVirtualWindow(currentChapterIndex);
   if (syncError) appAlert(`บันทึกคำแปลใหม่แล้ว แต่เปลี่ยนชื่อในตอนที่แปลไว้ไม่ครบ: ${syncError.message || syncError}\nลองแก้คำนี้อีกครั้ง หรือเลือก "แปลตอนนี้ใหม่" ในเมนู ⋯ ของตอน`);
   // แก้จากรายงานคุณภาพ: อัปเดตรายการคำที่รอยืนยัน
   if (document.getElementById('reader-quality-panel')?.style.display === 'block' && typeof renderQualityReport === 'function') renderQualityReport();
+}
+
+/**
+ * ชื่อเดิมของคำนี้ที่ยังค้างในตอนที่แปลแล้วของเรื่องที่อ่านอยู่ (เช่นแก้ครั้งก่อนแล้วแทนไม่ครบ)
+ * ถามผู้ใช้ก่อนแทน เพราะชื่อเดิมอาจตั้งใจใช้ในบางที่
+ */
+async function offerFixLeftoverOldNames(src) {
+  if (!currentBookId || currentBookId === 'default_novel') return;
+  const item = inMemoryGlossaryCache.find(x => x.src === src);
+  const current = item && resolveTermForBook(item, currentBookId);
+  const olds = (item?.previousTgts || []).map(cleanTermString).filter(t => t && t !== current && !current.includes(t));
+  if (!current || !olds.length) return;
+  const chaps = await dbGetChaptersByBook(currentBookId);
+  for (const old of olds.reverse()) {
+    let paraCount = 0;
+    chaps.forEach(c => (c.paragraphs || []).forEach(p => {
+      if (p.th && p.th.includes(old) && replaceWholeThaiPhrase(p.th, old, current) !== p.th) paraCount++;
+    }));
+    if (!paraCount) continue;
+    const ok = await appConfirm(`ยังพบชื่อเดิม "${old}" ของคำ ${src} อีก ${paraCount} ย่อหน้าในเรื่องนี้ จะเปลี่ยนเป็น "${current}" ด้วยไหม`, { title: 'พบชื่อเดิมค้างอยู่', confirmLabel: `เปลี่ยนเป็น "${current}"` });
+    if (ok) await syncUpdatedTermAcrossChapters(src, old, current, [currentBookId]);
+  }
 }
 
 async function researchGlossaryTermDirect(src, persist = true, ctx = getCurrentBookContext()) {
