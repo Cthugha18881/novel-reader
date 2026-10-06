@@ -311,7 +311,7 @@ async function renderGlossaryUI() {
     }
 
     const attachBtn = (!isGlobal && !isCurrentAttached) ?
-      `<button class="btn" style="padding:1px 4px; font-size:9px; background:rgba(37,99,235,0.1); color:#2563eb;" onclick="quickAttachCurrentBook(${jsArg(data.src)})" title="ดึงคำนี้มาใช้กับเรื่องปัจจุบัน">+ ใช้กับเรื่องนี้</button>` : '';
+      `<button class="btn" style="padding:1px 4px; font-size:9px; background:rgba(37,99,235,0.1); color: var(--accent-text);" onclick="quickAttachCurrentBook(${jsArg(data.src)})" title="ดึงคำนี้มาใช้กับเรื่องปัจจุบัน">+ ใช้กับเรื่องนี้</button>` : '';
 
     const row = document.createElement('div');
     row.className = 'gloss-item-row';
@@ -323,7 +323,7 @@ async function renderGlossaryUI() {
             <span class="gloss-badge">${getCategoryLabel(data.category)}</span>
             ${bookTagsHtml}
             ${attachBtn}
-            <b>${escapeHtml(data.src)}</b> ➔ <span id="gloss-tgt-val-${escapeHtml(data.src)}" style="color:#2563eb; font-weight:600;">${escapeHtml(data.tgt)}</span>
+            <b>${escapeHtml(data.src)}</b> ➔ <span id="gloss-tgt-val-${escapeHtml(data.src)}" style="color: var(--accent-text); font-weight:600;">${escapeHtml(data.tgt)}</span>
             ${hasBookOverride(data, currentBookId) ? `<span class="gloss-override-tag" title="เรื่องปัจจุบันใช้คำแปลเฉพาะเรื่องนี้">📌 เรื่องนี้: ${escapeHtml(data.overrides[currentBookId])}</span>` : ''}
             <span style="font-size:10px; opacity:0.4;">(${escapeHtml(data.count || 1)})</span>
           </div>

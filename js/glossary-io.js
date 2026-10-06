@@ -238,7 +238,7 @@ function renderGlossaryImportPreview() {
       ${hasBook ? `<label><input type="radio" name="gloss-import-policy" value="override" ${prevPolicy === 'override' ? 'checked' : ''}> ใช้คำแปลจากไฟล์เฉพาะเรื่องนี้ (เรื่องอื่นใช้คำเดิม)</label>` : ''}
       <label><input type="radio" name="gloss-import-policy" value="replace" ${prevPolicy === 'replace' ? 'checked' : ''}> แทนคำแปลหลัก (ทุกเรื่องที่ใช้คำนี้)</label>
       <div class="quality-hint">ถ้าเลือกใช้คำแปลจากไฟล์ ระบบจะแทนชื่อในตอนที่แปลแล้วให้ด้วย และจำชื่อเดิมไว้ให้ผู้ช่วย AI</div>
-      <div class="gloss-import-conflicts">${conflicts.slice(0, 50).map(t => `<div><b>${escapeHtml(t.src)}</b>: ${escapeHtml(t.current)} → <span style="color:#2563eb;">${escapeHtml(t.tgt)}</span></div>`).join('')}${conflicts.length > 50 ? `<div>…และอีก ${conflicts.length - 50} คำ</div>` : ''}</div>
+      <div class="gloss-import-conflicts">${conflicts.slice(0, 50).map(t => `<div><b>${escapeHtml(t.src)}</b>: ${escapeHtml(t.current)} → <span style="color: var(--accent-text);">${escapeHtml(t.tgt)}</span></div>`).join('')}${conflicts.length > 50 ? `<div>…และอีก ${conflicts.length - 50} คำ</div>` : ''}</div>
     </div>` : ''}`;
 }
 

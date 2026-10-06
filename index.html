@@ -2,7 +2,7 @@
 <html lang="th">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/csp.js"></script>
   <title>NovelTranslate AI v3.7.0</title>
@@ -22,7 +22,7 @@
 <body class="theme-sepia" id="app-body">
 
   <!-- FLOATING ACTION STATUS TOAST -->
-  <div id="global-action-toast">
+  <div id="global-action-toast" role="status" aria-live="polite">
     <span class="spinner-icon" style="margin: 0; width: 14px; height: 14px;"></span>
     <span id="global-toast-msg">กำลังทำงาน...</span>
   </div>
@@ -81,7 +81,7 @@
       <label title="รวมตอนที่แปลล่วงหน้าไว้แต่ยังไม่ได้อ่าน (อาจสปอยล์)"><input type="checkbox" id="assistant-include-unread"> รวมตอนที่ยังไม่อ่าน</label>
     </div>
     <div id="assistant-messages" class="assistant-messages"></div>
-    <div id="assistant-status" class="assistant-status"></div>
+    <div id="assistant-status" class="assistant-status" aria-live="polite"></div>
     <div class="assistant-input-row">
       <textarea id="assistant-input" class="form-input" rows="2" placeholder="ถามได้เลย เช่น ตัวละครนี้โผล่มาตอนไหน / สรุปเรื่อง / ใช้คลังศัพท์ยังไง" onkeydown="onAssistantInputKey(event)"></textarea>
       <button id="assistant-send-btn" class="btn btn-primary" onclick="sendAssistantMessage()">ส่ง</button>
@@ -185,7 +185,7 @@
           <b id="batch-progress-title">กำลังแปลล่วงหน้า...</b>
           <button class="btn btn-danger" id="batch-action-btn" style="padding: 2px 8px; font-size: 10px;" onclick="handleBatchActionClick()">หยุดแปล</button>
         </div>
-        <div id="batch-progress-desc">เตรียมคิว...</div>
+        <div id="batch-progress-desc" aria-live="polite">เตรียมคิว...</div>
       </div>
 
       <div id="bookshelf-list" class="modal-scrollable-body" style="max-height: 400px; margin-bottom: 12px;"></div>
@@ -604,7 +604,7 @@
         <button class="modal-close" onclick="closeModal('move-chapters-modal')">✕</button>
       </div>
       <div style="font-size: 12px; margin-bottom: 10px;">
-        ตอนที่เลือก: <b id="move-chapters-count" style="color: #2563eb;">...</b>
+        ตอนที่เลือก: <b id="move-chapters-count" style="color: var(--accent-text);">...</b>
         <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">ใช้แยกนิยายคนละเรื่องที่ถูกรวมไว้ด้วยกัน ตอนที่ย้ายจะต่อท้ายเรื่องปลายทางตามลำดับเดิม และคำศัพท์ของเรื่องเดิมจะใช้กับเรื่องปลายทางได้ด้วย</div>
       </div>
       <div class="form-group">
@@ -630,7 +630,7 @@
         <button class="modal-close" onclick="closeModal('genre-picker-modal')">✕</button>
       </div>
       <div style="font-size: 12px; margin-bottom: 8px;">
-        นิยาย: <b id="genre-picker-book-title" style="color: #2563eb;">...</b>
+        นิยาย: <b id="genre-picker-book-title" style="color: var(--accent-text);">...</b>
       </div>
       <div class="form-group">
         <label class="form-label">เลือกแนวเรื่องสำหรับเรื่องนี้:</label>
@@ -676,7 +676,7 @@
         <button class="modal-close" onclick="closeModal('edit-term-modal')">✕</button>
       </div>
       <div style="font-size: 13px; margin-bottom: 10px;">
-        คำจีนต้นฉบับ: <b id="edit-term-src-label" style="color: #2563eb; font-size: 14px;">...</b>
+        คำจีนต้นฉบับ: <b id="edit-term-src-label" style="color: var(--accent-text); font-size: 14px;">...</b>
       </div>
       <div class="form-group">
         <label class="form-label">คำแปลภาษาไทย:</label>
@@ -894,7 +894,7 @@
         <button class="modal-close" onclick="closeModal('book-assign-modal')">✕</button>
       </div>
       <div style="font-size: 12px; margin-bottom: 8px;">
-        คำศัพท์: <b id="assign-term-title" style="color: #2563eb;">...</b>
+        คำศัพท์: <b id="assign-term-title" style="color: var(--accent-text);">...</b>
       </div>
       <div id="assign-books-list" class="modal-scrollable-body" style="max-height: 200px; margin-bottom: 12px; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 6px;"></div>
       <div style="display: flex; gap: 6px; justify-content: flex-end;">

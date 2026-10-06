@@ -275,7 +275,7 @@ async function renderBibleCharacters() {
     return `
       <div class="bible-char-card${ch.locked ? ' locked' : ''}${ch.pending ? ' has-pending' : ''}" data-idx="${idx}">
         <div class="bible-char-head">
-          <b>${escapeHtml(ch.src)}</b> ${thName ? `➔ <span style="color:#2563eb;">${escapeHtml(thName)}</span>` : '<span style="opacity:0.5; font-size:11px;">(ยังไม่มีในคลังศัพท์)</span>'}
+          <b>${escapeHtml(ch.src)}</b> ${thName ? `➔ <span style="color: var(--accent-text);">${escapeHtml(thName)}</span>` : '<span style="opacity:0.5; font-size:11px;">(ยังไม่มีในคลังศัพท์)</span>'}
           <span style="margin-left:auto; display:flex; gap:6px; align-items:center;">
             <label style="font-size:11px; cursor:pointer;"><input type="checkbox" ${ch.locked ? 'checked' : ''} onchange="bibleDraft.bible.characters[${idx}].locked = this.checked; renderBibleCharacters();"> 🔒 ล็อก</label>
             <button class="btn btn-danger" style="padding:1px 6px; font-size:10px;" onclick="removeBibleCharacter(${idx})">✕</button>

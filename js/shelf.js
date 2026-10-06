@@ -340,7 +340,7 @@ function renderChaptersHtml(bookId, bookChaps, readingChapId) {
         </div>
         <div style="display:flex; gap:6px; align-items:center;">
           <select class="chap-type-select" onchange="setChapterType(${jsArg(bookId)}, ${jsArg(ch.id)}, this.value)" title="ประเภทตอน (มีผลกับการต่อบริบทและการส่งออก)">${typeOptions}</select>
-          <button class="chap-action-btn" style="background:rgba(37,99,235,0.1); color:#2563eb;" onclick="jumpToChapterById(${jsArg(bookId)}, ${jsArg(ch.id)})">อ่าน</button>
+          <button class="chap-action-btn" style="background:rgba(37,99,235,0.1); color: var(--accent-text);" onclick="jumpToChapterById(${jsArg(bookId)}, ${jsArg(ch.id)})">อ่าน</button>
           <button class="chap-action-btn" style="background:rgba(16,185,129,0.1); color:#059669;" onclick="retranslateSpecificChapter(event, ${jsArg(bookId)}, ${jsArg(ch.id)})" title="แปลบทนี้ใหม่ตามคลังคำศัพท์ล่าสุด">🔄 แปลใหม่</button>
         </div>
       </div>
@@ -383,7 +383,7 @@ async function openBookshelfModal() {
         <div class="book-info" onclick="toggleBookAccordion(${jsArg(b.bookId)})">
           <div class="book-title">
           📚 ${escapeHtml(b.title || 'นิยายเรื่องใหม่')}
-            <span class="btn" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; background: rgba(37,99,235,0.1); color: #2563eb;" onclick="openGenrePickerModal(event, ${jsArg(b.bookId)})" title="คลิกเพื่อเลือกแนวเรื่องจากรายการ">
+            <span class="btn" style="padding: 1px 6px; font-size: 10px; margin-left: 6px; background: rgba(37,99,235,0.1); color: var(--accent-text);" onclick="openGenrePickerModal(event, ${jsArg(b.bookId)})" title="คลิกเพื่อเลือกแนวเรื่องจากรายการ">
             🏷️ ${escapeHtml(genreBadge)} ✎
             </span>
             <span style="font-size:11px; font-weight:normal; opacity:0.7;">(▼ ดูตอนย่อย)</span>
@@ -394,7 +394,7 @@ async function openBookshelfModal() {
       </div>
       <div class="batch-bar">
         <span>แปลล่วงหน้า</span>
-        <input type="number" id="batch-input-${escapeHtml(b.bookId)}" class="form-input" style="width: 50px; padding: 3px 6px; font-size: 12px;" min="1" max="50" value="5">
+        <input type="number" id="batch-input-${escapeHtml(b.bookId)}" class="form-input" style="width: 56px; padding: 3px 6px; font-size: 12px;" min="1" max="50" value="5" aria-label="จำนวนตอนที่จะแปลล่วงหน้า">
         <span>บท</span>
         <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="startBatchTranslateForBook(${jsArg(b.bookId)})">
           ⚡ เริ่มแปลล่วงหน้า

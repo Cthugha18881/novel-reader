@@ -26,16 +26,52 @@ let selectedWordBuffer = "";
 let isSelectedChinese = false;
 let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 
+// ตอนว่างสำหรับตอนที่ยังไม่ได้เปิดนิยาย (หน้าจอแสดงหน้าต้อนรับแทน ดู buildWelcomeHtml)
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v3.7.0",
-    paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.7.0", src: "欢迎来到 NovelTranslate" },
-      { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
-    ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.7.0"
+    title: "ยินดีต้อนรับ",
+    paragraphs: [],
+    summary: ""
   }];
+}
+
+/** หน้าต้อนรับ: ขั้นตอนเริ่มต้น 2 ขั้น (ตั้งค่า AI → วางลิงก์/ไฟล์) + อ่านต่อเรื่องล่าสุดถ้ามี */
+async function buildWelcomeHtml() {
+  const hasKey = hasActiveApiKey() && !!getActiveLlmConfig().model;
+  const books = (await dbGetAllBooks().catch(() => [])).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const last = books[0];
+  return `<section class="welcome" aria-labelledby="welcome-title">
+    <h1 class="welcome-title" id="welcome-title">อ่านนิยายจีน ญี่ปุ่น เกาหลี เป็นภาษาไทย</h1>
+    <p class="welcome-lead">วางลิงก์ตอนนิยาย แล้ว AI แปลให้อ่านต่อเนื่อง ชื่อตัวละครและคำศัพท์ตรงกันทุกตอน ข้อมูลทั้งหมดเก็บในเครื่องนี้</p>
+    ${last ? `<div class="welcome-continue"><b>อ่านต่อ: ${escapeHtml(last.title || '')}</b>
+      <div class="welcome-actions">
+        <button class="btn btn-primary" onclick="loadBookFromDB(${jsArg(last.bookId)})">อ่านต่อ${last.lastChapterTitle ? ` "${escapeHtml(String(last.lastChapterTitle).slice(0, 40))}"` : ''}</button>
+        <button class="btn" onclick="openBookshelfModal()">เปิดชั้นหนังสือ (${books.length} เรื่อง)</button>
+      </div></div>` : ''}
+    <div class="welcome-steps">
+      <div class="welcome-step${hasKey ? ' done' : ''}">
+        <div class="welcome-num" aria-hidden="true">${hasKey ? '✓' : '1'}</div>
+        <div>
+          <h2>${hasKey ? 'ตั้งค่า AI แล้ว' : 'ตั้งค่า AI ที่ใช้แปล'}</h2>
+          <p>${hasKey ? `ใช้ ${escapeHtml(LLM_PROVIDERS[getActiveProvider()].label)} · ${escapeHtml(getActiveLlmConfig().model)}` : 'เลือกผู้ให้บริการ (Gemini, Claude หรือ OpenAI-compatible เช่น OpenRouter) แล้ววาง API Key ของคุณ'}</p>
+          <div class="welcome-actions"><button class="btn${hasKey ? '' : ' btn-primary'}" onclick="openSettingsModal()">${hasKey ? 'เปลี่ยนการตั้งค่า AI' : 'ตั้งค่า AI'}</button></div>
+        </div>
+      </div>
+      <div class="welcome-step">
+        <div class="welcome-num" aria-hidden="true">2</div>
+        <div>
+          <h2>เพิ่มนิยายเรื่องแรก</h2>
+          <p>วางลิงก์หน้าตอนจากเว็บนิยาย หรือนำเข้าไฟล์ .txt / .epub ระบบแปลตอนถัดไปให้ล่วงหน้าระหว่างอ่าน</p>
+          <div class="welcome-actions">
+            <button class="btn${hasKey ? ' btn-primary' : ''}" onclick="openImportModal()">วางลิงก์นิยาย</button>
+            <button class="btn" onclick="openImportModal(); switchImportTab('text')">นำเข้าไฟล์หรือข้อความ</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="welcome-note">มีคำถามเรื่องการใช้งาน กดปุ่ม 💬 มุมขวาล่างเพื่อถามผู้ช่วย AI ได้ · ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น อย่าลืมสำรองข้อมูลที่ชั้นหนังสือ</p>
+  </section>`;
 }
 
 let chapters = createGuideChapters();
@@ -114,22 +150,124 @@ function adjustFontSize(delta) {
   localStorage.setItem('nov_font_size', currentFontSize);
 }
 
+// ---------- หน้าต่าง (modal): role dialog, ปิดด้วย Esc, ล็อกโฟกัสไว้ข้างใน, คืนโฟกัสเมื่อปิด (WCAG 2.1.2 / 2.4.3 / 4.1.2) ----------
+const MODAL_FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+const modalReturnFocus = new Map();
+
+function modalFocusables(modal) {
+  return [...modal.querySelectorAll(MODAL_FOCUSABLE)].filter(el => el.offsetParent !== null || el === document.activeElement);
+}
+
+/** หน้าต่างบนสุดที่เปิดอยู่ (z-index สูงสุด ถ้าเท่ากันใช้อันที่อยู่ท้ายสุดในหน้า) */
+function topmostModal() {
+  const open = [...document.querySelectorAll('.modal-overlay.active')];
+  return open.sort((a, b) => (parseInt(getComputedStyle(a).zIndex, 10) || 0) - (parseInt(getComputedStyle(b).zIndex, 10) || 0)).pop() || null;
+}
+
 function openModal(id) {
   const modal = document.getElementById(id);
-  if (modal) {
-    modal.classList.add('active');
-    document.body.classList.add('modal-open');
+  if (!modal) return;
+  const box = modal.querySelector('.modal-box') || modal;
+  box.setAttribute('role', 'dialog');
+  box.setAttribute('aria-modal', 'true');
+  const title = modal.querySelector('.modal-title');
+  if (title) {
+    if (!title.id) title.id = `${id}-title`;
+    box.setAttribute('aria-labelledby', title.id);
   }
+  modal.querySelectorAll('.modal-close').forEach(btn => { if (!btn.getAttribute('aria-label')) btn.setAttribute('aria-label', 'ปิด'); });
+  if (!modal.classList.contains('active') && document.activeElement && document.activeElement !== document.body) {
+    modalReturnFocus.set(id, document.activeElement);
+  }
+  modal.classList.add('active');
+  document.body.classList.add('modal-open');
+  // โฟกัสช่องแรกที่กรอกได้ ถ้าไม่มีใช้ปุ่มแรก (รอให้เนื้อหาที่เพิ่งวาดเสร็จก่อน)
+  setTimeout(() => {
+    if (!modal.classList.contains('active') || modal.contains(document.activeElement)) return;
+    const items = modalFocusables(modal);
+    const field = items.find(el => el.matches('input:not([type="checkbox"]):not([type="radio"]), textarea, select'));
+    (field || items.find(el => !el.classList.contains('modal-close')) || items[0])?.focus({ preventScroll: true });
+  }, 60);
 }
 
 function closeModal(id) {
   const modal = document.getElementById(id);
-  if (modal) {
-    modal.classList.remove('active');
-    if (!document.querySelector('.modal-overlay.active')) {
-      document.body.classList.remove('modal-open');
-    }
+  if (!modal) return;
+  const wasOpen = modal.classList.contains('active');
+  modal.classList.remove('active');
+  if (!document.querySelector('.modal-overlay.active')) {
+    document.body.classList.remove('modal-open');
   }
+  const back = modalReturnFocus.get(id);
+  modalReturnFocus.delete(id);
+  if (wasOpen && back?.isConnected) back.focus({ preventScroll: true });
+}
+
+// ---------- ชื่อที่โปรแกรมอ่านจออ่าน (WCAG 4.1.2 / 2.5.3) ----------
+// ปุ่มที่มีแต่อีโมจิ (🔎 🎧 🔄): ชื่อปุ่มคำนวณจากเนื้อหาก่อน title จึงถูกอ่านเป็นชื่ออีโมจิ -> ใช้ title เป็น aria-label
+// ช่องกรอกที่ไม่มี label: ใช้ placeholder / title / ค่า (เช่น checkbox ของคำศัพท์) เป็นชื่อ
+const LETTER_REGEX = /[A-Za-z฀-๿぀-ヿ㐀-鿿가-힯0-9]/;
+
+function nameControl(el) {
+  if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby')) return;
+  if (el.matches('button')) {
+    if (!LETTER_REGEX.test(el.textContent || '') && el.title) el.setAttribute('aria-label', el.title);
+    return;
+  }
+  if (el.labels && el.labels.length) return;
+  // label ที่มองเห็นแต่ไม่ได้ผูกกับช่อง (ป้ายเหนือช่องในกลุ่มเดียวกัน) ใช้ก่อน placeholder
+  const groupLabel = el.closest('.form-group')?.querySelector('.form-label')?.textContent?.trim();
+  const name = groupLabel || el.placeholder || el.title || (el.type === 'checkbox' && el.value && el.value !== 'on' ? `เลือก ${el.value}` : '');
+  if (name) el.setAttribute('aria-label', name);
+}
+
+function nameControlsIn(root) {
+  if (root.nodeType !== 1) return;
+  if (root.matches?.('button, input, textarea, select')) nameControl(root);
+  root.querySelectorAll?.('button, input, textarea, select').forEach(nameControl);
+}
+
+function setupAccessibleNames() {
+  nameControlsIn(document.body);
+  // ปุ่ม/ช่องที่สร้างทีหลัง (รายการคลังศัพท์ ชั้นหนังสือ แถบเสียงอ่าน ฯลฯ)
+  new MutationObserver(records => records.forEach(r => r.addedNodes.forEach(nameControlsIn)))
+    .observe(document.body, { childList: true, subtree: true });
+}
+
+function setupModalKeyboard() {
+  document.addEventListener('keydown', (e) => {
+    const modal = topmostModal();
+    // ไม่มีหน้าต่างเปิด: Esc ปิดแผงตั้งค่าการอ่าน / แผงผู้ช่วย
+    if (!modal) {
+      if (e.key !== 'Escape') return;
+      if (document.getElementById('reader-panel')?.classList.contains('open')) toggleReaderPanel(false);
+      else if (document.getElementById('assistant-panel')?.classList.contains('open')) toggleAssistantPanel(false);
+      return;
+    }
+    if (e.key === 'Escape') {
+      // ใช้ปุ่มปิดของหน้าต่างนั้น (บางหน้าต่างต้องยกเลิกงาน/ล้างข้อมูลที่ค้างตอนปิด)
+      e.preventDefault();
+      const closeBtn = modal.querySelector('.modal-head .modal-close') || modal.querySelector('.modal-close');
+      if (closeBtn) closeBtn.click();
+      else closeModal(modal.id);
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const items = modalFocusables(modal);
+    if (!items.length) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    if (!modal.contains(document.activeElement)) {
+      e.preventDefault();
+      first.focus();
+    } else if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  });
 }
 
 const CHAPTER_TYPE_LABELS = {
@@ -243,6 +381,8 @@ function buildPreviewOnlyBannerHtml(chap) {
 
 function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
   const chapterType = chap.chapterType || 'story';
+  // ภาษาของต้นฉบับ: ให้โปรแกรมอ่านจอและฟอนต์เลือกถูกภาษา (หน้าเป็น lang="th") WCAG 3.1.2
+  const srcLang = escapeHtml(normalizeLang(currentSourceLang || DEFAULT_SOURCE_LANG));
   const isNoteChapter = chapterType === 'author_note';
   let parasHtml = '';
   let junkCount = 0;
@@ -261,7 +401,7 @@ function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
         parasHtml += `
       <div class="para-item para-junk" id="para-box-${chapIdx}-${pIdx}">
         <span class="para-kind-label">🌐 ข้อความจากหน้าเว็บ (ไม่ได้แปล)</span>
-        <div class="para-src" style="display: block;">${escapeHtml(p.src || '')}</div>
+        <div class="para-src" style="display: block;" lang="${srcLang}">${escapeHtml(p.src || '')}</div>
       </div>`;
         return;
       }
@@ -283,7 +423,7 @@ function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
         ${bookmark ? bookmarkMarkHtml(bookmark, chapIdx, pIdx) : ''}
         ${noteLabel}
         <div class="para-th" onclick="toggleParagraphSrc(event, '${chapIdx}-${pIdx}')" data-unique-key="${chapIdx}-${pIdx}" data-th="${escapeHtml(encodeURIComponent(p.th || ''))}" data-src="${escapeHtml(encodeURIComponent(p.src || ''))}">${highlightedTh}</div>
-        <div class="para-src" id="src-${chapIdx}-${pIdx}"><span class="para-src-text">${escapeHtml(p.src || "ไม่มีข้อความต้นฉบับ")}</span>${actions}</div>
+        <div class="para-src" id="src-${chapIdx}-${pIdx}"><span class="para-src-text"${p.src ? ` lang="${srcLang}"` : ''}>${escapeHtml(p.src || "ไม่มีข้อความต้นฉบับ")}</span>${actions}</div>
       </div>
     `;
     });
@@ -425,6 +565,17 @@ async function renderVirtualWindow(targetIdx, scrollToTop = false, targetParaIdx
 
   document.getElementById('display-book-title').innerText = currentBookTitle;
   document.getElementById('display-chap-title').innerText = curChap.title;
+  document.body.classList.toggle('no-book', currentBookId === 'default_novel');
+
+  // ยังไม่ได้เปิดนิยาย: หน้าต้อนรับบอกขั้นตอนเริ่มต้น (แทนหนังสือคู่มือ)
+  if (currentBookId === 'default_novel') {
+    container.innerHTML = await buildWelcomeHtml();
+    if (requestVersion !== renderRequestVersion) return;
+    renderedWindowIndices = [];
+    document.getElementById('manual-chap-nav').style.display = 'none';
+    updateInfiniteStatusBanner('', false);
+    return;
+  }
 
   const activeTerms = await getActiveGlossaryForCurrentBook();
   if (bookmarkCache.bookId !== currentBookId) await refreshBookmarkCache(currentBookId);
@@ -582,6 +733,7 @@ function setupChapterIntersectionObserver() {
 }
 
 function checkProactivePrefetch() {
+  if (currentBookId === 'default_novel') return;
   const isPrefetchEnabled = localStorage.getItem('nov_enable_prefetch') !== 'false';
   if (!isPrefetchEnabled || isPrefetching) return;
 
@@ -592,7 +744,7 @@ function checkProactivePrefetch() {
 
 function checkAndRefreshBottomStatus() {
   const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
-  if (!isInfinite) {
+  if (!isInfinite || currentBookId === 'default_novel') {
     updateInfiniteStatusBanner('', false);
     return;
   }
@@ -607,7 +759,7 @@ function checkAndRefreshBottomStatus() {
 
   if (isPrefetching) {
     updateInfiniteStatusBanner(`
-      <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
+      <div style="font-size: 13px; font-weight: 500; color: var(--accent-text);">
         <span class="spinner-icon"></span> กำลังดึงและแปลตอนถัดไปให้อัตโนมัติ...
       </div>
       <div style="font-size: 11px; opacity: 0.7; margin-top: 4px;">
@@ -616,7 +768,7 @@ function checkAndRefreshBottomStatus() {
     `, true);
   } else if (targetUrl && lastPrefetchError === OTHER_TAB_BUSY_MESSAGE) {
     updateInfiniteStatusBanner(`
-      <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
+      <div style="font-size: 13px; font-weight: 500; color: var(--accent-text);">
         <span class="spinner-icon"></span> ${escapeHtml(OTHER_TAB_BUSY_MESSAGE)}
       </div>
       <button class="btn" style="padding: 4px 10px; font-size: 11px; margin-top: 8px;" onclick="triggerManualFetchNext()">ลองแปลในแท็บนี้อีกครั้ง</button>
@@ -1413,7 +1565,7 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
     }
 
     updateInfiniteStatusBanner(`
-      <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
+      <div style="font-size: 13px; font-weight: 500; color: var(--accent-text);">
         <span class="spinner-icon"></span> กำลังดึงเนื้อหาตอนถัดไปจากเว็บต้นฉบับ...
       </div>
     `, true);
@@ -1425,7 +1577,7 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
     }
 
     updateInfiniteStatusBanner(`
-      <div style="font-size: 13px; font-weight: 500; color: #2563eb;">
+      <div style="font-size: 13px; font-weight: 500; color: var(--accent-text);">
         <span class="spinner-icon"></span> กำลังวิเคราะห์ชื่อเฉพาะและแปล "${escapeHtml(rawChapTitle)}" ผ่าน AI...
       </div>
     `, true);
@@ -2818,6 +2970,8 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
   loadSettings();
+  setupModalKeyboard();
+  setupAccessibleNames();
   setupReader();
   setupSelectionMonitor();
   setupScrollMonitor();
