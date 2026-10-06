@@ -40,7 +40,10 @@
 4. **Authentication → URL Configuration**
    - **Site URL**: `https://cthugha18881.github.io/novel-reader/`
    - **Redirect URLs** → Add: `https://cthugha18881.github.io/novel-reader/**` และ (ไว้ทดสอบบนเครื่อง) `http://localhost:8765/**`
-5. **Authentication → Emails → Templates → Magic Link**: ใส่รหัส 6 หลักในอีเมลด้วย (ผู้ใช้ที่ติดตั้งแอพบนมือถือ ลิงก์จะเปิดในเบราว์เซอร์แยก ต้องใช้รหัสแทน)
+5. **เทมเพลตอีเมล: ข้ามไปก่อนได้** Supabase ให้แก้เทมเพลตได้หลังตั้ง SMTP ของตัวเองแล้วเท่านั้น (ดู "ก่อนเปิดให้คนอื่นใช้" ด้านล่าง)
+   ระหว่างนี้อีเมลเป็นแบบเดิมของ Supabase (มีแค่ลิงก์ "Sign in" ไม่มีรหัส) และ**ส่งได้เฉพาะอีเมลของสมาชิกในองค์กร Supabase** จึงทดสอบได้ด้วยอีเมลของคุณเอง
+   แอพซ่อนช่องใส่รหัสไว้ (`emailHasCode: false` ใน `js/hosted-config.js`) จนกว่าจะแก้เทมเพลตแล้ว
+   เมื่อตั้ง SMTP แล้ว ไปที่ **Authentication → Emails → Templates → Magic link or OTP** ใส่รหัส 6 หลักในอีเมล (ผู้ใช้ที่ติดตั้งแอพบน iPhone ลิงก์จะเปิดใน Safari แยกจากแอพ ต้องใช้รหัสแทน) แล้วเปลี่ยน `emailHasCode` เป็น `true`
    ```html
    <h2>เข้าสู่ระบบ Dusktale</h2>
    <p>รหัสของคุณ: <b style="font-size:22px; letter-spacing:4px;">{{ .Token }}</b></p>
@@ -53,8 +56,17 @@
    - **Secret key** (`sb_secret_...` หรือ `service_role` แบบเก่า) → **ค่าลับ** ใส่ที่ Vercel เท่านั้น
 7. **Project Settings → Data API** คัดลอก **Project URL** (`https://xxxx.supabase.co`)
 
-> อีเมลของ Supabase แผนฟรีส่งได้จำกัดต่อชั่วโมง พอสำหรับทดสอบ ก่อนเปิดให้คนทั่วไปใช้ ให้ตั้ง SMTP ของตัวเองที่
-> **Authentication → Emails → SMTP Settings** (เช่น Resend หรือ Amazon SES)
+### ก่อนเปิดให้คนอื่นใช้: ตั้ง SMTP ของตัวเอง
+
+ตัวส่งอีเมลของ Supabase ส่งได้เฉพาะสมาชิกในองค์กรและไม่กี่ฉบับต่อชั่วโมง ก่อนชวนผู้ทดสอบคนอื่นต้องตั้งตัวส่งอีเมลของเราเอง
+
+1. ซื้อโดเมน (เช่น `dusktale.app`) ที่ Cloudflare / Namecheap ฯลฯ
+2. สมัคร [Resend](https://resend.com) (แผนฟรี 3,000 ฉบับ/เดือน, 100 ฉบับ/วัน) → **Domains → Add domain** → ใส่ DNS record ที่ Resend ให้มา (ที่หน้าจัดการโดเมน) รอสถานะ Verified
+3. Resend → **API Keys** → สร้างคีย์ (ค่าลับ)
+4. Supabase → **Authentication → Emails → SMTP Settings** → เปิด Custom SMTP:
+   Host `smtp.resend.com` · Port `465` · Username `resend` · Password = คีย์ Resend · Sender email เช่น `no-reply@dusktale.app` · Sender name `Dusktale`
+5. **Authentication → Rate Limits**: ปรับจำนวนอีเมลต่อชั่วโมงตามต้องการ
+6. แก้เทมเพลต **Magic link or OTP** และ **Confirm signup** ด้วยข้อความด้านบน แล้วตั้ง `emailHasCode: true` ใน `js/hosted-config.js`
 
 ## 3. Vercel: เซิร์ฟเวอร์
 

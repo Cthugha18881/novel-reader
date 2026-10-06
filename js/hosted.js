@@ -11,6 +11,7 @@ const HOSTED = (() => {
     apiBase: clean(c.apiBase),
     supabaseUrl: clean(c.supabaseUrl),
     anonKey: String(c.supabaseAnonKey || '').trim(),
+    emailHasCode: c.emailHasCode === true,
     freeTokens: Number(c.freeMonthlyTokens) || 400000,
     tokensPerChapter: Number(c.tokensPerChapter) || 11000
   };
@@ -205,7 +206,7 @@ async function renderHostedAccountBox(refresh = false) {
         <input type="email" id="hosted-email" class="form-input" placeholder="you@example.com" autocomplete="email" value="${escapeHtml(hostedPendingEmail)}" onkeydown="if (event.key === 'Enter') hostedSendFromUi()">
         <button class="btn btn-primary" id="hosted-send-btn" onclick="hostedSendFromUi()">ส่งลิงก์เข้าสู่ระบบ</button>
       </div>
-      <div class="hosted-row" id="hosted-code-row"${hostedPendingEmail ? '' : ' hidden'}>
+      <div class="hosted-row" id="hosted-code-row"${hostedPendingEmail && HOSTED.emailHasCode ? '' : ' hidden'}>
         <input id="hosted-code" class="form-input mono" inputmode="numeric" maxlength="10" placeholder="รหัสจากอีเมล" autocomplete="one-time-code" aria-label="รหัสจากอีเมล" onkeydown="if (event.key === 'Enter') hostedVerifyFromUi()">
         <button class="btn" id="hosted-verify-btn" onclick="hostedVerifyFromUi()">ยืนยันรหัส</button>
       </div>
@@ -253,9 +254,13 @@ async function hostedSendFromUi() {
   if (btn) { btn.disabled = false; btn.textContent = 'ส่งอีกครั้ง'; }
   if (!r.ok) return setHostedMsg(r.status === 429 ? 'ส่งอีเมลถี่เกินไป รอสักครู่แล้วลองใหม่' : `ส่งอีเมลไม่สำเร็จ: ${r.message}`, 'danger');
   hostedPendingEmail = email;
-  document.getElementById('hosted-code-row').hidden = false;
-  setHostedMsg(`ส่งอีเมลไปที่ ${email} แล้ว กดลิงก์ในอีเมล (เปิดในเบราว์เซอร์นี้) หรือใส่รหัสจากอีเมลในช่องด้านบน`, 'success');
-  document.getElementById('hosted-code')?.focus();
+  if (HOSTED.emailHasCode) {
+    document.getElementById('hosted-code-row').hidden = false;
+    setHostedMsg(`ส่งอีเมลไปที่ ${email} แล้ว กดลิงก์ในอีเมล (เปิดในเบราว์เซอร์นี้) หรือใส่รหัสจากอีเมลในช่องด้านบน`, 'success');
+    document.getElementById('hosted-code')?.focus();
+  } else {
+    setHostedMsg(`ส่งอีเมลไปที่ ${email} แล้ว เปิดอีเมลแล้วกดลิงก์ "Sign in" ในเบราว์เซอร์นี้ (ไม่เจอ ดูในโฟลเดอร์สแปม/ขยะ)`, 'success');
+  }
 }
 
 async function hostedVerifyFromUi() {

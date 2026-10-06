@@ -9,6 +9,9 @@ window.DUSKTALE_HOSTED = {
   supabaseUrl: '',
   // Supabase: Project Settings -> API Keys -> publishable key (sb_publishable_...) หรือ anon key แบบเก่า
   supabaseAnonKey: '',
+  // อีเมลเข้าสู่ระบบมีรหัส 6 หลักหรือยัง (ต้องตั้ง SMTP ของตัวเองแล้วแก้เทมเพลตก่อน ดู docs/backend-setup.md)
+  // false = แสดงแค่ "กดลิงก์ในอีเมล" ไม่มีช่องใส่รหัส
+  emailHasCode: false,
   // ใช้แสดงผลในแอพเท่านั้น (โควตาจริงอยู่ที่ตาราง dt_plans ในฐานข้อมูล)
   freeMonthlyTokens: 400000,
   tokensPerChapter: 11000
