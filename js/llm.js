@@ -500,6 +500,11 @@ async function callOpenAIOnce(cfg, key, prompt, opts, signal, jsonMode = null) {
   const reason = choice?.finish_reason || '';
   if (reason === 'length') throw new LLMError('ผลลัพธ์ยาวเกินขีดจำกัดของโมเดลและถูกตัดกลางคัน', 'truncated');
   if (reason === 'content_filter') throw new LLMError('โมเดลปฏิเสธการตอบ (content_filter)', 'blocked');
+  // คิดจน token หมดเพดาน ไม่เหลือเขียนคำตอบ (OpenRouter บางเจ้าตอบ finish_reason "stop" แต่เนื้อหาว่าง)
+  const thought = data.usage?.completion_tokens_details?.reasoning_tokens || 0;
+  if (!text && thought > 0 && thought >= (body.max_tokens || body.max_completion_tokens || Infinity) * 0.9) {
+    throw new LLMError(`โมเดลใช้ token ทั้งหมด (${thought.toLocaleString()}) ไปกับการคิดก่อนตอบ จนไม่เหลือสำหรับคำตอบ ลองตั้ง "การคิดก่อนตอบ" เป็น ปิด`, 'empty');
+  }
   if (!text) throw new LLMError('โมเดลไม่ส่งข้อความกลับมา', 'empty');
   return text;
 }
