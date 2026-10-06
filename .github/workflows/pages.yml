@@ -1,9 +1,10 @@
-name: Deploy Novel Reader to GitHub Pages
+name: Test and deploy Dusktale to GitHub Pages
 
 on:
   push:
     branches:
       - codex/complete-app
+  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -12,11 +13,35 @@ permissions:
   id-token: write
 
 concurrency:
-  group: github-pages
+  group: github-pages-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # ทดสอบก่อนทุกครั้ง: ไม่ผ่าน = ไม่ deploy (หน้าเว็บจริงยังเป็นเวอร์ชันเดิม)
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out branch
+        uses: actions/checkout@v6
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Syntax check (ทุกไฟล์ JavaScript)
+        run: |
+          for f in js/*.js sw.js; do node --check "$f" || exit 1; done
+          node --check tests/run-ci.mjs
+      - name: Install Playwright (Chromium)
+        run: |
+          npm install --no-save --no-package-lock --no-audit --no-fund playwright@1
+          npx playwright install --with-deps chromium
+      - name: Unit tests + app smoke test
+        run: node tests/run-ci.mjs
+
   deploy:
+    needs: test
+    if: github.event_name != 'pull_request'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
