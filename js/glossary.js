@@ -489,7 +489,7 @@ async function openBookAssignModal(src) {
   const books = await dbGetAllBooks();
   let html = `
     <label style="display: flex; align-items: center; gap: 8px; padding: 6px; border-bottom: 1px solid var(--border); cursor: pointer; font-weight: 600;">
-      <input type="checkbox" id="assign-global-chk" ${cur.scope === 'global' ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
+      <input type="checkbox" id="assign-global-chk" ${cur.scope === 'global' ? 'checked' : ''}>
       <span>🌐 ใช้กับทุกเรื่อง (คำสากล)</span>
     </label>
   `;
@@ -498,7 +498,7 @@ async function openBookAssignModal(src) {
     const isChecked = Array.isArray(cur.books) && cur.books.includes(b.bookId);
     html += `
       <label style="display: flex; align-items: center; gap: 8px; padding: 6px; cursor: pointer; font-size: 12px;">
-        <input type="checkbox" class="assign-book-chk" value="${escapeHtml(b.bookId)}" ${isChecked ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
+        <input type="checkbox" class="assign-book-chk" value="${escapeHtml(b.bookId)}" ${isChecked ? 'checked' : ''}>
         <span>📚 ${escapeHtml(b.title)}</span>
       </label>
     `;
@@ -530,7 +530,7 @@ async function openBatchBookAssignModal() {
     const isCurrent = (b.bookId === currentBookId);
     html += `
       <label style="display: flex; align-items: center; gap: 8px; padding: 6px; cursor: pointer; font-size: 12px;">
-        <input type="checkbox" class="assign-book-chk" value="${escapeHtml(b.bookId)}" ${isCurrent ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
+        <input type="checkbox" class="assign-book-chk" value="${escapeHtml(b.bookId)}" ${isCurrent ? 'checked' : ''}>
         <span>📚 ${escapeHtml(b.title)}</span>
       </label>
     `;
