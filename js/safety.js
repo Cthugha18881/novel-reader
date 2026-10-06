@@ -4,7 +4,8 @@
 
 // ---------- API Key ----------
 // โหมด "ไม่จำ key": เก็บใน sessionStorage (หายเมื่อปิดแท็บ และแต่ละแท็บต้องใส่เอง)
-const SECRET_NAME_PATTERN = /^nov_(llm_keys_[a-z0-9]+|jina_key|proxy_key)$/;
+// nov_hosted_session = การเข้าสู่ระบบบริการแปลของ Dusktale (ดูแลเหมือน API Key: ไม่อยู่ในไฟล์สำรอง ลบพร้อม "ลบ API Key ทั้งหมด")
+const SECRET_NAME_PATTERN = /^nov_(llm_keys_[a-z0-9]+|jina_key|proxy_key|hosted_session)$/;
 const SECRETS_SESSION_FLAG = 'nov_secrets_session_only';
 
 function isSecretName(name) {

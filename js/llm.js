@@ -127,6 +127,8 @@ function getActiveProvider() {
 }
 
 function getProviderKeys(provider) {
+  // บริการของ Dusktale ไม่มีคีย์ ใช้การเข้าสู่ระบบแทน (คืนค่าแทนคีย์ให้โค้ดเดิมที่เช็กว่ามีคีย์ทำงานต่อได้)
+  if (provider === 'dusktale') return typeof isHostedSignedIn === 'function' && isHostedSignedIn() ? ['dusktale-session'] : [];
   try {
     const keys = JSON.parse(getSecret(`nov_llm_keys_${provider}`) || '[]');
     return Array.isArray(keys) ? keys.filter(k => typeof k === 'string' && k.trim().length > 5).map(k => k.trim()) : [];
@@ -136,6 +138,7 @@ function getProviderKeys(provider) {
 }
 
 function getProviderModel(provider) {
+  if (provider === 'dusktale') return 'auto';
   return (localStorage.getItem(`nov_llm_model_${provider}`) || LLM_PROVIDERS[provider].defaultModel || '').trim();
 }
 
@@ -146,6 +149,7 @@ function getProviderBaseUrl(provider) {
 
 // โมเดลสำหรับงานรอง (สแกนคำศัพท์/ตรวจทาน/ตรวจความหมาย) ว่างไว้ = ใช้โมเดลหลัก
 function getProviderAuxModel(provider) {
+  if (provider === 'dusktale') return '';
   return (localStorage.getItem(`nov_llm_aux_model_${provider}`) || '').trim();
 }
 
@@ -231,8 +235,16 @@ async function readJsonSafe(res) {
   try { return JSON.parse(text); } catch (e) { return { _raw: text }; }
 }
 
-function errorFromStatus(status, message) {
+function errorFromStatus(status, message, provider = '') {
   const msg = message || `HTTP ${status}`;
+  // เซิร์ฟเวอร์ของ Dusktale ส่งข้อความภาษาไทยที่ถูกต้องมาแล้ว (ไม่ใช่เรื่อง API Key / เครดิตของผู้ใช้)
+  if (provider === 'dusktale') {
+    if (status === 401) return new LLMError('การเข้าสู่ระบบ Dusktale หมดอายุ กรุณาเข้าสู่ระบบใหม่ในหน้าตั้งค่า', 'auth', status);
+    if (status === 402) return new LLMError(msg, 'quota', status);
+    if (status === 429) return new LLMError(msg, 'rate', status);
+    if (status >= 500) return new LLMError(msg, 'server', status);
+    if (status === 403) return new LLMError(msg, 'auth', status);
+  }
   if (status === 401 || status === 403) return new LLMError(`API Key ไม่ถูกต้องหรือไม่มีสิทธิ์: ${msg}`, 'auth', status);
   if (status === 429) return new LLMError(`โควต้าเต็ม / ติด Rate Limit: ${msg}`, 'rate', status);
   // เครดิตในบัญชีหรือวงเงินของคีย์ไม่พอ (OpenRouter ฯลฯ) ลองซ้ำไม่ช่วย ต้องเติมเครดิตหรือเพิ่มวงเงิน
@@ -482,7 +494,7 @@ async function callOpenAIOnce(cfg, key, prompt, opts, signal, jsonMode = null) {
     if ((body.max_tokens || body.max_completion_tokens) && res.status === 400 && /max_(completion_)?tokens/i.test(msg || '')) {
       return callOpenAIOnce(cfg, key, prompt, { ...opts, skipMaxTokens: true }, signal, mode);
     }
-    throw classifyModelError(errorFromStatus(res.status, msg), cfg.model);
+    throw classifyModelError(errorFromStatus(res.status, msg, cfg.provider), cfg.model);
   }
   // OpenAI: prompt_tokens รวมส่วนที่อ่านจาก cache แล้ว
   if (data.usage && opts.onUsage) {
@@ -539,7 +551,7 @@ async function callLLMWithProvider(prompt, { json = true, schema = null, system 
   const cfg = override
     ? { ...getActiveLlmConfig(role, override.provider), model: override.model, mainModel: override.model, auxModel: override.model, ...(override.reasoning ? { reasoning: override.reasoning } : {}) }
     : getActiveLlmConfig(role, providerOverride);
-  if (cfg.keys.length === 0) throw new LLMError(`กรุณาใส่ API Key ของ ${LLM_PROVIDERS[cfg.provider].label} ในเมนู 'ตั้งค่า' ก่อน`, 'config');
+  if (cfg.keys.length === 0) throw new LLMError(cfg.provider === 'dusktale' ? "กรุณาเข้าสู่ระบบ Dusktale ในเมนู 'ตั้งค่า' ก่อน" : `กรุณาใส่ API Key ของ ${LLM_PROVIDERS[cfg.provider].label} ในเมนู 'ตั้งค่า' ก่อน`, 'config');
   if (!cfg.model) throw new LLMError("กรุณาเลือกโมเดลในเมนู 'ตั้งค่า' ก่อน", 'config');
 
   // เพดานค่าใช้จ่ายและเพดานจำนวนครั้งต่อตอน (usage.js)
@@ -622,6 +634,7 @@ async function callLLMJson(prompt, options = {}) {
 
 // ---------- Model listing (ใช้ค่าจากฟอร์มตั้งค่าที่ยังไม่บันทึกได้) ----------
 async function listProviderModels(provider, key, baseUrl = '') {
+  if (provider === 'dusktale') return ['auto'];
   if (provider === 'gemini') {
     const res = await guardedFetch('https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000', {
       headers: { 'x-goog-api-key': key }

@@ -4,8 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
+  <script src="js/hosted-config.js"></script>
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.10.0</title>
+  <title>Dusktale v3.11.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -927,7 +928,9 @@
           </div>
         </div>
 
-        <div class="form-group">
+        <div class="form-group hosted-account" id="hosted-account-box" hidden></div>
+
+        <div class="form-group byok-only">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label class="form-label" style="margin: 0;" id="llm-keys-label">API Keys (คลังคีย์หมุนเวียน)</label>
             <button class="btn btn-secondary btn-sm" id="fetch-models-btn" onclick="fetchLiveModels()">
@@ -941,7 +944,7 @@
           <div id="fetch-status-text" style="font-size: 11px; margin-top: 4px; display: none;"></div>
         </div>
 
-        <div class="form-group">
+        <div class="form-group byok-only">
           <label class="form-label">โมเดล AI ตัวหลัก (Primary Model)</label>
           <input type="text" id="llm-model-input" class="form-input mono" list="llm-model-list" autocomplete="off" placeholder="เลือกหรือพิมพ์ชื่อโมเดล">
           <datalist id="llm-model-list"></datalist>
@@ -950,7 +953,7 @@
           </div>
         </div>
 
-        <div class="form-group">
+        <div class="form-group byok-only">
           <label class="form-label" for="llm-aux-model-input">โมเดลสำหรับงานรอง (ไม่บังคับ)</label>
           <input type="text" id="llm-aux-model-input" class="form-input mono" list="llm-model-list" autocomplete="off" placeholder="เว้นว่าง = ใช้โมเดลหลัก">
           <div class="hint">
@@ -1102,6 +1105,7 @@
   <script src="js/safety.js"></script>
   <script src="js/dialogs.js"></script>
   <script src="js/llm.js"></script>
+  <script src="js/hosted.js"></script>
   <script src="js/usage.js"></script>
   <script src="js/lang.js"></script>
   <script src="js/api.js"></script>

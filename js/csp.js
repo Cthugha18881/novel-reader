@@ -25,6 +25,9 @@
   } catch (e) {
     custom.push('https://api.openai.com');
   }
+  // บริการแปลของ Dusktale (js/hosted-config.js โหลดก่อนไฟล์นี้)
+  const hosted = window.DUSKTALE_HOSTED || {};
+  custom.push(originOf(hosted.apiBase || ''), originOf(hosted.supabaseUrl || ''));
   // proxy สำรองสำหรับดึงหน้าเว็บที่ผู้ใช้ตั้งเอง (source.js)
   try {
     const proxies = JSON.parse(localStorage.getItem('nov_proxies') || '[]');

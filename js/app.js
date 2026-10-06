@@ -39,6 +39,7 @@ function createGuideChapters() {
 /** หน้าต้อนรับ: ขั้นตอนเริ่มต้น 2 ขั้น (ตั้งค่า AI → วางลิงก์/ไฟล์) + อ่านต่อเรื่องล่าสุดถ้ามี */
 async function buildWelcomeHtml() {
   const hasKey = hasActiveApiKey() && !!getActiveLlmConfig().model;
+  const hostedReady = typeof isHostedConfigured === 'function' && isHostedConfigured();
   const books = (await dbGetAllBooks().catch(() => [])).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   const last = books[0];
   return `<section class="welcome" aria-labelledby="welcome-title">
@@ -55,9 +56,13 @@ async function buildWelcomeHtml() {
       <div class="welcome-step${hasKey ? ' done' : ''}">
         <div class="welcome-num" aria-hidden="true">${hasKey ? '✓' : '1'}</div>
         <div>
-          <h2>${hasKey ? 'ตั้งค่า AI แล้ว' : 'ตั้งค่า AI ที่ใช้แปล'}</h2>
-          <p>${hasKey ? `ใช้ ${escapeHtml(LLM_PROVIDERS[getActiveProvider()].label)} · ${escapeHtml(getActiveLlmConfig().model)}` : 'เลือกผู้ให้บริการ (Gemini, Claude หรือ OpenAI-compatible เช่น OpenRouter) แล้ววาง API Key ของคุณ'}</p>
-          <div class="welcome-actions"><button class="btn${hasKey ? '' : ' btn-primary'}" onclick="openSettingsModal()">${hasKey ? 'เปลี่ยนการตั้งค่า AI' : 'ตั้งค่า AI'}</button></div>
+          <h2>${hasKey ? 'ตั้งค่า AI แล้ว' : (hostedReady ? 'เข้าสู่ระบบ หรือใช้ API Key ของตัวเอง' : 'ตั้งค่า AI ที่ใช้แปล')}</h2>
+          <p>${hasKey
+            ? (getActiveProvider() === 'dusktale' ? 'ใช้บริการแปลของ Dusktale (ไม่ต้องใช้ API Key)' : `ใช้ ${escapeHtml(LLM_PROVIDERS[getActiveProvider()].label)} · ${escapeHtml(getActiveLlmConfig().model)}`)
+            : (hostedReady ? 'เข้าสู่ระบบด้วยอีเมลแล้วแปลได้เลย ฟรีเดือนละประมาณ ' + Math.floor(HOSTED.freeTokens / HOSTED.tokensPerChapter) + ' ตอน หรือใช้ API Key ของ Gemini, Claude, OpenRouter ที่มีอยู่แล้ว' : 'เลือกผู้ให้บริการ (Gemini, Claude หรือ OpenAI-compatible เช่น OpenRouter) แล้ววาง API Key ของคุณ')}</p>
+          <div class="welcome-actions">${hostedReady && !hasKey
+            ? '<button class="btn btn-primary" onclick="openHostedSignIn()">เข้าสู่ระบบ — แปลได้เลยฟรี</button><button class="btn" onclick="openSettingsModal(\'ai\')">ใช้ API Key ของตัวเอง</button>'
+            : `<button class="btn${hasKey ? '' : ' btn-primary'}" onclick="openSettingsModal()">${hasKey ? 'เปลี่ยนการตั้งค่า AI' : 'ตั้งค่า AI'}</button>`}</div>
         </div>
       </div>
       <div class="welcome-step">

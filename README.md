@@ -13,6 +13,7 @@
 - **เช็กตอนใหม่**: ต่อเรื่องหรือทุกเรื่อง (จากสารบัญ หรือลิงก์ตอนถัดไปของตอนล่าสุด) แล้วเพิ่มเป็นตอนที่รอแปล ไม่ใช้โควตา AI
 - **โปรไฟล์ตั้งต้น**: syosetu, kakuyomu, royalroad, webnovel.com, wtr-lab.com
 - **วางข้อความ / ไฟล์ .txt .epub**: แยกตอนอัตโนมัติ เดา encoding ไฟล์จีน (GBK/Big5) และเข้าคิว "รอแปล"
+- **บริการแปลของ Dusktale (ไม่ต้องใช้ API Key)**: เข้าสู่ระบบด้วยอีเมล (ลิงก์ หรือรหัส 6 หลัก ผ่าน Supabase Auth แบบ REST) แล้วแปลผ่านเซิร์ฟเวอร์ของ Dusktale (`server/`) ซึ่งใช้ GPT-6 Luna ผ่าน OpenRouter มีโควตา token ต่อเดือนตามแพ็กเกจ (ฟรี 400K ≈ 35 ตอน) ปิดอยู่จนกว่าจะใส่ค่าใน `js/hosted-config.js` วิธีตั้งค่าทั้งระบบ: [`docs/backend-setup.md`](docs/backend-setup.md)
 - **เลือก AI ได้ 3 แบบ**: Google Gemini, Anthropic Claude, OpenAI / OpenAI-compatible (OpenRouter, DeepSeek, LM Studio ฯลฯ) ใส่ได้หลายคีย์ และหมุนคีย์อัตโนมัติเมื่อโควต้าเต็ม
 - **คลังศัพท์อัจฉริยะ**: สกัดชื่อเฉพาะอัตโนมัติ, ล็อกคำแปล, ไฮไลต์ในเนื้อเรื่อง, แยกหมวด 7 หมวด, ใช้ร่วมทุกเรื่องหรือเฉพาะเรื่อง และตั้ง **คำแปลเฉพาะเรื่อง** ได้ (คำจีนเดียวกันแต่ละเรื่องแปลต่างกัน)
 - **อ่านต่อเนื่อง**: infinite scroll (บนหน้ามีไม่เกิน 4 ตอน อ่านยาวแค่ไหนก็ไม่หน่วง เลื่อนขึ้นได้ ตำแหน่งไม่กระโดด), แปลบทถัดไปล่วงหน้า, แปลล่วงหน้าหลายบท (batch), จำตำแหน่งอ่านถึงระดับย่อหน้า
@@ -82,6 +83,9 @@
 
 > ชื่อภายในยังเป็นของเดิมโดยตั้งใจ: ฐานข้อมูล `NovelTranslateDB_v12`, รูปแบบไฟล์สำรอง `NovelTranslateBackup`, ไฟล์คำศัพท์ `NovelTranslateGlossary`, ชื่อไฟล์สำรองอัตโนมัติ `noveltranslate-auto-*`, cache `noveltranslate-*` เปลี่ยนแล้วข้อมูลและไฟล์สำรองเก่าจะเปิดไม่ได้
 | `tests/index.html` | unit test ของฟังก์ชันหลัก (เปิดในเบราว์เซอร์) |
+| `js/hosted-config.js` | ค่าสาธารณะของบริการแปล Dusktale (URL เซิร์ฟเวอร์, Supabase URL, publishable key) โหลดก่อน `csp.js` ว่าง = ปิดบริการ |
+| `js/hosted.js` | บัญชี Dusktale (เข้าสู่ระบบ/ต่ออายุ/ออก, session เก็บแบบ secret), ผู้ให้บริการ `dusktale` ใน `llm.js`, กล่องบัญชีและโควตาในหน้าตั้งค่า |
+| `server/` | เซิร์ฟเวอร์ Vercel Functions ไม่มี dependency: `api/v1/chat/completions.js` (ตรวจผู้ใช้ → จองโควตา → OpenRouter → ตัดยอดจริง), `api/me.js`, `api/health.js`, `lib/core.js` (ฟังก์ชันล้วน), `schema.sql` (ตาราง/RLS/ฟังก์ชันโควตา), `test/` (node --test) |
 | `tests/run-ci.mjs` | ตัวรันทดสอบใน Chromium แบบไม่มีหน้าจอ (unit test + เปิดแอพจริงต้องไม่มี error) ใช้ใน GitHub Actions |
 | `legal/` | นโยบายความเป็นส่วนตัว และข้อกำหนดการใช้งาน (ลิงก์อยู่ท้ายหน้าแรก หน้าต้อนรับ และ ตั้งค่า → 💾 ข้อมูล) |
 

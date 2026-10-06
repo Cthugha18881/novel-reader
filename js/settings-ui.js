@@ -16,6 +16,8 @@ function readProviderDraftFromStorage(provider) {
 }
 
 function stashSettingsForm() {
+  // บริการของ Dusktale ไม่มีคีย์/โมเดลให้กรอก
+  if (settingsFormProvider === 'dusktale') return;
   settingsDrafts[settingsFormProvider] = {
     keys: document.getElementById('llm-keys-area').value,
     model: document.getElementById('llm-model-input').value.trim(),
@@ -47,6 +49,16 @@ function populateModelSuggestions(provider, modelsList = null) {
 function showSettingsForProvider(provider) {
   settingsFormProvider = provider;
   const meta = LLM_PROVIDERS[provider];
+  // Dusktale: แสดงกล่องบัญชีแทนช่อง API Key / โมเดล
+  const hosted = provider === 'dusktale';
+  document.querySelectorAll('#settings-modal .byok-only').forEach(el => { el.hidden = hosted; });
+  const hostedBox = document.getElementById('hosted-account-box');
+  if (hostedBox) hostedBox.hidden = !hosted;
+  if (hosted) {
+    document.getElementById('llm-baseurl-group').style.display = 'none';
+    if (typeof renderHostedAccountBox === 'function') renderHostedAccountBox();
+    return;
+  }
   const draft = settingsDrafts[provider] || readProviderDraftFromStorage(provider);
 
   document.getElementById('llm-keys-label').innerText = `${meta.label} API Keys (คลังคีย์หมุนเวียน)`;
@@ -200,6 +212,7 @@ async function saveSettings() {
   setSessionOnlySecrets(document.getElementById('secrets-session-only').checked);
   localStorage.setItem('nov_backup_remind_days', document.getElementById('backup-remind-days').value);
   Object.entries(settingsDrafts).forEach(([provider, draft]) => {
+    if (!LLM_PROVIDERS[provider] || provider === 'dusktale') return;
     const parsedKeys = draft.keys.split('\n').map(k => k.trim()).filter(k => k.length > 5);
     setSecret(`nov_llm_keys_${provider}`, parsedKeys.length ? JSON.stringify(parsedKeys) : '');
     localStorage.setItem(`nov_llm_model_${provider}`, draft.model);
@@ -233,6 +246,10 @@ async function saveSettings() {
     (mismatch ? `\n⚠️ คีย์ OpenAI-compatible เป็นของ ${mismatch.name} แต่ Base URL ไม่ใช่ ${mismatch.url} คีย์จะถูกส่งผิดที่ กรุณาแก้ Base URL` : '');
   const openaiBase = getProviderBaseUrl('openai');
   const needsReload = openaiBase && !isConnectAllowedByCsp(openaiBase);
+  if (cfg.provider === 'dusktale') {
+    appAlert(`บันทึกการตั้งค่าเรียบร้อยแล้ว\nใช้งาน ${LLM_PROVIDERS.dusktale.label}${cfg.keys.length ? '' : '\n⚠️ ยังไม่ได้เข้าสู่ระบบ กรุณาเข้าสู่ระบบด้วยอีเมลที่ ตั้งค่า → 🤖 AI ก่อนแปล'}`);
+    return;
+  }
   appAlert(`บันทึกการตั้งค่าเรียบร้อยแล้ว\nใช้งาน ${LLM_PROVIDERS[cfg.provider].label} (${cfg.model || 'ยังไม่เลือกโมเดล'}) — คลัง API Key ${cfg.keys.length} ตัว${warning}`);
   if (needsReload && await appConfirm(`Base URL ใหม่ (${openaiBase}) จะใช้ได้หลังรีโหลดหน้า เพราะระบบความปลอดภัยอนุญาตปลายทางตอนเปิดหน้าเท่านั้น`, { title: 'รีโหลดหน้า', confirmLabel: 'รีโหลดตอนนี้', cancelLabel: 'ไว้ทีหลัง' })) {
     location.reload();

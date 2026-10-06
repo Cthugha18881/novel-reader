@@ -25,6 +25,7 @@
   <script src="../js/safety.js"></script>
   <script src="../js/dialogs.js"></script>
   <script src="../js/llm.js"></script>
+  <script src="../js/hosted.js"></script>
   <script src="../js/usage.js"></script>
   <script src="../js/lang.js"></script>
   <script src="../js/api.js"></script>
@@ -977,6 +978,31 @@
       const run = batchProgressHtml('x'), q = batchProgressHtml('y'), done = batchProgressHtml('z'), none = batchProgressHtml('w');
       batchCurrent = saved.cur; batchQueue = saved.q; delete batchResults.z;
       return run.includes('1/4') && run.includes('width: 25%') && run.includes('&lt;b&gt;') && q.includes('รอคิวแปล 2 ตอน') && done.includes('แปลเสร็จ 3 ตอน') && none === '';
+    });
+    test('hosted: ไม่มีค่าตั้ง = ไม่มีผู้ให้บริการ dusktale แอพทำงานแบบเดิม', () => {
+      return !isHostedConfigured() && !LLM_PROVIDERS.dusktale && !PROVIDER_CALLERS.dusktale && eq(getProviderKeys('dusktale'), []);
+    });
+    test('hosted: parseAuthHash อ่านผลจากลิงก์ในอีเมล', () => {
+      const ok = parseAuthHash('#access_token=AT&expires_at=2000000000&expires_in=3600&refresh_token=RT&token_type=bearer&type=magiclink');
+      const err = parseAuthHash('#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired');
+      return ok.access_token === 'AT' && ok.refresh_token === 'RT' && ok.expires_at === 2000000000 && ok.type === 'magiclink' &&
+        err.error === 'Email link is invalid or has expired' && parseAuthHash('') === null && parseAuthHash('#shelf') === null && parseAuthHash('#access_token=only') === null;
+    });
+    test('hosted: session หมดอายุ / ต่ออายุ', () => {
+      const s = sessionFromAuthResponse({ access_token: 'a', refresh_token: 'r', expires_in: 3600, user: { email: 'x@y.z' } }, 1000);
+      return s.expires_at === 4600 && s.email === 'x@y.z' && sessionFromAuthResponse({ access_token: 'a' }) === null &&
+        !hostedSessionNeedsRefresh(s, 1000) && hostedSessionNeedsRefresh(s, 4550) && hostedSessionNeedsRefresh(null) && hostedSessionNeedsRefresh({ access_token: 'a' }, 1);
+    });
+    test('hosted: describeHostedQuota เหลือกี่ตอน', () => {
+      const q = describeHostedQuota({ used: 110000, limit: 400000 }, 11000);
+      const over = describeHostedQuota({ used: 999999, limit: 400000 }, 11000);
+      return q.left === 290000 && q.chaptersLeft === 26 && q.chaptersTotal === 36 && q.pct === 28 && over.left === 0 && over.pct === 100 && describeHostedQuota({}).limit === 0;
+    });
+    test('errorFromStatus: dusktale ใช้ข้อความของเซิร์ฟเวอร์ ไม่พูดถึง API Key/เติมเครดิต', () => {
+      const q = errorFromStatus(402, 'โควตาแปลของเดือนนี้หมดแล้ว', 'dusktale');
+      const a = errorFromStatus(401, 'x', 'dusktale');
+      const byok = errorFromStatus(402, 'x');
+      return q.kind === 'quota' && q.message === 'โควตาแปลของเดือนนี้หมดแล้ว' && a.kind === 'auth' && /เข้าสู่ระบบ/.test(a.message) && /เติมเครดิต/.test(byok.message);
     });
     test('setModelOverride/getModelOverride: ผูกกับ signal เท่านั้น', () => {
       const a = new AbortController(), b = new AbortController();
