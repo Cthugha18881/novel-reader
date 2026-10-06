@@ -1112,3 +1112,23 @@ body.home-open.no-book .dock-home-only { display: none; }
 /* เป้ากดของรายการ (WCAG 2.5.8 ≥ 24px) */
 input.chap-chk, input.gloss-item-chk { width: 24px; height: 24px; }
 .home-card-title { min-height: 24px; }
+
+/* ---------- หน้าข้อกำหนด / นโยบาย (legal/) ---------- */
+.legal-body { display: block; }
+.legal-page { max-width: 760px; margin: 0 auto; padding: 24px 20px 64px; font-family: var(--font-ui); line-height: 1.75; font-size: 15px; }
+.legal-page h1 { font-size: 26px; margin: 10px 0 4px; }
+.legal-page h2 { font-size: 17px; margin: 26px 0 8px; }
+.legal-page p, .legal-page li { color: var(--text); }
+.legal-page ul { padding-left: 22px; margin: 6px 0; }
+.legal-page a { color: var(--accent-text); }
+.legal-back { display: inline-block; margin-bottom: 16px; font-size: 14px; }
+.legal-logo { display: block; border-radius: 14px; box-shadow: var(--shadow); }
+.legal-meta { font-size: 13px; color: var(--text-muted) !important; }
+.legal-summary { margin: 18px 0; padding: 14px 16px; border-radius: var(--radius-lg); background: var(--accent-soft); border: 1px solid var(--accent-line); }
+.legal-table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0; }
+.legal-table th, .legal-table td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+.legal-table th { background: var(--surface-2); }
+.legal-foot { margin-top: 32px; font-size: 13px; }
+@media (max-width: 560px) { .legal-table, .legal-table tbody, .legal-table tr, .legal-table td { display: block; width: 100%; } .legal-table thead { display: none; } .legal-table td { border-top: none; } .legal-table tr { border-top: 1px solid var(--border); margin-bottom: 8px; } }
+.legal-links { font-size: 12px; color: var(--text-muted); text-align: center; margin-top: 24px; }
+.legal-links a { color: var(--accent-text); }

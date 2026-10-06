@@ -73,6 +73,7 @@ async function buildWelcomeHtml() {
       </div>
     </div>
     <p class="welcome-note">มีคำถามเรื่องการใช้งาน กดปุ่ม 💬 มุมขวาล่างเพื่อถามผู้ช่วย AI ได้ · ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น อย่าลืมสำรองข้อมูลที่ ตั้งค่า → 💾 ข้อมูล</p>
+    <p class="legal-links"><a href="legal/privacy.html">นโยบายความเป็นส่วนตัว</a> · <a href="legal/terms.html">ข้อกำหนดการใช้งาน</a></p>
   </section>`;
 }
 

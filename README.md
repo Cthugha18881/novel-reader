@@ -72,6 +72,8 @@
 
 > ชื่อภายในยังเป็นของเดิมโดยตั้งใจ: ฐานข้อมูล `NovelTranslateDB_v12`, รูปแบบไฟล์สำรอง `NovelTranslateBackup`, ไฟล์คำศัพท์ `NovelTranslateGlossary`, ชื่อไฟล์สำรองอัตโนมัติ `noveltranslate-auto-*`, cache `noveltranslate-*` เปลี่ยนแล้วข้อมูลและไฟล์สำรองเก่าจะเปิดไม่ได้
 | `tests/index.html` | unit test ของฟังก์ชันหลัก (เปิดในเบราว์เซอร์) |
+| `tests/run-ci.mjs` | ตัวรันทดสอบใน Chromium แบบไม่มีหน้าจอ (unit test + เปิดแอพจริงต้องไม่มี error) ใช้ใน GitHub Actions |
+| `legal/` | นโยบายความเป็นส่วนตัว และข้อกำหนดการใช้งาน (ลิงก์อยู่ท้ายหน้าแรก หน้าต้อนรับ และ ตั้งค่า → 💾 ข้อมูล) |
 
 ### หลักการสำคัญในโค้ด
 
@@ -103,7 +105,9 @@ python -m http.server 8765
 
 ## Deploy
 
-GitHub Actions (`.github/workflows/pages.yml`) จะ deploy ไป GitHub Pages อัตโนมัติเมื่อ push เข้า branch `codex/complete-app`
+GitHub Actions (`.github/workflows/pages.yml`) ทำ 2 ขั้นเมื่อ push เข้า branch `codex/complete-app`:
+1. **test**: `node --check` ทุกไฟล์ใน `js/` แล้วรัน `tests/run-ci.mjs` (unit test ทั้งหมดใน Chromium + เปิดแอพจริง เปิดหน้าต่างหลัก ต้องไม่มี JavaScript error ปิดอินเทอร์เน็ตระหว่างทดสอบ)
+2. **deploy**: ไป GitHub Pages เฉพาะเมื่อ test ผ่าน (pull request รันแค่ test)
 ถ้าเปลี่ยนไปใช้ `main` ให้แก้ `on.push.branches` ใน workflow ด้วย
 
 เมื่อแก้ไฟล์ของแอพแล้ว ควรเปลี่ยน `CACHE_NAME` ใน `sw.js` ทุกครั้งที่ออกเวอร์ชันใหม่
