@@ -697,7 +697,7 @@ async function renderTocSummary(entries, isSaved) {
   const box = document.getElementById('toc-summary');
   const actions = document.getElementById('toc-saved-actions');
   if (!entries?.length) {
-    box.innerHTML = '<div style="opacity:0.6; font-size:12px;">ยังไม่มีสารบัญ วางลิงก์หน้าสารบัญ (หน้ารายชื่อตอนทั้งหมดของเรื่อง) แล้วกด "ดึงสารบัญ"</div>';
+    box.innerHTML = '<div style="opacity: 0.6; font-size: 12px;">ยังไม่มีสารบัญ วางลิงก์หน้าสารบัญ (หน้ารายชื่อตอนทั้งหมดของเรื่อง) แล้วกด "ดึงสารบัญ"</div>';
     actions.style.display = 'none';
     return;
   }
@@ -706,9 +706,9 @@ async function renderTocSummary(entries, isSaved) {
   const translated = entries.filter(en => have.has(normalizeUrl(en.url))).length;
   const sample = (list) => list.map(en => `<li>${escapeHtml(en.title || en.url)}</li>`).join('');
   box.innerHTML = `
-    <div style="font-size:12px; margin-bottom:6px;"><b>${entries.length}</b> ตอนในสารบัญ · มีในชั้นหนังสือแล้ว <b>${translated}</b> ตอน${isSaved ? ' · ✓ บันทึกแล้ว' : ' · ยังไม่ได้บันทึก'}</div>
-    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; font-size:11px;">
-      <div><b>ตอนแรกๆ</b><ol style="padding-left:18px;">${sample(entries.slice(0, 3))}</ol></div>
+    <div style="font-size: 12px; margin-bottom: 6px;"><b>${entries.length}</b> ตอนในสารบัญ · มีในชั้นหนังสือแล้ว <b>${translated}</b> ตอน${isSaved ? ' · ✓ บันทึกแล้ว' : ' · ยังไม่ได้บันทึก'}</div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; font-size: 11px;">
+      <div><b>ตอนแรกๆ</b><ol style="padding-left: 18px;">${sample(entries.slice(0, 3))}</ol></div>
       <div><b>ตอนท้ายๆ</b><ol start="${Math.max(1, entries.length - 2)}" style="padding-left:18px;">${sample(entries.slice(-3))}</ol></div>
     </div>`;
   actions.style.display = isSaved ? 'flex' : 'none';
@@ -858,10 +858,10 @@ function renderSiteProfiles() {
     <div class="bible-char-card">
       <div class="bible-char-head">
         <input type="text" value="${escapeHtml(p.host)}" placeholder="โดเมน เช่น example.com" onchange="siteProfilesDraft[${idx}].host = this.value.trim().toLowerCase().replace(/^https?:\\/\\//, '').replace(/^(www|m)\\./, '').replace(/\\/.*$/, '')" style="flex:1; font-weight:600; font-size:12px; padding:4px 6px; border-radius:4px; border:1px solid rgba(0,0,0,0.15);">
-        <label style="font-size:11px; cursor:pointer;"><input type="checkbox" ${p.enabled !== false ? 'checked' : ''} onchange="siteProfilesDraft[${idx}].enabled = this.checked"> ใช้งาน</label>
-        <button class="btn btn-danger" style="padding:1px 6px; font-size:10px;" onclick="siteProfilesDraft.splice(${idx}, 1); renderSiteProfiles();">✕</button>
+        <label style="font-size: 11px; cursor: pointer;"><input type="checkbox" ${p.enabled !== false ? 'checked' : ''} onchange="siteProfilesDraft[${idx}].enabled = this.checked"> ใช้งาน</label>
+        <button class="btn btn-danger btn-sm" onclick="siteProfilesDraft.splice(${idx}, 1); renderSiteProfiles();">✕</button>
       </div>
-      ${failing.has(p.host) ? '<div style="font-size:11px; color:#b45309; margin-bottom:4px;">⚠️ โปรไฟล์นี้หาเนื้อหาไม่เจอติดกันหลายครั้ง เว็บอาจเปลี่ยนหน้าตา ลองทดสอบด้านล่างแล้วปรับ selector</div>' : ''}
+      ${failing.has(p.host) ? '<div style="font-size: 11px; color: var(--warning); margin-bottom: 4px;">⚠️ โปรไฟล์นี้หาเนื้อหาไม่เจอติดกันหลายครั้ง เว็บอาจเปลี่ยนหน้าตา ลองทดสอบด้านล่างแล้วปรับ selector</div>' : ''}
       <div class="bible-char-grid">
         ${field(idx, 'contentSelector', 'CSS selector ของเนื้อหา', 'เช่น #content, .chapter-content', true)}
         ${field(idx, 'titleSelector', 'selector ชื่อตอน', 'เช่น h1')}
@@ -869,8 +869,8 @@ function renderSiteProfiles() {
         ${field(idx, 'removeSelector', 'selector ส่วนที่ตัดทิ้ง', 'เช่น .ads, script, .comments', true)}
       </div>
       <details style="font-size:11px; margin-top:4px;" ${p.jinaTarget || p.jinaWait || p.noCache || (p.nextMode && p.nextMode !== 'auto') || p.lockPattern ? 'open' : ''}>
-        <summary style="cursor:pointer; opacity:0.75;">ตัวเลือกขั้นสูง (เว็บที่โหลดเนื้อหาด้วย JavaScript / เลขตอนใน URL)</summary>
-        <div class="bible-char-grid" style="margin-top:4px;">
+        <summary style="cursor: pointer; opacity: 0.75;">ตัวเลือกขั้นสูง (เว็บที่โหลดเนื้อหาด้วย JavaScript / เลขตอนใน URL)</summary>
+        <div class="bible-char-grid" style="margin-top: 4px;">
           ${field(idx, 'jinaTarget', 'ให้ r.jina.ai อ่านเฉพาะส่วน', 'เช่น .reader-container')}
           ${field(idx, 'jinaWait', 'รอจนส่วนนี้โหลดเสร็จ', 'เช่น .chapter p')}
           ${field(idx, 'lockPattern', 'ข้อความ/regex ใน HTML ที่แปลว่าต้องซื้อ', 'เช่น unlock this chapter')}
@@ -882,10 +882,10 @@ function renderSiteProfiles() {
               <option value="increment" ${p.nextMode === 'increment' ? 'selected' : ''}>เพิ่มเลขตอนท้าย URL</option>
             </select>
           </label>
-          <label style="flex-direction:row; align-items:center; gap:6px;"><input type="checkbox" ${p.noCache ? 'checked' : ''} onchange="siteProfilesDraft[${idx}].noCache = this.checked"> ไม่ใช้หน้าที่ r.jina.ai เก็บไว้ (ช้าลง แต่ได้หน้าล่าสุด)</label>
+          <label style="flex-direction: row; align-items: center; gap: 6px;"><input type="checkbox" ${p.noCache ? 'checked' : ''} onchange="siteProfilesDraft[${idx}].noCache = this.checked"> ไม่ใช้หน้าที่ r.jina.ai เก็บไว้ (ช้าลง แต่ได้หน้าล่าสุด)</label>
         </div>
       </details>
-    </div>`).join('') : '<div style="text-align:center; padding:12px; opacity:0.6; font-size:12px;">ยังไม่มีโปรไฟล์ เว็บที่ไม่มีโปรไฟล์จะใช้ตัวดึงแบบกลาง</div>';
+    </div>`).join('') : '<div class="empty-note">ยังไม่มีโปรไฟล์ เว็บที่ไม่มีโปรไฟล์จะใช้ตัวดึงแบบกลาง</div>';
 }
 
 function addSiteProfile() {
@@ -952,11 +952,11 @@ async function handleSiteProfilesFile(input) {
 function renderProxies() {
   const list = document.getElementById('proxy-list');
   list.innerHTML = proxiesDraft.length ? proxiesDraft.map((p, idx) => `
-    <div style="display:flex; gap:4px; margin-bottom:4px;">
+    <div style="display: flex; gap: 4px; margin-bottom: 4px;">
       <input type="text" class="form-input" style="flex:1; font-size:11px; padding:4px 6px;" value="${escapeHtml(p.name || '')}" placeholder="ชื่อ" onchange="proxiesDraft[${idx}].name = this.value.trim()">
       <input type="url" class="form-input" style="flex:3; font-size:11px; padding:4px 6px; font-family:monospace;" value="${escapeHtml(p.url || '')}" placeholder="https://my-proxy.workers.dev/?url={url}" onchange="proxiesDraft[${idx}].url = this.value.trim()">
-      <button class="btn btn-danger" style="padding:1px 6px; font-size:10px;" onclick="proxiesDraft.splice(${idx}, 1); renderProxies();">✕</button>
-    </div>`).join('') : '<div style="font-size:11px; opacity:0.6;">ยังไม่มี proxy สำรอง (ใช้ r.jina.ai อย่างเดียว)</div>';
+      <button class="btn btn-danger btn-sm" onclick="proxiesDraft.splice(${idx}, 1); renderProxies();">✕</button>
+    </div>`).join('') : '<div class="hint" style="margin-top: 0;">ยังไม่มี proxy สำรอง (ใช้ r.jina.ai อย่างเดียว)</div>';
 }
 
 function addProxy() {
@@ -999,13 +999,13 @@ async function testSiteProfile() {
     const sourceLabel = { profile: 'โปรไฟล์เว็บ', link: 'ลิงก์ในหน้า', html: 'HTML / rel=next', ai: 'AI', toc: 'สารบัญ', increment: 'เพิ่มเลขตอน (โปรไฟล์)', guess: 'เดาจากเลข URL' }[page.nextUrlSource] || page.nextUrlSource;
     const viaLabel = { profile: 'โปรไฟล์เว็บ', generic: 'ตัวดึงแบบกลาง', ai: 'AI ช่วยแยกเนื้อหา' }[page.via] || page.via;
     box.innerHTML = `
-      <div>✓ ดึงได้ด้วย: <b>${escapeHtml(viaLabel)}</b>${page.profileFailed ? ' <span style="color:#dc2626;">(selector ของโปรไฟล์หาเนื้อหาไม่เจอ)</span>' : ''}</div>
+      <div>✓ ดึงได้ด้วย: <b>${escapeHtml(viaLabel)}</b>${page.profileFailed ? ' <span style="color: var(--danger);">(selector ของโปรไฟล์หาเนื้อหาไม่เจอ)</span>' : ''}</div>
       <div>ชื่อตอน: <b>${escapeHtml(page.rawChapTitle)}</b> · ${page.text.length.toLocaleString()} ตัวอักษร · ${page.pageCount || 1} หน้า · ภาษาที่ตรวจพบ: ${escapeHtml(getLangName(detectSourceLang(page.text) || 'other'))}</div>
-      <div>ตอนถัดไป (${escapeHtml(sourceLabel)}): <span style="word-break:break-all;">${escapeHtml(page.nextUrl || '-')}</span></div>
-      ${page.lockInfo ? `<div style="color:#b45309;">🔒 ตรวจพบว่าเป็นตอนที่ต้องซื้อ/อ่านต่อในแอพ: ${escapeHtml(describeLockInfo(page.lockInfo).short)}</div>` : ''}
-      <div class="para-src" style="display:block; max-height:140px; overflow:auto;">${escapeHtml(page.text.slice(0, 600))}${page.text.length > 600 ? '…' : ''}</div>`;
+      <div>ตอนถัดไป (${escapeHtml(sourceLabel)}): <span style="word-break: break-all;">${escapeHtml(page.nextUrl || '-')}</span></div>
+      ${page.lockInfo ? `<div style="color: var(--warning);">🔒 ตรวจพบว่าเป็นตอนที่ต้องซื้อ/อ่านต่อในแอพ: ${escapeHtml(describeLockInfo(page.lockInfo).short)}</div>` : ''}
+      <div class="para-src" style="display: block; max-height: 140px; overflow: auto;">${escapeHtml(page.text.slice(0, 600))}${page.text.length > 600 ? '…' : ''}</div>`;
   } catch (err) {
-    box.innerHTML = `<span style="color:#dc2626;">✗ ${escapeHtml(describeScrapeError(err))}</span>`;
+    box.innerHTML = `<span style="color: var(--danger);">✗ ${escapeHtml(describeScrapeError(err))}</span>`;
   } finally {
     endTask('site-test', controller);
     if (saved === null) localStorage.removeItem('nov_site_profiles'); else localStorage.setItem('nov_site_profiles', saved);

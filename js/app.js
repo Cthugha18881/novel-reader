@@ -424,7 +424,7 @@ function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
       <div class="para-item${kind === 'author_note' ? ' para-note' : ''}${p.userEdited ? ' para-user-edited' : ''}${bookmark ? ' para-bookmarked' : ''}${ttsClass}" id="para-box-${chapIdx}-${pIdx}">
         ${bookmark ? bookmarkMarkHtml(bookmark, chapIdx, pIdx) : ''}
         ${noteLabel}
-        <div class="para-th" onclick="toggleParagraphSrc(event, '${chapIdx}-${pIdx}')" data-unique-key="${chapIdx}-${pIdx}" data-th="${escapeHtml(encodeURIComponent(p.th || ''))}" data-src="${escapeHtml(encodeURIComponent(p.src || ''))}">${highlightedTh}</div>
+        <div class="para-th" tabindex="0" role="button" aria-expanded="false" aria-controls="src-${chapIdx}-${pIdx}" onclick="toggleParagraphSrc(event, '${chapIdx}-${pIdx}')" data-unique-key="${chapIdx}-${pIdx}" data-th="${escapeHtml(encodeURIComponent(p.th || ''))}" data-src="${escapeHtml(encodeURIComponent(p.src || ''))}">${highlightedTh}</div>
         <div class="para-src" id="src-${chapIdx}-${pIdx}"><span class="para-src-text"${p.src ? ` lang="${srcLang}"` : ''}>${escapeHtml(p.src || "ไม่มีข้อความต้นฉบับ")}</span>${actions}</div>
       </div>
     `;
@@ -764,7 +764,7 @@ function checkAndRefreshBottomStatus() {
       <div style="font-size: 13px; font-weight: 500; color: var(--accent-text);">
         <span class="spinner-icon"></span> กำลังดึงและแปลตอนถัดไปให้อัตโนมัติ...
       </div>
-      <div style="font-size: 11px; opacity: 0.7; margin-top: 4px;">
+      <div class="hint">
         เมื่อแปลเสร็จ เนื้อหาจะต่อท้ายสายตาของคุณทันที
       </div>
     `, true);
@@ -773,11 +773,11 @@ function checkAndRefreshBottomStatus() {
       <div style="font-size: 13px; font-weight: 500; color: var(--accent-text);">
         <span class="spinner-icon"></span> ${escapeHtml(OTHER_TAB_BUSY_MESSAGE)}
       </div>
-      <button class="btn" style="padding: 4px 10px; font-size: 11px; margin-top: 8px;" onclick="triggerManualFetchNext()">ลองแปลในแท็บนี้อีกครั้ง</button>
+      <button class="btn btn-sm" style="margin-top: 8px;" onclick="triggerManualFetchNext()">ลองแปลในแท็บนี้อีกครั้ง</button>
     `, true);
   } else if (targetUrl) {
     const errorHtml = lastPrefetchError ? `
-      <div style="font-size: 11px; color: #dc2626; margin-bottom: 8px;">
+      <div style="font-size: 11px; color: var(--danger); margin-bottom: 8px;">
         ⚠️ แปลล่วงหน้าไม่สำเร็จ: ${escapeHtml(lastPrefetchError)}
       </div>` : '';
     updateInfiniteStatusBanner(`
@@ -791,13 +791,13 @@ function checkAndRefreshBottomStatus() {
     `, true);
   } else {
     updateInfiniteStatusBanner(`
-      <div style="font-size: 13px; font-weight: 600; color: #dc2626; margin-bottom: 6px;">
+      <div style="font-size: 13px; font-weight: 600; color: var(--danger); margin-bottom: 6px;">
         ⚠️ ไม่พบลิงก์ของตอนถัดไป
       </div>
       <div style="font-size: 11px; opacity: 0.75; margin-bottom: 10px;">
         ตอนนี้อาจเป็นตอนล่าสุดของเว็บ (กด 🔔 เช็กตอนใหม่ ที่ชั้นหนังสือภายหลัง) หรือเลข URL กระโดดข้าม ถ้ารู้ลิงก์ตอนถัดไป วางเพื่อแปลต่อได้เลย
       </div>
-      <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="promptFixNextUrlFromBottom()">
+      <button class="btn btn-primary btn-sm" onclick="promptFixNextUrlFromBottom()">
         🔗 วาง URL ตอนถัดไป
       </button>
     `, true);
@@ -928,8 +928,21 @@ function toggleParagraphSrc(e, uniqueKey) {
 
   const srcEl = document.getElementById(`src-${uniqueKey}`);
   if (srcEl) {
-    srcEl.style.display = (srcEl.style.display === 'block') ? 'none' : 'block';
+    const open = srcEl.style.display !== 'block';
+    srcEl.style.display = open ? 'block' : 'none';
+    document.querySelector(`.para-th[data-unique-key="${uniqueKey}"]`)?.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
+}
+
+/** ย่อหน้าใช้คีย์บอร์ดได้ (WCAG 2.1.1): Tab ไปที่ย่อหน้า แล้ว Enter / Space เปิดต้นฉบับและปุ่มของย่อหน้า (แก้คำแปล บุ๊กมาร์ก ฟังจากตรงนี้) */
+function setupParagraphKeyboard() {
+  document.getElementById('reading-content')?.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const para = e.target.closest?.('.para-th');
+    if (!para || e.target !== para) return;
+    e.preventDefault();
+    toggleParagraphSrc(e, para.dataset.uniqueKey);
+  });
 }
 
 function setupSelectionMonitor() {
@@ -990,6 +1003,15 @@ function hideGlobalToast() {
 function handleImportCancel() {
   abortTask('import');
   closeModal('import-modal');
+}
+
+/** กล่องสถานะ: สีตามธีม (info / warn / error) แทนการใส่สีตรงๆ ที่อ่านไม่ออกในธีมมืด */
+function setStatusTone(el, tone) {
+  if (!el) return;
+  el.classList.remove('status-info', 'status-warn', 'status-error');
+  el.classList.add(`status-${tone}`);
+  el.style.background = '';
+  el.style.color = '';
 }
 
 function cancelNextChapterFetch() {
@@ -1605,7 +1627,7 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
       onStatus: (msg) => {
         if (currentBookId !== requestBookId) return;
         updateInfiniteStatusBanner(`
-          <div style="font-size: 13px; font-weight: 500; color: #b45309;">
+          <div style="font-size: 13px; font-weight: 500; color: var(--warning);">
             <span class="spinner-icon"></span> ${escapeHtml(msg)}
           </div>
         `, true);
@@ -1860,7 +1882,7 @@ async function handleImportFile(input) {
     renderImportTextPreview();
   } catch (err) {
     importTextParsed = null;
-    status.innerHTML = `<span style="color:#dc2626;">อ่านไฟล์ไม่สำเร็จ: ${escapeHtml(err.message)}</span>`;
+    status.innerHTML = `<span style="color: var(--danger);">อ่านไฟล์ไม่สำเร็จ: ${escapeHtml(err.message)}</span>`;
   }
 }
 
@@ -1873,7 +1895,7 @@ function previewImportText() {
   }
   if (text.length > IMPORT_LIMITS.pasteChars) {
     importTextParsed = null;
-    document.getElementById('import-text-preview').innerHTML = `<span style="color:#dc2626;">ข้อความยาวเกินไป (${text.length.toLocaleString()} ตัวอักษร) วางได้ไม่เกิน ${IMPORT_LIMITS.pasteChars.toLocaleString()} ตัวอักษร ลองแบ่งเป็นหลายครั้ง</span>`;
+    document.getElementById('import-text-preview').innerHTML = `<span style="color: var(--danger);">ข้อความยาวเกินไป (${text.length.toLocaleString()} ตัวอักษร) วางได้ไม่เกิน ${IMPORT_LIMITS.pasteChars.toLocaleString()} ตัวอักษร ลองแบ่งเป็นหลายครั้ง</span>`;
     return;
   }
   importTextParsed = { bookTitle: document.getElementById('import-text-title').value.trim(), chapters: splitTextIntoChapters(text) };
@@ -1884,7 +1906,7 @@ function renderImportTextPreview() {
   const box = document.getElementById('import-text-preview');
   const list = importTextParsed?.chapters || [];
   if (!list.length) {
-    box.innerHTML = '<span style="color:#dc2626;">ไม่พบเนื้อหาในข้อความ/ไฟล์นี้</span>';
+    box.innerHTML = '<span style="color: var(--danger);">ไม่พบเนื้อหาในข้อความ/ไฟล์นี้</span>';
     return;
   }
   const total = list.reduce((n, ch) => n + ch.paragraphs.join('').length, 0);
@@ -1892,9 +1914,9 @@ function renderImportTextPreview() {
   const lang = detectSourceLang(list.slice(0, 3).map(ch => ch.paragraphs.join('\n')).join('\n'));
   box.innerHTML = `
     <div>พบ <b>${list.length}</b> ตอน · ${total.toLocaleString()} ตัวอักษร${lang ? ` · ภาษาที่ตรวจพบ: <b>${escapeHtml(getLangName(lang))}</b>` : ''}</div>
-    <ol style="padding-left:20px; margin-top:4px;">${sample.map((ch, i) => ch
-      ? `<li value="${list.indexOf(ch) + 1}">${escapeHtml(ch.title)} <span style="opacity:0.6;">(${ch.paragraphs.join('').length.toLocaleString()} ตัวอักษร)</span></li>`
-      : '<li style="list-style:none; opacity:0.6;">…</li>').join('')}</ol>`;
+    <ol style="padding-left: 20px; margin-top: 4px;">${sample.map((ch, i) => ch
+      ? `<li value="${list.indexOf(ch) + 1}">${escapeHtml(ch.title)} <span style="opacity: 0.6;">(${ch.paragraphs.join('').length.toLocaleString()} ตัวอักษร)</span></li>`
+      : '<li style="list-style: none; opacity: 0.6;">…</li>').join('')}</ol>`;
 }
 
 /** นำเข้าข้อความ/ไฟล์เป็น "ตอนที่รอแปล" (ยังไม่ใช้โควตา AI จนกว่าจะสั่งแปล) */
@@ -1989,8 +2011,7 @@ async function startTranslateFirst() {
   const btnText = document.getElementById('start-btn-text');
 
   status.style.display = 'block';
-  status.style.background = '#eff6ff';
-  status.style.color = '#1e40af';
+  setStatusTone(status, 'info');
   status.innerText = "กำลังสแกนหาเนื้อหา...";
   startBtn.disabled = true;
   btnText.innerText = "กำลังทำงาน...";
@@ -2036,8 +2057,7 @@ async function startTranslateFirst() {
       lockInfo,
       prevChapter: prevChap,
       onStatus: (msg) => {
-        status.style.background = '#fffbeb';
-        status.style.color = '#b45309';
+        setStatusTone(status, 'warn');
         status.innerText = msg;
       }
     });
@@ -2082,8 +2102,7 @@ async function startTranslateFirst() {
     await loadBookFromDB(targetBookId, newChapter.id);
     closeModal('import-modal');
   } catch (err) {
-    status.style.background = '#fef2f2';
-    status.style.color = '#991b1b';
+    setStatusTone(status, 'error');
     if (isAbortError(err)) status.innerText = "ยกเลิกการแปลแล้ว";
     // แยก "หน้าเว็บไม่มีอยู่" ออกจาก "ดึงหน้าได้แต่หาเนื้อหาไม่เจอ" เพื่อให้ผู้ใช้รู้ว่าต้องแก้ตรงไหน
     else if (err.message === '404') status.innerText = 'ข้อผิดพลาด: ไม่พบหน้านิยาย (404 Not Found)';
@@ -2235,7 +2254,7 @@ function applySuggestedBaseUrl(url) {
   document.getElementById('llm-baseurl-input').value = url;
   const statusText = document.getElementById('fetch-status-text');
   statusText.style.display = 'block';
-  statusText.style.color = '#2563eb';
+  statusText.style.color = 'var(--accent-text)';
   statusText.innerText = 'ใส่ Base URL ให้แล้ว กด "บันทึกการตั้งค่า" แล้วรีโหลดหน้า (ระบบความปลอดภัยอนุญาตปลายทางใหม่ตอนเปิดหน้า) จากนั้นกด "ตรวจเช็กโมเดล" อีกครั้ง';
 }
 
@@ -2251,14 +2270,14 @@ async function fetchLiveModels() {
   const suggested = provider === 'openai' ? suggestBaseUrlForKey(firstKey, baseUrl) : null;
   if (suggested) {
     statusText.style.display = 'block';
-    statusText.style.color = '#b45309';
+    statusText.style.color = 'var(--warning)';
     statusText.innerHTML = `คีย์นี้เป็นของ <b>${escapeHtml(suggested.name)}</b> แต่ Base URL ยังเป็น ${escapeHtml(baseUrl || '(ว่าง)')} คีย์จะถูกส่งไปผิดที่
       <button class="btn btn-primary" style="padding: 2px 8px; font-size: 11px; margin-left: 4px;" onclick="applySuggestedBaseUrl(${jsArg(suggested.url)})">ใช้ ${escapeHtml(suggested.url)}</button>`;
     return;
   }
   if (provider === 'openai' && baseUrl && !isConnectAllowedByCsp(baseUrl)) {
     statusText.style.display = 'block';
-    statusText.style.color = '#b45309';
+    statusText.style.color = 'var(--warning)';
     statusText.innerText = 'Base URL ใหม่นี้ยังไม่ได้รับอนุญาตในหน้านี้ (ระบบความปลอดภัยจำกัดปลายทางที่ส่งข้อมูลได้) กด "บันทึกการตั้งค่า" แล้วรีโหลดหน้าก่อน จึงจะตรวจเช็กได้';
     return;
   }
@@ -2266,7 +2285,7 @@ async function fetchLiveModels() {
   fetchBtn.disabled = true;
   fetchBtn.innerText = "กำลังตรวจเช็ก...";
   statusText.style.display = "block";
-  statusText.style.color = "#2563eb";
+  statusText.style.color = 'var(--accent-text)';
   statusText.innerText = `กำลังเชื่อมต่อไปยัง ${LLM_PROVIDERS[provider].label}...`;
 
   try {
@@ -2278,10 +2297,10 @@ async function fetchLiveModels() {
     const modelInput = document.getElementById('llm-model-input');
     if (!modelInput.value.trim()) modelInput.value = availableModels[0];
 
-    statusText.style.color = "#16a34a";
+    statusText.style.color = 'var(--success)';
     statusText.innerText = `✓ คีย์ใช้งานได้ ตรวจพบโมเดล ${availableModels.length} รุ่น (เลือกได้จากช่องโมเดลด้านล่าง)`;
   } catch (err) {
-    statusText.style.color = "#dc2626";
+    statusText.style.color = 'var(--danger)';
     statusText.innerText = "เกิดข้อผิดพลาด: " + err.message;
   } finally {
     fetchBtn.disabled = false;
@@ -2430,7 +2449,7 @@ function renderBackupImportModal(current) {
       <thead><tr><th></th><th>ในเครื่องนี้</th><th>ในไฟล์</th></tr></thead>
       <tbody>${row('นิยาย (เรื่อง)', 'books')}${row('ตอน', 'chapters')}${row('คำศัพท์', 'glossaries')}${row('คู่มือเรื่อง / สารบัญ', 'bookData')}${row('สถิติการใช้ AI', 'usage')}${row('ฉบับแปลก่อนหน้า (ประวัติเวอร์ชัน)', 'chapterVersions')}</tbody>
     </table>
-    ${dropped ? `<div style="color: #b45309; margin-top: 6px;">⚠️ จะข้ามข้อมูลที่เสียหรือรูปแบบไม่ถูกต้อง ${dropped.toLocaleString()} รายการ</div>` : ''}`;
+    ${dropped ? `<div style="color: var(--warning); margin-top: 6px;">⚠️ จะข้ามข้อมูลที่เสียหรือรูปแบบไม่ถูกต้อง ${dropped.toLocaleString()} รายการ</div>` : ''}`;
 
   const settingsCount = Object.keys(settings.safe).length;
   document.getElementById('backup-import-settings-row').style.display = settingsCount ? 'flex' : 'none';
@@ -2571,7 +2590,7 @@ function renderBookshelfBackupNote() {
   if (!el) return;
   const state = getBackupReminderState();
   el.innerText = `สำรองครั้งล่าสุด: ${formatAgo(state.lastBackup)}${state.hasUnsaved ? ' · มีข้อมูลใหม่ที่ยังไม่ได้สำรอง' : ''}`;
-  el.style.color = state.shouldRemind ? '#b45309' : '';
+  el.style.color = state.shouldRemind ? 'var(--warning)' : '';
 }
 
 /** ส่วน "ข้อมูลและความปลอดภัย" ในหน้าตั้งค่า */
@@ -2729,7 +2748,7 @@ async function renderUsageDashboard() {
     const color = state.level === 'over' ? '#dc2626' : (state.level === 'warn' ? '#b45309' : '#16a34a');
     statusEl.innerHTML = `<span style="color: ${color}; font-weight: 600;">${state.level === 'over' ? '⛔ เกินเพดานแล้ว' : (state.level === 'warn' ? '⚠️ ใกล้ถึงเพดาน' : '✓ ยังไม่ถึงเพดาน')}</span>
       — ${escapeHtml(w.period)}ใช้ไป ${escapeHtml(formatBudgetAmount(w.used, state.unit))} จาก ${escapeHtml(formatBudgetAmount(w.limit, state.unit))} (${Math.round(w.ratio * 100)}%)
-      ${state.unpricedWarning ? '<div style="color: #b45309;">บางโมเดลยังไม่กรอกราคา ยอดเงินจึงต่ำกว่าความจริง (กรอกราคาด้านล่าง หรือเปลี่ยนหน่วยเพดานเป็น token)</div>' : ''}`;
+      ${state.unpricedWarning ? '<div style="color: var(--warning);">บางโมเดลยังไม่กรอกราคา ยอดเงินจึงต่ำกว่าความจริง (กรอกราคาด้านล่าง หรือเปลี่ยนหน่วยเพดานเป็น token)</div>' : ''}`;
   }
   document.getElementById('budget-unit').value = budget.unit;
   document.getElementById('budget-daily').value = budget.daily || '';
@@ -2844,7 +2863,7 @@ function renderGeminiOverheadResult(r) {
   const el = document.getElementById('gemini-overhead-result');
   if (!el || !r) return;
   if (r.error) {
-    el.innerHTML = `<span style="color: #dc2626;">ตรวจไม่สำเร็จ: ${escapeHtml(r.error)}</span>`;
+    el.innerHTML = `<span style="color: var(--danger);">ตรวจไม่สำเร็จ: ${escapeHtml(r.error)}</span>`;
     return;
   }
   const rows = Object.entries(r.schemas).map(([name, n]) => `${escapeHtml(name)} +${n.toLocaleString()}`).join(' · ');
@@ -3052,6 +3071,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   setupScrollMonitor();
   setupFullscreenListener();
   setupPopoverDelegation();
+  setupParagraphKeyboard();
   setupHome();
 
   const lastBookId = localStorage.getItem('nov_last_book_id');

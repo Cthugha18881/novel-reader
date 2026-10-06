@@ -229,11 +229,11 @@ function newChapterBadgeHtml(bookId) {
   const when = new Date(s.checkedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
   if (s.count > 0) {
     return `<span class="new-chap-badge">🆕 ${s.atLeast ? 'มีตอนใหม่' : `${s.count} ตอนใหม่`}</span>
-      <button class="btn btn-primary" style="padding: 2px 8px; font-size: 10px;" onclick="queueNewChaptersFromBadge(${jsArg(bookId)})">เพิ่มเข้าคิว</button>
-      <span style="font-size: 10px; opacity: 0.6;">เช็กเมื่อ ${escapeHtml(when)}</span>`;
+      <button class="btn btn-primary btn-sm" onclick="queueNewChaptersFromBadge(${jsArg(bookId)})">เพิ่มเข้าคิว</button>
+      <span class="text-muted" style="font-size: 11px;">เช็กเมื่อ ${escapeHtml(when)}</span>`;
   }
   const text = s.mode === 'error' ? `⚠️ เช็กไม่ได้: ${s.note || ''}` : (s.mode === 'none' ? s.note || 'เช็กไม่ได้' : 'ยังไม่มีตอนใหม่');
-  return `<span style="font-size: 10px; opacity: 0.65;">${escapeHtml(text)} · เช็กเมื่อ ${escapeHtml(when)}</span>`;
+  return `<span class="text-muted" style="font-size: 11px;">${escapeHtml(text)} · เช็กเมื่อ ${escapeHtml(when)}</span>`;
 }
 
 function renderNewChapterBadge(bookId) {

@@ -257,7 +257,7 @@ async function renderBibleCharacters() {
   const pendingCount = chars.filter(c => c.pending).length;
   document.getElementById('bible-pending-note').innerText = pendingCount ? `มีข้อเสนอแก้ไขจาก AI ${pendingCount} ตัวละคร (กรอบสีเหลือง) กดรับหรือปฏิเสธได้` : '';
   if (chars.length === 0) {
-    list.innerHTML = '<div style="text-align:center; padding:16px; opacity:0.6; font-size:12px;">ยังไม่มีตัวละครในคู่มือ ระบบจะเพิ่มให้อัตโนมัติระหว่างแปล หรือกด "✨ สร้างจากตอนที่แปลแล้ว"</div>';
+    list.innerHTML = '<div class="empty-note">ยังไม่มีตัวละครในคู่มือ ระบบจะเพิ่มให้อัตโนมัติระหว่างแปล หรือกด "✨ สร้างจากตอนที่แปลแล้ว"</div>';
     return;
   }
   list.innerHTML = chars.map((ch, idx) => {
@@ -267,18 +267,18 @@ async function renderBibleCharacters() {
         <b>AI เสนอให้แก้:</b>
         ${BIBLE_FIELDS.filter(f => ch.pending[f]).map(f => `${({ gender: 'เพศ', role: 'บทบาท', selfRef: 'แทนตัวเอง' })[f]}: ${escapeHtml(ch[f] || '-')} → <b>${escapeHtml(f === 'gender' ? GENDER_LABELS[ch.pending[f]] || ch.pending[f] : ch.pending[f])}</b>`).join(' · ')}
         ${ch.pending.addressing ? `เรียกผู้อื่น: <b>${escapeHtml(formatAddressing(ch.pending.addressing))}</b>` : ''}
-        <div style="margin-top:4px; display:flex; gap:4px;">
-          <button class="btn btn-primary" style="padding:1px 8px; font-size:10px;" onclick="resolveBiblePending(${idx}, true)">รับ</button>
-          <button class="btn" style="padding:1px 8px; font-size:10px;" onclick="resolveBiblePending(${idx}, false)">ไม่รับ</button>
+        <div style="margin-top: 4px; display: flex; gap: 4px;">
+          <button class="btn btn-primary btn-sm" onclick="resolveBiblePending(${idx}, true)">รับ</button>
+          <button class="btn btn-sm" onclick="resolveBiblePending(${idx}, false)">ไม่รับ</button>
         </div>
       </div>` : '';
     return `
       <div class="bible-char-card${ch.locked ? ' locked' : ''}${ch.pending ? ' has-pending' : ''}" data-idx="${idx}">
         <div class="bible-char-head">
-          <b>${escapeHtml(ch.src)}</b> ${thName ? `➔ <span style="color: var(--accent-text);">${escapeHtml(thName)}</span>` : '<span style="opacity:0.5; font-size:11px;">(ยังไม่มีในคลังศัพท์)</span>'}
-          <span style="margin-left:auto; display:flex; gap:6px; align-items:center;">
-            <label style="font-size:11px; cursor:pointer;"><input type="checkbox" ${ch.locked ? 'checked' : ''} onchange="bibleDraft.bible.characters[${idx}].locked = this.checked; renderBibleCharacters();"> 🔒 ล็อก</label>
-            <button class="btn btn-danger" style="padding:1px 6px; font-size:10px;" onclick="removeBibleCharacter(${idx})">✕</button>
+          <b>${escapeHtml(ch.src)}</b> ${thName ? `➔ <span style="color: var(--accent-text);">${escapeHtml(thName)}</span>` : '<span style="opacity: 0.5; font-size: 11px;">(ยังไม่มีในคลังศัพท์)</span>'}
+          <span style="margin-left: auto; display: flex; gap: 6px; align-items: center;">
+            <label style="font-size: 11px; cursor: pointer;"><input type="checkbox" ${ch.locked ? 'checked' : ''} onchange="bibleDraft.bible.characters[${idx}].locked = this.checked; renderBibleCharacters();"> 🔒 ล็อก</label>
+            <button class="btn btn-danger btn-sm" onclick="removeBibleCharacter(${idx})">✕</button>
           </span>
         </div>
         <div class="bible-char-grid">
@@ -346,8 +346,8 @@ function renderReplaceRules() {
       <input type="text" value="${escapeHtml(r.from)}" onchange="bibleDraft.replaceRules[${idx}].from = this.value" placeholder="คำที่ต้องการแทน">
       <span>➔</span>
       <input type="text" value="${escapeHtml(r.to)}" onchange="bibleDraft.replaceRules[${idx}].to = this.value" placeholder="แทนด้วย (เว้นว่าง = ลบ)">
-      <button class="btn btn-danger" style="padding:1px 6px; font-size:10px;" onclick="bibleDraft.replaceRules.splice(${idx}, 1); renderReplaceRules();">✕</button>
-    </div>`).join('') : '<div style="text-align:center; padding:12px; opacity:0.6; font-size:12px;">ยังไม่มีกฎแทนคำ</div>';
+      <button class="btn btn-danger btn-sm" onclick="bibleDraft.replaceRules.splice(${idx}, 1); renderReplaceRules();">✕</button>
+    </div>`).join('') : '<div class="empty-note">ยังไม่มีกฎแทนคำ</div>';
 }
 
 function addReplaceRule() {
@@ -362,11 +362,11 @@ function renderStyleExamples() {
     const idx = examples.length - 1 - revIdx;
     return `
       <div class="bible-example">
-        <div class="para-src" style="display:block; margin:0 0 4px;">${escapeHtml(ex.src)}</div>
-        <div style="font-size:13px;">${escapeHtml(ex.th)}</div>
-        <button class="btn btn-danger" style="padding:1px 6px; font-size:10px; margin-top:4px;" onclick="bibleDraft.styleExamples.splice(${idx}, 1); renderStyleExamples();">ลบตัวอย่างนี้</button>
+        <div class="para-src" style="display: block; margin: 0 0 4px;">${escapeHtml(ex.src)}</div>
+        <div style="font-size: 13px;">${escapeHtml(ex.th)}</div>
+        <button class="btn btn-danger btn-sm" style="margin-top: 4px;" onclick="bibleDraft.styleExamples.splice(${idx}, 1); renderStyleExamples();">ลบตัวอย่างนี้</button>
       </div>`;
-  }).join('') : '<div style="text-align:center; padding:12px; opacity:0.6; font-size:12px;">ยังไม่มีตัวอย่าง ตัวอย่างจะถูกเพิ่มเมื่อคุณแก้คำแปลในหน้าอ่าน (แตะย่อหน้า → ✎ แก้คำแปล)</div>';
+  }).join('') : '<div class="empty-note">ยังไม่มีตัวอย่าง ตัวอย่างจะถูกเพิ่มเมื่อคุณแก้คำแปลในหน้าอ่าน (แตะย่อหน้า → ✎ แก้คำแปล)</div>';
 }
 
 async function saveBibleModal() {

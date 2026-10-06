@@ -739,8 +739,8 @@ function assistantFeedbackHtml(m, i) {
       <textarea class="form-input" rows="2" id="assistant-fix-${i}" placeholder="เช่น หลินต้งทะลวงขั้นแก่นปราณตอน #12 ไม่ใช่ #10"></textarea>
       <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;">
         <button class="btn btn-primary" style="padding: 2px 8px; font-size: 11px;" onclick="saveAssistantFix(${i})">บันทึก</button>
-        <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="openGlossaryModal()" title="ชื่อผิด/ไม่ตรง แก้คำแปลในคลังศัพท์">แก้ชื่อในคลังศัพท์</button>
-        <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="openStoryLogFromAssistant()" title="เหตุการณ์ผิด แก้ในบันทึกเหตุการณ์ของตอน">แก้บันทึกเหตุการณ์</button>
+        <button class="btn btn-sm" onclick="openGlossaryModal()" title="ชื่อผิด/ไม่ตรง แก้คำแปลในคลังศัพท์">แก้ชื่อในคลังศัพท์</button>
+        <button class="btn btn-sm" onclick="openStoryLogFromAssistant()" title="เหตุการณ์ผิด แก้ในบันทึกเหตุการณ์ของตอน">แก้บันทึกเหตุการณ์</button>
       </div>
     </div>` : '';
   return `<div class="assistant-feedback">

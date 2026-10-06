@@ -134,8 +134,8 @@ async function renderVersionHistory() {
       <span>ต่างกัน <b>${changed.length}</b> จาก ${rows.length} ย่อหน้า</span>
       <label style="cursor: pointer;"><input type="checkbox" ${versionView.onlyChanged ? 'checked' : ''} onchange="versionView.onlyChanged = this.checked; renderVersionHistory()"> แสดงเฉพาะที่ต่าง</label>
       <span style="margin-left: auto; display: flex; gap: 6px;">
-        <button class="btn btn-primary" style="padding: 3px 10px; font-size: 12px;" onclick="restoreChapterVersion()">↩ กู้คืนทั้งตอน</button>
-        <button class="btn btn-danger" style="padding: 3px 10px; font-size: 12px;" onclick="deleteCurrentVersion()">ลบฉบับนี้</button>
+        <button class="btn btn-primary btn-sm" onclick="restoreChapterVersion()">↩ กู้คืนทั้งตอน</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteCurrentVersion()">ลบฉบับนี้</button>
       </span>
     </div>
     <div class="version-diff">
@@ -294,7 +294,7 @@ async function renderQualityReport() {
     <div class="quality-head">
       <div><b>${escapeHtml(r.title)}</b> · ${r.chapters.toLocaleString()} ตอน</div>
       <div class="quality-hint">${total ? `พบ ${total.toLocaleString()} จุดที่ควรตรวจ` : 'ไม่พบจุดที่ต้องตรวจ'} · ตรวจในเครื่อง ไม่ใช้โควตา AI
-        <button class="btn" style="padding: 1px 8px; font-size: 11px; margin-left: 6px;" onclick="renderQualityReport()">ตรวจใหม่</button></div>
+        <button class="btn btn-sm" style="margin-left: 6px;" onclick="renderQualityReport()">ตรวจใหม่</button></div>
     </div>
     ${qualitySection('🔎 ย่อหน้าน่าสงสัย', r.suspicious.length, limitList(r.suspicious, x => qualityItemButton(x, bookId, ` · <span class="quality-reason">${escapeHtml(reasonText(x.reasons))}</span>`)), {
       open: true, hint: 'ตรวจด้วยกฎ: ตัวอักษรต้นฉบับหลงเหลือ, ชื่อไม่ตรงคลังศัพท์, ความยาวผิดปกติ, วงเล็บ, ย่อหน้าที่แปลไม่สำเร็จ (ย่อหน้าที่แก้เองแล้วไม่นับ)'
@@ -307,7 +307,7 @@ async function renderQualityReport() {
       hint: `คำสั่งแปลปัจจุบันรุ่น ${PROMPT_VERSION} ตอนที่แปลก่อนหน้านี้อาจได้คุณภาพต่ำกว่า แปลใหม่ได้ทีละตอน (ฉบับเดิมเก็บไว้ในประวัติ)`
     })}
     ${qualitySection('👤 ตัวละครที่ข้อมูลขัดกัน รอยืนยัน', r.pendingCharacters.length, `<div class="quality-hint">${r.pendingCharacters.map(c => escapeHtml(c.name)).join(', ')}</div>
-      ${isCurrent ? '<button class="btn btn-secondary" style="padding: 3px 10px; font-size: 12px;" onclick="closeModal(\'reader-tools-modal\'); openBibleModal()">เปิดคู่มือเรื่องเพื่อยืนยัน</button>' : ''}`, {
+      ${isCurrent ? '<button class="btn btn-secondary btn-sm" onclick="closeModal(\'reader-tools-modal\'); openBibleModal()">เปิดคู่มือเรื่องเพื่อยืนยัน</button>' : ''}`, {
       hint: 'AI เจอข้อมูลใหม่ที่ไม่ตรงกับคู่มือเรื่อง (เพศ บทบาท คำเรียก) ยังไม่ได้ใช้จนกว่าจะยืนยัน'
     })}
     ${qualitySection('🏷️ คำศัพท์ใหม่ที่ AI เพิ่ม ยังไม่ยืนยัน', r.newTerms.length, `
@@ -324,7 +324,7 @@ async function renderQualityReport() {
     ${qualitySection('🔒 ตอนกันก๊อป / ตอนที่ต้องซื้อ', r.locked.length, limitList(r.locked, x => qualityItemButton(x, bookId)))}
     ${qualitySection('📄 แปลจากตัวอย่าง (ไม่ครบตอน)', r.preview.length, limitList(r.preview, x => qualityItemButton(x, bookId)))}
     ${qualitySection('📜 บันทึกเหตุการณ์ขาด/ไม่ตรงเนื้อหา', r.storyLogMissing + r.storyLogStale, `<div class="quality-hint">ขาด ${r.storyLogMissing} ตอน · เนื้อหาเปลี่ยนหลังทำบันทึก ${r.storyLogStale} ตอน (ผู้ช่วย AI และเพลงประกอบจะแม่นน้อยลง)</div>
-      ${isCurrent ? '<button class="btn btn-secondary" style="padding: 3px 10px; font-size: 12px;" onclick="closeModal(\'reader-tools-modal\'); openStoryLogFromAssistant()">เปิดแท็บบันทึกเหตุการณ์</button>' : ''}`)}`;
+      ${isCurrent ? '<button class="btn btn-secondary btn-sm" onclick="closeModal(\'reader-tools-modal\'); openStoryLogFromAssistant()">เปิดแท็บบันทึกเหตุการณ์</button>' : ''}`)}`;
 }
 
 /** ยืนยันคำศัพท์ที่ AI เพิ่ม (ไม่เปลี่ยนคำแปล แค่บอกว่าตรวจแล้ว) */

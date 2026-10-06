@@ -78,7 +78,7 @@ function renderReaderPanel() {
     <label class="reader-row" style="cursor: pointer;"><span>ปุ่มเลื่อนทีละหน้าจอ ▲▼<br><small style="opacity: 0.65;">ใช้ปุ่มลูกศรซ้าย/ขวาบนคีย์บอร์ดได้ด้วย</small></span>
       <input type="checkbox" ${prefs.pageButtons ? 'checked' : ''} onchange="saveReadingPrefs({ pageButtons: this.checked })"></label>
     <div style="text-align: right; margin-top: 6px;"><button class="btn" style="font-size: 11px;" onclick="resetReadingPrefs()">คืนค่าเริ่มต้น</button></div>
-    <div id="bgm-settings" style="border-top: 1px solid rgba(0,0,0,0.1); margin-top: 8px; padding-top: 4px;"></div>`;
+    <div id="bgm-settings" style="border-top: 1px solid var(--border); margin-top: 8px; padding-top: 4px;"></div>`;
   renderBgmSettings(document.getElementById('bgm-settings'));
 }
 
@@ -828,7 +828,7 @@ async function renderBookmarkList() {
   box.innerHTML = `<div class="reader-result-count">${sorted.length} รายการในเรื่องนี้</div>` + sorted.map(b => {
     const exists = orderOf.has(b.chapId);
     return `<div class="reader-bookmark">
-      <div class="reader-result-meta">${exists ? `#${escapeHtml(labels.get(b.chapId))} ` : ''}${escapeHtml(b.chapTitle || '')}${exists ? '' : ' <span style="color:#dc2626;">(ตอนนี้ถูกลบแล้ว)</span>'} · ${escapeHtml(new Date(b.updatedAt || b.at).toLocaleDateString('th-TH'))}</div>
+      <div class="reader-result-meta">${exists ? `#${escapeHtml(labels.get(b.chapId))} ` : ''}${escapeHtml(b.chapTitle || '')}${exists ? '' : ' <span style="color: var(--danger);">(ตอนนี้ถูกลบแล้ว)</span>'} · ${escapeHtml(new Date(b.updatedAt || b.at).toLocaleDateString('th-TH'))}</div>
       <div class="reader-result-text">${escapeHtml(b.excerpt || '')}</div>
       ${b.note ? `<div class="reader-bookmark-note">📝 ${escapeHtml(b.note)}</div>` : ''}
       <div style="display: flex; gap: 6px; margin-top: 4px;">

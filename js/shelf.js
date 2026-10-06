@@ -78,7 +78,7 @@ function batchProgressHtml(bookId, { compact = false } = {}) {
   if (s.kind === 'queued') {
     return `<div class="batch-progress queued">
       <div class="bp-top"><b>⏳ รอคิวแปล ${s.count} ตอน${s.position > 1 ? ` (คิวที่ ${s.position})` : ''}</b><button class="btn bp-btn" onclick="event.stopPropagation(); cancelBatchTranslate(${id})">ยกเลิก</button></div>
-      <div class="bp-bar"><span style="width: 0"></span></div></div>`;
+      <div class="bp-bar"><span style="width: 0;"></span></div></div>`;
   }
   const head = { done: `✓ แปลเสร็จ ${s.done} ตอน`, stopped: `หยุดแล้ว (แปลไป ${s.done} ตอน)`, locked: '🔒 หยุดที่ตอนที่ต้องซื้อ', error: `⚠️ หยุดกลางคัน (แปลไป ${s.done} ตอน)` }[s.kind] || '';
   return `<div class="batch-progress ${s.kind}">

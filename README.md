@@ -75,6 +75,9 @@
 
 ### หลักการสำคัญในโค้ด
 
+- **สีและขนาดใช้ token/คลาสกลาง** (`styles.css` ส่วนบน): สีตัวอักษรเน้น `--accent-text`, สถานะ `--warning` `--success` `--danger` `--info` (+ `-soft` สำหรับพื้น) แต่ละธีมมีค่าของตัวเอง ห้ามใส่สีตรงๆ ใน HTML/JS เพราะธีมมืดจะอ่านไม่ออก คลาสกลาง: `.btn-sm` `.hint` `.modal-actions` `.mono` `.empty-note` `.text-*` `.status-*` (กล่องสถานะใช้ `setStatusTone(el, 'info' | 'warn' | 'error')`)
+- **ย่อหน้าใช้คีย์บอร์ดได้**: `.para-th` เป็น role=button กด Enter/Space เปิดต้นฉบับ (`setupParagraphKeyboard`)
+
 - **ฟังก์ชันแปลทุกตัวรับ `BookContext`** (`{ bookId, title, author, genre }`) เป็นพารามิเตอร์
   ห้ามอ่าน `currentBookId` / `currentBookGenre` ตรงๆ ในงานเบื้องหลัง เพราะผู้ใช้อาจกำลังอ่านอีกเรื่องอยู่
 - **ทุกงานที่เรียก AI มี AbortController ของตัวเอง** ผ่าน `beginTask(name)` / `endTask(name, controller)`

@@ -195,7 +195,7 @@ function renderBenchmarkResults() {
   const ok = s.results.filter(r => r.ok);
   const sameChapter = s.chapId === chapters[currentChapterIndex]?.id;
   const summaryRows = s.results.map((r, i) => {
-    if (!r.ok) return `<tr><td>${escapeHtml(r.label)}</td><td colspan="6" style="color:#dc2626;">ไม่สำเร็จ: ${escapeHtml(r.error || '')}</td></tr>`;
+    if (!r.ok) return `<tr><td>${escapeHtml(r.label)}</td><td colspan="6" style="color: var(--danger);">ไม่สำเร็จ: ${escapeHtml(r.error || '')}</td></tr>`;
     const cost = benchmarkCost(r);
     return `<tr>
       <td>${escapeHtml(r.label)}</td>

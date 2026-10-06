@@ -141,7 +141,7 @@ function showTermPopover(e, src, tgt) {
   const editBtn = document.getElementById('popover-edit-btn');
   const researchBtn = document.getElementById('popover-research-btn');
 
-  textSpan.innerHTML = `<b>${escapeHtml(src)}</b> ➔ <span id="popover-tgt-span" style="color:#38bdf8;">${escapeHtml(tgt)}</span>`;
+  textSpan.innerHTML = `<b>${escapeHtml(src)}</b> ➔ <span id="popover-tgt-span" style="color: #38bdf8;">${escapeHtml(tgt)}</span>`;
 
   researchBtn.onclick = async (ev) => {
     ev.stopPropagation();
@@ -311,7 +311,7 @@ async function renderGlossaryUI() {
   else if (sortMode === 'len_desc') items.sort((a, b) => b.src.length - a.src.length);
 
   if (items.length === 0) {
-    list.innerHTML = `<div style="text-align:center; padding:20px; opacity:0.5; font-size:12px;">ไม่พบคำศัพท์ที่ตรงกับเงื่อนไขในหมวดหมู่นี้</div>`;
+    list.innerHTML = `<div class="empty-note">ไม่พบคำศัพท์ที่ตรงกับเงื่อนไขในหมวดหมู่นี้</div>`;
     updateGlossaryBatchToolbar();
     return;
   }
@@ -479,7 +479,7 @@ async function openBookAssignModal(src) {
   const titleEl = document.getElementById('assign-term-title');
   const container = document.getElementById('assign-books-list');
   titleEl.innerText = src;
-  container.innerHTML = '<div style="text-align:center; padding:10px;">กำลังโหลด...</div>';
+  container.innerHTML = '<div style="text-align: center; padding: 10px;">กำลังโหลด...</div>';
   openModal('book-assign-modal');
 
   const items = await dbGetAllGlossaryItems();
@@ -488,16 +488,16 @@ async function openBookAssignModal(src) {
 
   const books = await dbGetAllBooks();
   let html = `
-    <label style="display:flex; align-items:center; gap:8px; padding:6px; border-bottom:1px solid rgba(0,0,0,0.06); cursor:pointer; font-weight:600;">
+    <label style="display: flex; align-items: center; gap: 8px; padding: 6px; border-bottom: 1px solid var(--border); cursor: pointer; font-weight: 600;">
       <input type="checkbox" id="assign-global-chk" ${cur.scope === 'global' ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
-      <span>🌐 ใช้งานได้กับทุกเรื่อง (Global)</span>
+      <span>🌐 ใช้กับทุกเรื่อง (คำสากล)</span>
     </label>
   `;
 
   books.forEach(b => {
     const isChecked = Array.isArray(cur.books) && cur.books.includes(b.bookId);
     html += `
-      <label style="display:flex; align-items:center; gap:8px; padding:6px; cursor:pointer; font-size:12px;">
+      <label style="display: flex; align-items: center; gap: 8px; padding: 6px; cursor: pointer; font-size: 12px;">
         <input type="checkbox" class="assign-book-chk" value="${escapeHtml(b.bookId)}" ${isChecked ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
         <span>📚 ${escapeHtml(b.title)}</span>
       </label>
@@ -515,21 +515,21 @@ async function openBatchBookAssignModal() {
   const titleEl = document.getElementById('assign-term-title');
   const container = document.getElementById('assign-books-list');
   titleEl.innerText = `ทั้งหมด (${chks.length}) คำที่เลือก`;
-  container.innerHTML = '<div style="text-align:center; padding:10px;">กำลังโหลด...</div>';
+  container.innerHTML = '<div style="text-align: center; padding: 10px;">กำลังโหลด...</div>';
   openModal('book-assign-modal');
 
   const books = await dbGetAllBooks();
   let html = `
-    <label style="display:flex; align-items:center; gap:8px; padding:6px; border-bottom:1px solid rgba(0,0,0,0.06); cursor:pointer; font-weight:600;">
-      <input type="checkbox" id="assign-global-chk" style="cursor:pointer; accent-color:#2563eb;">
-      <span>🌐 ใช้งานได้กับทุกเรื่อง (Global)</span>
+    <label style="display: flex; align-items: center; gap: 8px; padding: 6px; border-bottom: 1px solid var(--border); cursor: pointer; font-weight: 600;">
+      <input type="checkbox" id="assign-global-chk" style="cursor: pointer;">
+      <span>🌐 ใช้กับทุกเรื่อง (คำสากล)</span>
     </label>
   `;
 
   books.forEach(b => {
     const isCurrent = (b.bookId === currentBookId);
     html += `
-      <label style="display:flex; align-items:center; gap:8px; padding:6px; cursor:pointer; font-size:12px;">
+      <label style="display: flex; align-items: center; gap: 8px; padding: 6px; cursor: pointer; font-size: 12px;">
         <input type="checkbox" class="assign-book-chk" value="${escapeHtml(b.bookId)}" ${isCurrent ? 'checked' : ''} style="cursor:pointer; accent-color:#2563eb;">
         <span>📚 ${escapeHtml(b.title)}</span>
       </label>

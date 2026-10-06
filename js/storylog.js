@@ -385,22 +385,22 @@ async function renderStoryLogTab() {
       บันทึกเหตุการณ์ของแต่ละตอน (ระดับพลัง ของที่ได้/เสีย ความสัมพันธ์ ตัวตน ฉายา) ผู้ช่วย AI ใช้ตอบคำถามแนว "ตอนนี้เป็นอย่างไร"
       ชื่อในบันทึกเก็บตามต้นฉบับ จึงไม่กระทบเมื่อแก้ชื่อไทยในคลังศัพท์ ระบบทำให้อัตโนมัติตอนแปล (ปิดได้ที่ช่องด้านล่าง)
     </div>
-    <div style="font-size: 12px; margin-bottom: 8px;">มีบันทึก <b>${fresh.length}</b> / ${eligible.length} ตอน${stale.length ? ` · <span style="color:#b45309;">${stale.length} ตอนเนื้อหาเปลี่ยนหลังทำบันทึก</span>` : ''}</div>
+    <div style="font-size: 12px; margin-bottom: 8px;">มีบันทึก <b>${fresh.length}</b> / ${eligible.length} ตอน${stale.length ? ` · <span style="color: var(--warning);">${stale.length} ตอนเนื้อหาเปลี่ยนหลังทำบันทึก</span>` : ''}</div>
     <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-bottom: 10px;">
-      ${missing.length ? `<button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="runStoryLogBackfill()">📜 สร้างบันทึกที่ขาด ${missing.length} ตอน (~${formatTokenCount(est.input)} + ${formatTokenCount(est.output)} token)</button>` : ''}
-      <button class="btn" id="story-log-stop-btn" style="padding: 3px 8px; font-size: 11px; display: none;" onclick="abortTask('storylog')">หยุด</button>
+      ${missing.length ? `<button class="btn btn-secondary btn-sm" onclick="runStoryLogBackfill()">📜 สร้างบันทึกที่ขาด ${missing.length} ตอน (~${formatTokenCount(est.input)} + ${formatTokenCount(est.output)} token)</button>` : ''}
+      <button class="btn btn-sm" id="story-log-stop-btn" style="display: none;" onclick="abortTask('storylog')">หยุด</button>
       <label style="font-size: 11px; display: flex; gap: 4px; align-items: center; margin-left: auto; cursor: pointer;">
         <input type="checkbox" ${isStoryLogEnabled() ? 'checked' : ''} onchange="localStorage.setItem('nov_story_log', this.checked ? 'true' : 'false')"> ทำบันทึกอัตโนมัติตอนแปล (ใช้โมเดลงานรอง ~1 คำขอต่อตอน)
       </label>
     </div>
     <div id="story-log-progress" style="font-size: 11px; margin-bottom: 6px;"></div>
     <div class="story-log-list">${eligible.slice().reverse().map(c => storyLogChapterRowHtml(c, numberOf, activeTerms)).join('') || '<div style="opacity: 0.6; font-size: 12px;">ยังไม่มีตอนที่แปลแล้ว</div>'}</div>
-    <div style="border-top: 1px dashed rgba(0,0,0,0.12); margin-top: 12px; padding-top: 8px;">
+    <div style="border-top: 1px dashed var(--border); margin-top: 12px; padding-top: 8px;">
       <b style="font-size: 12px;">ข้อมูลที่แก้จากแชทผู้ช่วย (${corrections.length})</b>
       <div style="font-size: 11px; opacity: 0.7; margin: 4px 0;">ผู้ช่วยถือว่าข้อมูลนี้ถูกต้องที่สุด ใช้แทนข้อมูลอื่นที่ขัดกัน</div>
       ${corrections.map((c, i) => `<div class="story-log-correction">
         <div><b>ถาม:</b> ${escapeHtml(c.question)}</div><div><b>ที่ถูกคือ:</b> ${escapeHtml(c.correction)}</div>
-        <button class="btn btn-danger" style="padding: 1px 6px; font-size: 10px;" onclick="deleteAssistantCorrection(${i})">ลบ</button></div>`).join('') || '<div style="font-size: 11px; opacity: 0.6;">ยังไม่มี (กด 👎 ใต้คำตอบของผู้ช่วยเพื่อแก้)</div>'}
+        <button class="btn btn-danger btn-sm" onclick="deleteAssistantCorrection(${i})">ลบ</button></div>`).join('') || '<div class="hint" style="margin-top: 0;">ยังไม่มี (กด 👎 ใต้คำตอบของผู้ช่วยเพื่อแก้)</div>'}
     </div>`;
 }
 
@@ -409,7 +409,7 @@ function storyLogChapterRowHtml(chap, numberOf, activeTerms) {
   const log = chap.storyLog;
   const fresh = isStoryLogFresh(chap);
   const status = !log ? '<span style="opacity: 0.55;">ยังไม่มีบันทึก</span>'
-    : (fresh ? `${log.events.length} เหตุการณ์${log.edited ? ' · แก้เองแล้ว' : ''}` : '<span style="color:#b45309;">เนื้อหาเปลี่ยนหลังทำบันทึก</span>');
+    : (fresh ? `${log.events.length} เหตุการณ์${log.edited ? ' · แก้เองแล้ว' : ''}` : '<span style="color: var(--warning);">เนื้อหาเปลี่ยนหลังทำบันทึก</span>');
   const open = storyLogOpenChapterId === chap.id;
   return `<div class="story-log-row">
     <div class="story-log-row-head" onclick="toggleStoryLogRow(${jsArg(chap.id)})">
@@ -438,15 +438,15 @@ function storyLogEditorHtml(chap, activeTerms) {
       <input type="text" data-ev="value" value="${escapeHtml(e.value)}" placeholder="ค่า" title="${escapeHtml(storyName(e.value, activeTerms))}">
       <select data-ev="flag">${flagOptions(e.flag)}</select>
       <input type="text" data-ev="detail" class="wide" value="${escapeHtml(e.detail)}" placeholder="รายละเอียด (ไทย)">
-      <button class="btn btn-danger" style="padding: 1px 6px; font-size: 10px;" onclick="this.closest('.story-log-event').remove()">✕</button>
+      <button class="btn btn-danger btn-sm" onclick="this.closest('.story-log-event').remove()">✕</button>
     </div>`).join('')}
     <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
-      <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="addStoryLogEventRow(this)">+ เพิ่มเหตุการณ์</button>
+      <button class="btn btn-sm" onclick="addStoryLogEventRow(this)">+ เพิ่มเหตุการณ์</button>
     </div>
     <div style="font-size: 11px; opacity: 0.7; margin: 10px 0 4px;">🎵 ช่วงอารมณ์ (เลือกเพลงประกอบตอนฟังเสียงอ่าน) แต่ละช่วงยาวไปจนถึงช่วงถัดไป${(log.moods || []).length ? '' : ' — ยังไม่มี ระบบเดาจากคำในเนื้อเรื่องแทน'}</div>
     <div class="story-log-moods">${(log.moods || []).map(m => storyMoodRowHtml(m)).join('')}</div>
     <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;">
-      <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="addStoryMoodRow(this)">+ เพิ่มช่วงอารมณ์</button>
+      <button class="btn btn-sm" onclick="addStoryMoodRow(this)">+ เพิ่มช่วงอารมณ์</button>
       <button class="btn btn-primary" style="padding: 2px 8px; font-size: 11px;" onclick="saveStoryLogEditor(${id}, this)">บันทึก</button>
       <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="regenerateStoryLog(${id})" title="ให้ AI ทำบันทึกของตอนนี้ใหม่ (ทับที่แก้ไว้)">🔄 ทำใหม่</button>
     </div>
@@ -456,7 +456,7 @@ function storyLogEditorHtml(chap, activeTerms) {
 function storyMoodRowHtml(m = { from: 0, mood: 'calm' }) {
   return `<div class="story-mood-row">ตั้งแต่ย่อหน้า <input type="number" min="1" data-mood="from" value="${Number(m.from) + 1}">
     <select data-mood="mood">${STORY_MOODS.map(k => `<option value="${k}" ${k === m.mood ? 'selected' : ''}>${STORY_MOOD_LABELS[k]}</option>`).join('')}</select>
-    <button class="btn btn-danger" style="padding: 1px 6px; font-size: 10px;" onclick="this.closest('.story-mood-row').remove()">✕</button></div>`;
+    <button class="btn btn-danger btn-sm" onclick="this.closest('.story-mood-row').remove()">✕</button></div>`;
 }
 
 function addStoryMoodRow(btn) {
@@ -479,7 +479,7 @@ function addStoryLogEventRow(btn) {
     <input type="text" data-ev="subject" placeholder="ผู้เกี่ยวข้อง"><input type="text" data-ev="object" placeholder="สิ่งของ/อีกฝ่าย">
     <input type="text" data-ev="value" placeholder="ค่า"><select data-ev="flag">${STORY_EVENT_FLAGS.map(f => `<option value="${f}">${f ? STORY_FLAG_LABELS[f] : 'เกิดขึ้นจริง'}</option>`).join('')}</select>
     <input type="text" data-ev="detail" class="wide" placeholder="รายละเอียด (ไทย)">
-    <button class="btn btn-danger" style="padding: 1px 6px; font-size: 10px;" onclick="this.closest('.story-log-event').remove()">✕</button>`;
+    <button class="btn btn-danger btn-sm" onclick="this.closest('.story-log-event').remove()">✕</button>`;
   editor.insertBefore(row, btn.parentElement);
 }
 

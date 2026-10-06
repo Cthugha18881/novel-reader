@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.8.0</title>
+  <title>Dusktale v3.9.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -66,7 +66,7 @@
         <div style="font-weight: 600;">ผู้ช่วย AI</div>
         <div id="assistant-book-label" class="assistant-sub"></div>
       </div>
-      <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="clearAssistantChat()" title="ล้างบทสนทนาของเรื่องนี้">ล้าง</button>
+      <button class="btn btn-sm" onclick="clearAssistantChat()" title="ล้างบทสนทนาของเรื่องนี้">ล้าง</button>
       <button class="modal-close" onclick="toggleAssistantPanel(false)">✕</button>
     </div>
     <div class="assistant-options">
@@ -84,8 +84,8 @@
   <!-- INLINE TERM QUICK POPOVER -->
   <div id="term-popover">
     <span id="popover-text">จีน ➔ ไทย</span>
-    <button class="btn" style="padding: 2px 7px; font-size: 10px; background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); color:#fff;" id="popover-research-btn" title="ให้ AI ค้นหาคำแปลไทยตามหลัก 3-Tier ใหม่">🔄 ค้นหาใหม่</button>
-    <button class="btn btn-primary" style="padding: 2px 7px; font-size: 10px;" id="popover-edit-btn">✎ แก้ไข</button>
+    <button class="btn btn-sm" style="background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); color: #fff;" id="popover-research-btn" title="ให้ AI ค้นหาคำแปลไทยตามหลัก 3-Tier ใหม่">🔄 ค้นหาใหม่</button>
+    <button class="btn btn-primary btn-sm" id="popover-edit-btn">✎ แก้ไข</button>
   </div>
 
   <!-- BOTTOM FLOATING ACTION BAR FOR SELECTED WORD -->
@@ -95,9 +95,9 @@
       <span class="sel-text" id="sel-preview-text">...</span>
     </div>
     <div style="display: flex; gap: 6px;">
-      <button class="btn" style="color:#fff; border-color:rgba(255,255,255,0.2); padding: 4px 6px; font-size: 11px;" onclick="dismissSelectionBar()">ปิด</button>
-      <button class="btn" id="reverse-pair-btn" style="color:#38bdf8; border-color:#38bdf8; padding: 4px 8px; font-size: 11px;" onclick="findChineseForSelection()" title="ให้ AI ค้นหาและไฮไลต์อักษรจีนต้นฉบับในย่อหน้า">🔍 หาคำจีน</button>
-      <button class="btn btn-primary" style="padding: 4px 8px; font-size: 11px;" onclick="addFromSelectionBar()">+ ใส่คลัง</button>
+      <button class="btn btn-sm" style="color: #fff; border-color: rgba(255,255,255,0.2);" onclick="dismissSelectionBar()">ปิด</button>
+      <button class="btn btn-sm" id="reverse-pair-btn" style="color: #38bdf8; border-color: #38bdf8;" onclick="findChineseForSelection()" title="ให้ AI ค้นหาและไฮไลต์อักษรจีนต้นฉบับในย่อหน้า">🔍 หาคำจีน</button>
+      <button class="btn btn-primary btn-sm" onclick="addFromSelectionBar()">+ ใส่คลัง</button>
     </div>
   </div>
 
@@ -226,8 +226,8 @@
           </label>
           <button class="btn btn-primary" onclick="saveBudgetSettings()">บันทึกเพดาน</button>
         </div>
-        <div id="budget-unit-hint" style="font-size: 11px; opacity: 0.65; margin-top: 4px;"></div>
-        <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">ใกล้ถึงเพดาน (80%) จะเตือน · ถึงเพดานแล้ว การแปลล่วงหน้า/แปลตอนถัดไปเบื้องหลังจะหยุด ส่วนการกดแปลเองจะถามก่อน</div>
+        <div class="hint" id="budget-unit-hint"></div>
+        <div class="hint" style="margin-top: 2px;">ใกล้ถึงเพดาน (80%) จะเตือน · ถึงเพดานแล้ว การแปลล่วงหน้า/แปลตอนถัดไปเบื้องหลังจะหยุด ส่วนการกดแปลเองจะถามก่อน</div>
 
         <div class="form-label" style="margin-top: 14px;">แยกตามโมเดล (เดือนนี้)</div>
         <div id="usage-by-model"></div>
@@ -238,21 +238,21 @@
         <div style="font-size: 11px; opacity: 0.65; margin-bottom: 6px;">ดูราคาล่าสุดจากหน้าเว็บผู้ให้บริการ ช่อง cache เว้นว่างได้ (Claude คิด ~10% ของราคา input, เจ้าอื่นคิด ~25%)</div>
         <div class="usage-price-row usage-price-head"><div class="usage-price-model">โมเดล</div><div>input</div><div>output</div><div>cache</div></div>
         <div id="usage-prices"></div>
-        <button class="btn btn-secondary" style="margin-top: 6px; padding: 3px 10px; font-size: 11px;" onclick="saveModelPricesFromForm()">บันทึกราคา</button>
+        <button class="btn btn-secondary btn-sm" style="margin-top: 6px;" onclick="saveModelPricesFromForm()">บันทึกราคา</button>
 
         <details style="margin-top: 14px;">
           <summary style="cursor: pointer; font-weight: 600;">🧾 บันทึกข้อผิดพลาด (<span id="diag-log-count">0</span> รายการ)</summary>
           <div style="font-size: 11px; opacity: 0.7; margin: 6px 0;">เก็บข้อผิดพลาด 200 รายการ และยอด token ดิบจากผู้ให้บริการของ 300 คำขอล่าสุด ตัด API Key ออกแล้ว ส่งไฟล์นี้ให้ผู้ช่วยตรวจปัญหาได้</div>
           <div id="request-log-summary" style="font-size: 11px; margin-bottom: 6px;"></div>
-          <button class="btn btn-secondary" style="padding: 3px 10px; font-size: 11px; margin-bottom: 6px;" onclick="runGeminiOverheadTest()" title="ใช้ countTokens ของ Gemini ซึ่งไม่เสียเงิน">🔬 ตรวจ token ส่วนเกินของ Gemini (ฟรี)</button>
+          <button class="btn btn-secondary btn-sm" style="margin-bottom: 6px;" onclick="runGeminiOverheadTest()" title="ใช้ countTokens ของ Gemini ซึ่งไม่เสียเงิน">🔬 ตรวจ token ส่วนเกินของ Gemini (ฟรี)</button>
           <div id="gemini-overhead-result" style="font-size: 11px; margin-bottom: 6px; line-height: 1.6;"></div>
           <div id="diag-log-recent"></div>
           <div style="display: flex; gap: 6px; margin-top: 6px;">
-            <button class="btn btn-secondary" style="padding: 3px 10px; font-size: 11px;" onclick="exportDiagnosticLog()">⬇️ ส่งออกบันทึก</button>
-            <button class="btn" style="padding: 3px 10px; font-size: 11px;" onclick="clearDiagnosticLogFromUi()">ล้างบันทึก</button>
+            <button class="btn btn-secondary btn-sm" onclick="exportDiagnosticLog()">⬇️ ส่งออกบันทึก</button>
+            <button class="btn btn-sm" onclick="clearDiagnosticLogFromUi()">ล้างบันทึก</button>
           </div>
         </details>
-        <button class="btn btn-danger" style="margin-top: 12px; padding: 3px 10px; font-size: 11px;" onclick="clearUsageHistory()">ล้างสถิติการใช้งานทั้งหมด</button>
+        <button class="btn btn-danger btn-sm" style="margin-top: 12px;" onclick="clearUsageHistory()">ล้างสถิติการใช้งานทั้งหมด</button>
       </div>
     </div>
   </div>
@@ -274,7 +274,7 @@
           <input type="radio" name="backup-import-mode" value="replace" onchange="onBackupImportModeChange()" style="margin-top: 2px;">
           <div><b>แทนที่ทั้งหมด</b><div style="opacity: 0.7;">ลบนิยาย ตอน คลังศัพท์ และคู่มือเรื่องในเครื่องนี้ทั้งหมดก่อน แล้วใช้ข้อมูลจากไฟล์เท่านั้น</div></div>
         </label>
-        <div id="backup-import-replace-box" style="display: none; margin: 0 0 8px 22px; padding: 8px; border-radius: 6px; background: rgba(220,38,38,0.08); color: #b91c1c;">
+        <div id="backup-import-replace-box" style="display: none; margin: 0 0 8px 22px; padding: 8px; border-radius: 6px; background: var(--danger-soft); color: var(--danger);">
           <label style="display: flex; gap: 6px; align-items: center; cursor: pointer;">
             <input type="checkbox" id="backup-import-safety" checked> ดาวน์โหลดไฟล์สำรองของข้อมูลปัจจุบันก่อนแทนที่ (แนะนำ)
           </label>
@@ -287,15 +287,15 @@
         <label id="backup-import-baseurl-row" style="display: none; gap: 8px; align-items: flex-start; cursor: pointer; margin-bottom: 6px;">
           <input type="checkbox" id="backup-import-baseurl" style="margin-top: 2px;">
           <div>ใช้ Base URL ของ OpenAI-compatible จากไฟล์: <code id="backup-import-baseurl-value" style="word-break: break-all;"></code>
-            <div style="color: #b45309;">⚠️ API Key ของ OpenAI-compatible จะถูกส่งไปที่ปลายทางนี้ เลือกเฉพาะเมื่อเป็นไฟล์สำรองของคุณเอง</div></div>
+            <div style="color: var(--warning);">⚠️ API Key ของ OpenAI-compatible จะถูกส่งไปที่ปลายทางนี้ เลือกเฉพาะเมื่อเป็นไฟล์สำรองของคุณเอง</div></div>
         </label>
         <label id="backup-import-proxies-row" style="display: none; gap: 8px; align-items: flex-start; cursor: pointer; margin-bottom: 6px;">
           <input type="checkbox" id="backup-import-proxies" style="margin-top: 2px;">
           <div>ใช้ proxy สำรองจากไฟล์: <code id="backup-import-proxies-value" style="word-break: break-all;"></code>
-            <div style="color: #b45309;">⚠️ ลิงก์นิยายที่อ่าน (และ proxy key ถ้ามี) จะถูกส่งไปที่ปลายทางนี้ เลือกเฉพาะเมื่อเป็นไฟล์สำรองของคุณเอง</div></div>
+            <div style="color: var(--warning);">⚠️ ลิงก์นิยายที่อ่าน (และ proxy key ถ้ามี) จะถูกส่งไปที่ปลายทางนี้ เลือกเฉพาะเมื่อเป็นไฟล์สำรองของคุณเอง</div></div>
         </label>
       </div>
-      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px; flex-shrink: 0;">
+      <div class="modal-actions">
         <button class="btn" onclick="cancelBackupImport()">ยกเลิก</button>
         <button class="btn btn-primary" id="backup-import-confirm-btn" onclick="confirmBackupImport()">นำเข้า</button>
       </div>
@@ -308,7 +308,7 @@
       <div class="modal-head">
         <div>
           <div class="modal-title">คู่มือเรื่อง</div>
-          <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">เรื่อง: <b id="bible-book-title">...</b> — AI ใช้ข้อมูลนี้ทุกครั้งที่แปลเรื่องนี้</div>
+          <div class="hint" style="margin-top: 2px;">เรื่อง: <b id="bible-book-title">...</b> — AI ใช้ข้อมูลนี้ทุกครั้งที่แปลเรื่องนี้</div>
         </div>
         <button class="modal-close" onclick="closeModal('bible-modal')">✕</button>
       </div>
@@ -322,13 +322,13 @@
       <div class="modal-scrollable-body" style="max-height: 55vh;">
         <div class="bible-tab-panel" data-tab="characters">
           <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; align-items: center;">
-            <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="addBibleCharacter()">+ เพิ่มตัวละคร</button>
-            <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="generateBibleFromChapters()" title="ให้ AI อ่านตอนที่แปลแล้วล่าสุดเพื่อเติมข้อมูลตัวละคร">✨ สร้างจากตอนที่แปลแล้ว</button>
+            <button class="btn btn-primary btn-sm" onclick="addBibleCharacter()">+ เพิ่มตัวละคร</button>
+            <button class="btn btn-secondary btn-sm" onclick="generateBibleFromChapters()" title="ให้ AI อ่านตอนที่แปลแล้วล่าสุดเพื่อเติมข้อมูลตัวละคร">✨ สร้างจากตอนที่แปลแล้ว</button>
             <label style="font-size: 11px; display: flex; gap: 4px; align-items: center; margin-left: auto; cursor: pointer;">
-              <input type="checkbox" id="bible-auto-chk" style="accent-color: #2563eb;"> อัปเดตอัตโนมัติระหว่างแปล
+              <input type="checkbox" id="bible-auto-chk"> อัปเดตอัตโนมัติระหว่างแปล
             </label>
           </div>
-          <div id="bible-pending-note" style="font-size: 11px; color: #a16207; margin-bottom: 6px;"></div>
+          <div id="bible-pending-note" style="font-size: 11px; color: var(--warning); margin-bottom: 6px;"></div>
           <div id="bible-characters-list"></div>
         </div>
         <div class="bible-tab-panel" data-tab="style" style="display: none;">
@@ -339,8 +339,8 @@
           <div style="font-size: 11px; opacity: 0.7; margin-bottom: 8px;">แทนคำที่ AI ชอบใช้แปลกๆ ด้วยคำที่ต้องการ ทำงานอัตโนมัติหลังแปลทุกตอน และไม่แตะคำในคลังศัพท์</div>
           <div id="bible-rules-list"></div>
           <div style="display: flex; gap: 6px; margin-top: 8px;">
-            <button class="btn btn-primary" style="padding: 3px 8px; font-size: 11px;" onclick="addReplaceRule()">+ เพิ่มกฎ</button>
-            <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="applyReplaceRulesToBook()">ใช้กฎกับตอนที่แปลแล้วทั้งหมด</button>
+            <button class="btn btn-primary btn-sm" onclick="addReplaceRule()">+ เพิ่มกฎ</button>
+            <button class="btn btn-secondary btn-sm" onclick="applyReplaceRulesToBook()">ใช้กฎกับตอนที่แปลแล้วทั้งหมด</button>
           </div>
         </div>
         <div class="bible-tab-panel" data-tab="log" style="display: none;"><div id="bible-log-panel"></div></div>
@@ -349,7 +349,7 @@
           <div id="bible-examples-list"></div>
         </div>
       </div>
-      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px; flex-shrink: 0;">
+      <div class="modal-actions">
         <button class="btn" onclick="closeModal('bible-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="saveBibleModal()">บันทึกคู่มือ</button>
       </div>
@@ -366,7 +366,7 @@
       <div style="font-size: 12px; margin-bottom: 6px;">ตอน: <b id="paste-chapter-title">...</b></div>
       <div style="font-size: 11px; opacity: 0.7; margin-bottom: 8px; line-height: 1.5;">คัดลอกเนื้อหาต้นฉบับของตอนนี้จากเว็บหรือแอพของเว็บ (ที่คุณมีสิทธิ์อ่าน) มาวาง ระบบจะใช้แทนข้อความตัวอย่างแล้วแปลให้ ลำดับตอนและลิงก์เดิมยังเหมือนเดิม</div>
       <textarea id="paste-chapter-text" class="form-input" rows="10" style="resize: vertical; font-size: 13px;"></textarea>
-      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px;">
+      <div class="modal-actions">
         <button class="btn" onclick="closeModal('paste-chapter-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="savePastedChapter()">ใช้เนื้อหานี้และแปล</button>
       </div>
@@ -382,13 +382,13 @@
       <div class="para-src" id="edit-para-src" style="display: block; margin: 0 0 10px;"></div>
       <textarea id="edit-para-th" class="form-input" rows="6" style="resize: vertical; font-size: 15px; line-height: 1.7;"></textarea>
       <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; margin-top: 10px;">
-        <input type="checkbox" id="edit-para-as-example" style="accent-color: #2563eb; margin-top: 2px;" checked>
+        <input type="checkbox" id="edit-para-as-example" style="margin-top: 2px;" checked>
         <div>
           <span style="font-weight: 600;">ใช้เป็นตัวอย่างสำนวนให้ AI</span>
-          <div style="font-size: 11px; opacity: 0.65;">AI จะดูตัวอย่างนี้เวลาแปลเนื้อหาที่คล้ายกันในตอนถัดไป ย่อหน้าที่แก้เองจะไม่ถูกเขียนทับเมื่อกดแปลใหม่ (ถ้าไม่ยืนยัน)</div>
+          <div class="hint" style="margin-top: 0;">AI จะดูตัวอย่างนี้เวลาแปลเนื้อหาที่คล้ายกันในตอนถัดไป ย่อหน้าที่แก้เองจะไม่ถูกเขียนทับเมื่อกดแปลใหม่ (ถ้าไม่ยืนยัน)</div>
         </div>
       </label>
-      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
+      <div class="modal-actions">
         <button class="btn" onclick="closeModal('edit-para-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="saveEditedParagraph()">บันทึก</button>
       </div>
@@ -451,7 +451,7 @@
         <button class="modal-close" onclick="closeModal('glossary-import-modal')">✕</button>
       </div>
       <div id="glossary-import-body" class="modal-scrollable-body" style="max-height: 60vh;"></div>
-      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px;">
+      <div class="modal-actions">
         <button class="btn" onclick="closeModal('glossary-import-modal')">ยกเลิก</button>
         <button class="btn btn-primary" id="gloss-import-confirm-btn" onclick="confirmGlossaryImport()">นำเข้า</button>
       </div>
@@ -481,8 +481,8 @@
       </div>
       <div id="bookmark-excerpt" class="bookmark-excerpt"></div>
       <textarea id="bookmark-note" class="form-input" rows="4" maxlength="2000" placeholder="โน้ต (ไม่ใส่ก็ได้) เช่น จุดที่พระเอกได้ดาบ / ประโยคที่ชอบ"></textarea>
-      <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">เก็บในเครื่องนี้ และอยู่ในไฟล์สำรองข้อมูล</div>
-      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px;">
+      <div class="hint">เก็บในเครื่องนี้ และอยู่ในไฟล์สำรองข้อมูล</div>
+      <div class="modal-actions">
         <button class="btn btn-danger" id="bookmark-delete-btn" style="margin-right: auto;" onclick="deleteBookmarkFromEditor()">ลบ</button>
         <button class="btn" onclick="closeModal('bookmark-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="saveBookmarkFromEditor()">บันทึก</button>
@@ -496,7 +496,7 @@
       <div class="modal-head">
         <div>
           <div class="modal-title">สารบัญของเรื่อง</div>
-          <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">เรื่อง: <b id="toc-book-title">...</b></div>
+          <div class="hint" style="margin-top: 2px;">เรื่อง: <b id="toc-book-title">...</b></div>
         </div>
         <button class="modal-close" onclick="closeModal('toc-modal')">✕</button>
       </div>
@@ -510,14 +510,14 @@
           <button class="btn btn-primary" style="white-space: nowrap;" onclick="fetchTocForModal()">ดึงสารบัญ</button>
         </div>
         <label style="display: flex; gap: 6px; align-items: center; font-size: 11px; margin-top: 6px; cursor: pointer;">
-          <input type="checkbox" id="toc-reverse-chk" onchange="toggleTocReverse()" style="accent-color: #2563eb;"> กลับลำดับ (ถ้าสารบัญเรียงจากตอนใหม่ไปเก่า และระบบตรวจไม่เจอ)
+          <input type="checkbox" id="toc-reverse-chk" onchange="toggleTocReverse()"> กลับลำดับ (ถ้าสารบัญเรียงจากตอนใหม่ไปเก่า และระบบตรวจไม่เจอ)
         </label>
       </div>
       <div id="toc-summary" style="margin-bottom: 10px;"></div>
       <div id="toc-saved-actions" style="display: none; gap: 6px; flex-wrap: wrap; margin-bottom: 10px;">
-        <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="reorderChaptersByToc(tocEditingBookId)">↕ เรียงตอนตามสารบัญ</button>
-        <button class="btn btn-secondary" style="padding: 3px 8px; font-size: 11px;" onclick="queueMissingTocEntries()">➕ เพิ่มตอนที่ขาดเป็นคิวรอแปล</button>
-        <button class="btn btn-danger" style="padding: 3px 8px; font-size: 11px;" onclick="removeBookToc()">ลบสารบัญ</button>
+        <button class="btn btn-secondary btn-sm" onclick="reorderChaptersByToc(tocEditingBookId)">↕ เรียงตอนตามสารบัญ</button>
+        <button class="btn btn-secondary btn-sm" onclick="queueMissingTocEntries()">➕ เพิ่มตอนที่ขาดเป็นคิวรอแปล</button>
+        <button class="btn btn-danger btn-sm" onclick="removeBookToc()">ลบสารบัญ</button>
       </div>
       <div style="display: flex; gap: 6px; justify-content: flex-end;">
         <button class="btn" onclick="closeModal('toc-modal')">ปิด</button>
@@ -536,42 +536,42 @@
       <div class="modal-scrollable-body" style="max-height: 60vh;">
         <div class="form-group">
           <label class="form-label" for="jina-key-input">Jina Reader API Key (ไม่บังคับ)</label>
-          <input type="password" id="jina-key-input" class="form-input" placeholder="jina_..." autocomplete="off" style="font-family: monospace; font-size: 12px;">
-          <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">ตัวดึงหน้าเว็บ (r.jina.ai) แบบไม่ใส่คีย์จำกัดจำนวนครั้งต่อนาที ถ้าแปลล่วงหน้าหลายตอนแล้วโดนบล็อก ให้สมัครคีย์ฟรีที่ jina.ai มาใส่</div>
+          <input type="password" id="jina-key-input" class="form-input mono" placeholder="jina_..." autocomplete="off">
+          <div class="hint">ตัวดึงหน้าเว็บ (r.jina.ai) แบบไม่ใส่คีย์จำกัดจำนวนครั้งต่อนาที ถ้าแปลล่วงหน้าหลายตอนแล้วโดนบล็อก ให้สมัครคีย์ฟรีที่ jina.ai มาใส่</div>
         </div>
         <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; margin-bottom: 12px;">
-          <input type="checkbox" id="ai-extract-chk" style="accent-color: #2563eb; margin-top: 2px;">
+          <input type="checkbox" id="ai-extract-chk" style="margin-top: 2px;">
           <div>
             <span style="font-weight: 600;">ให้ AI ช่วยแยกเนื้อหา เมื่อดึงจากเว็บที่ไม่รู้จักได้ไม่ดี</span>
-            <div style="font-size: 11px; opacity: 0.65;">ใช้เฉพาะเมื่อเนื้อหาที่ดึงได้สั้นผิดปกติ ใช้โมเดลงานรอง และส่งแค่บรรทัดแบบย่อ (ประหยัด token)</div>
+            <div class="hint" style="margin-top: 0;">ใช้เฉพาะเมื่อเนื้อหาที่ดึงได้สั้นผิดปกติ ใช้โมเดลงานรอง และส่งแค่บรรทัดแบบย่อ (ประหยัด token)</div>
           </div>
         </label>
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
           <b style="font-size: 12px;">โปรไฟล์เว็บ (CSS selector)</b>
           <span style="display: flex; gap: 6px;">
-            <button class="btn btn-primary" style="padding: 2px 8px; font-size: 11px;" onclick="addSiteProfile()">+ เพิ่ม</button>
-            <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="exportSiteProfiles()" title="ส่งออกโปรไฟล์เป็นไฟล์ไว้แชร์หรือสำรอง">⬇️ ส่งออก</button>
-            <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="triggerSiteProfilesImport()" title="นำเข้าโปรไฟล์จากไฟล์ (เว็บที่ซ้ำจะถูกแทนที่)">⬆️ นำเข้า</button>
+            <button class="btn btn-primary btn-sm" onclick="addSiteProfile()">+ เพิ่ม</button>
+            <button class="btn btn-sm" onclick="exportSiteProfiles()" title="ส่งออกโปรไฟล์เป็นไฟล์ไว้แชร์หรือสำรอง">⬇️ ส่งออก</button>
+            <button class="btn btn-sm" onclick="triggerSiteProfilesImport()" title="นำเข้าโปรไฟล์จากไฟล์ (เว็บที่ซ้ำจะถูกแทนที่)">⬆️ นำเข้า</button>
             <input type="file" id="site-profiles-file" accept=".json,application/json" style="display: none;" onchange="handleSiteProfilesFile(this)">
-            <button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="resetSiteProfiles()">คืนค่าเริ่มต้น</button>
+            <button class="btn btn-sm" onclick="resetSiteProfiles()">คืนค่าเริ่มต้น</button>
           </span>
         </div>
         <div style="font-size: 11px; opacity: 0.65; margin-bottom: 8px;">ระบุตำแหน่งเนื้อหาของเว็บที่ตัวดึงแบบกลางดึงได้ไม่ดี ถ้า selector หาเนื้อหาไม่เจอ ระบบจะกลับไปใช้ตัวดึงแบบกลางให้อัตโนมัติ (ค่าเริ่มต้นของเว็บยอดนิยมอาจต้องปรับถ้าเว็บเปลี่ยนหน้าตา)</div>
         <div id="site-profiles-list"></div>
-        <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 10px;">
+        <div class="form-group" style="border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 10px;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
             <b style="font-size: 12px;">Proxy สำรอง (เมื่อ r.jina.ai ใช้ไม่ได้)</b>
-            <button class="btn btn-primary" style="padding: 2px 8px; font-size: 11px;" onclick="addProxy()">+ เพิ่ม</button>
+            <button class="btn btn-primary btn-sm" onclick="addProxy()">+ เพิ่ม</button>
           </div>
           <div style="font-size: 11px; opacity: 0.65; margin-bottom: 6px; line-height: 1.5;">ใส่ proxy ของคุณเอง เช่น Cloudflare Worker (ดูตัวอย่างโค้ดใน <code>docs/cloudflare-worker.js</code>) ระบบจะลองตามลำดับเมื่อ r.jina.ai ล่ม/โดนจำกัด proxy ต้องคืน HTML ของหน้าเว็บ และใช้ <code>{url}</code> แทนตำแหน่งลิงก์</div>
           <div id="proxy-list"></div>
           <label class="form-label" for="proxy-key-input" style="margin-top: 6px;">Proxy key (ไม่บังคับ ส่งเป็น header X-Proxy-Key)</label>
-          <input type="password" id="proxy-key-input" class="form-input" autocomplete="off" style="font-family: monospace; font-size: 12px;">
+          <input type="password" id="proxy-key-input" class="form-input mono" autocomplete="off">
           <label style="display: flex; gap: 6px; align-items: center; font-size: 11px; margin-top: 6px; cursor: pointer;">
-            <input type="checkbox" id="proxy-first-chk" style="accent-color: #2563eb;"> ใช้ proxy ก่อน r.jina.ai (เว็บที่ตั้งให้ r.jina.ai รันหน้าเว็บ ยังใช้ r.jina.ai ก่อนเสมอ)
+            <input type="checkbox" id="proxy-first-chk"> ใช้ proxy ก่อน r.jina.ai (เว็บที่ตั้งให้ r.jina.ai รันหน้าเว็บ ยังใช้ r.jina.ai ก่อนเสมอ)
           </label>
         </div>
-        <div class="form-group" style="border-top: 1px dashed rgba(0,0,0,0.12); padding-top: 10px; margin-top: 10px;">
+        <div class="form-group" style="border-top: 1px dashed var(--border); padding-top: 10px; margin-top: 10px;">
           <label class="form-label" for="site-test-url">🧪 ทดสอบดึงหน้าเว็บ (ใช้ค่าในฟอร์มนี้)</label>
           <div style="display: flex; gap: 6px;">
             <input type="url" id="site-test-url" class="form-input" placeholder="ลิงก์หน้าตอนที่ต้องการทดสอบ">
@@ -580,7 +580,7 @@
           <div id="site-test-result" style="font-size: 12px; margin-top: 8px; line-height: 1.6;"></div>
         </div>
       </div>
-      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px; flex-shrink: 0;">
+      <div class="modal-actions">
         <button class="btn" onclick="closeModal('site-profiles-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="saveSiteProfilesModal()">บันทึก</button>
       </div>
@@ -596,7 +596,7 @@
       </div>
       <div style="font-size: 12px; margin-bottom: 10px;">
         ตอนที่เลือก: <b id="move-chapters-count" style="color: var(--accent-text);">...</b>
-        <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">ใช้แยกนิยายคนละเรื่องที่ถูกรวมไว้ด้วยกัน ตอนที่ย้ายจะต่อท้ายเรื่องปลายทางตามลำดับเดิม และคำศัพท์ของเรื่องเดิมจะใช้กับเรื่องปลายทางได้ด้วย</div>
+        <div class="hint">ใช้แยกนิยายคนละเรื่องที่ถูกรวมไว้ด้วยกัน ตอนที่ย้ายจะต่อท้ายเรื่องปลายทางตามลำดับเดิม และคำศัพท์ของเรื่องเดิมจะใช้กับเรื่องปลายทางได้ด้วย</div>
       </div>
       <div class="form-group">
         <label class="form-label" for="move-chapters-target">ย้ายไปที่:</label>
@@ -606,7 +606,7 @@
         <label class="form-label" for="move-chapters-new-title">ชื่อเรื่องใหม่:</label>
         <input type="text" id="move-chapters-new-title" class="form-input">
       </div>
-      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
+      <div class="modal-actions">
         <button class="btn" onclick="closeModal('move-chapters-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="confirmMoveChapters()">ย้ายตอน</button>
       </div>
@@ -652,7 +652,7 @@
           <option value="other">ภาษาอื่น</option>
         </select>
       </div>
-      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
+      <div class="modal-actions">
         <button class="btn" onclick="closeModal('genre-picker-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="saveChosenBookGenre()">บันทึก</button>
       </div>
@@ -672,14 +672,14 @@
       <div class="form-group">
         <label class="form-label">คำแปลภาษาไทย:</label>
         <input type="text" id="edit-term-tgt-input" class="form-input" placeholder="ใส่คำแปลไทย...">
-        <div id="edit-term-global-hint" style="font-size: 11px; opacity: 0.65; margin-top: 4px;"></div>
+        <div class="hint" id="edit-term-global-hint"></div>
       </div>
       <div class="form-group">
         <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px;">
-          <input type="checkbox" id="edit-term-book-only" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
+          <input type="checkbox" id="edit-term-book-only" style="margin-top: 2px;">
           <div>
             <span id="edit-term-book-only-label" style="font-weight: 600;">ใช้คำแปลนี้เฉพาะเรื่องปัจจุบัน</span>
-            <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">เหมาะกับคำจีนเดียวกันที่แต่ละเรื่องแปลต่างกัน เรื่องอื่นจะยังใช้คำแปลหลักเหมือนเดิม</div>
+            <div class="hint" style="margin-top: 2px;">เหมาะกับคำจีนเดียวกันที่แต่ละเรื่องแปลต่างกัน เรื่องอื่นจะยังใช้คำแปลหลักเหมือนเดิม</div>
           </div>
         </label>
       </div>
@@ -695,7 +695,7 @@
           <option value="realm">🧬 ลำดับขั้น/สเตตัส</option>
         </select>
       </div>
-      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 14px;">
+      <div class="modal-actions">
         <button class="btn" onclick="closeModal('edit-term-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="saveEditedGlossaryTerm()">บันทึกการแก้ไข</button>
       </div>
@@ -717,7 +717,7 @@
         <div class="form-group">
           <label class="form-label">URL หน้านิยาย (จีน ญี่ปุ่น เกาหลี อังกฤษ ฯลฯ)</label>
           <input type="url" id="import-url" class="form-input" placeholder="https://www.69shuba.com/txt/88724/40717272" oninput="updateImportTargetHint()">
-          <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">เว็บที่ดึงได้ไม่ดี ปรับได้ที่ ตั้งค่า → 🌐 ตั้งค่าเว็บต้นฉบับ</div>
+          <div class="hint">เว็บที่ดึงได้ไม่ดี ปรับได้ที่ ตั้งค่า → 🌐 ตั้งค่าเว็บต้นฉบับ</div>
         </div>
       </div>
       <div id="import-panel-text" style="display: none;">
@@ -729,14 +729,14 @@
           <label class="form-label" for="import-text-area">วางเนื้อหา (แยกตอนอัตโนมัติจากหัวตอน เช่น 第1章, 第1話, 1화, Chapter 1)</label>
           <textarea id="import-text-area" class="form-input" rows="6" style="resize: vertical; font-size: 12px;" oninput="clearTimeout(window.__importPreviewTimer); window.__importPreviewTimer = setTimeout(previewImportText, 400)"></textarea>
           <div style="display: flex; gap: 8px; align-items: center; margin-top: 6px; flex-wrap: wrap;">
-            <label class="btn" style="padding: 3px 10px; font-size: 11px; cursor: pointer;">📂 เลือกไฟล์ .txt / .epub
+            <label class="btn btn-sm" style="cursor: pointer;">📂 เลือกไฟล์ .txt / .epub
               <input type="file" id="import-file" accept=".txt,.epub,text/plain,application/epub+zip" style="display: none;" onchange="handleImportFile(this)">
             </label>
-            <span style="font-size: 11px; opacity: 0.65;">ไฟล์ .txt ภาษาจีนแบบ GBK/Big5 ระบบจะเดา encoding ให้</span>
+            <span class="hint" style="margin-top: 0;">ไฟล์ .txt ภาษาจีนแบบ GBK/Big5 ระบบจะเดา encoding ให้</span>
           </div>
           <div id="import-text-preview" style="font-size: 12px; margin-top: 8px;"></div>
           <label style="display: flex; gap: 6px; align-items: center; font-size: 12px; margin-top: 8px; cursor: pointer;">
-            <input type="checkbox" id="import-text-translate-first" checked style="accent-color: #2563eb;"> แปลตอนแรกทันทีหลังนำเข้า
+            <input type="checkbox" id="import-text-translate-first" checked> แปลตอนแรกทันทีหลังนำเข้า
           </label>
         </div>
       </div>
@@ -745,7 +745,7 @@
         <select id="import-target-book" class="form-input" onchange="updateImportTargetHint()">
           <option value="auto">อัตโนมัติ (ตรวจจาก URL ว่าเป็นเรื่องไหน)</option>
         </select>
-        <div id="import-target-hint" style="font-size: 11px; opacity: 0.7; margin-top: 4px;"></div>
+        <div class="hint" id="import-target-hint"></div>
       </div>
       <div class="form-group">
         <label class="form-label" for="import-source-lang">ภาษาต้นฉบับ</label>
@@ -774,7 +774,7 @@
           <option value="mystery">สืบสวน / ลึกลับ / ไขคดี</option>
           <option value="apocalypse">วันสิ้นโลก / ซอมบี้ / เอาชีวิตรอด</option>
         </select>
-        <div style="font-size: 11px; opacity: 0.65; margin-top: 4px;">*ระบบจะจำแนวเรื่องนี้ไว้ใช้กับเรื่องนี้ตลอดไป และสามารถเปลี่ยนได้ที่ชั้นหนังสือ</div>
+        <div class="hint">*ระบบจะจำแนวเรื่องนี้ไว้ใช้กับเรื่องนี้ตลอดไป และสามารถเปลี่ยนได้ที่ชั้นหนังสือ</div>
       </div>
       <div class="status-msg" id="import-status"></div>
       <div style="display: flex; gap: 8px; margin-top: 14px;">
@@ -875,7 +875,7 @@
       <div style="font-size: 12px; margin-bottom: 8px;">
         คำศัพท์: <b id="assign-term-title" style="color: var(--accent-text);">...</b>
       </div>
-      <div id="assign-books-list" class="modal-scrollable-body" style="max-height: 200px; margin-bottom: 12px; border: 1px solid rgba(0,0,0,0.08); border-radius: 6px; padding: 6px;"></div>
+      <div id="assign-books-list" class="modal-scrollable-body" style="max-height: 200px; margin-bottom: 12px; border: 1px solid var(--border); border-radius: 6px; padding: 6px;"></div>
       <div style="display: flex; gap: 6px; justify-content: flex-end;">
         <button class="btn" onclick="closeModal('book-assign-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="saveBookAssignment()">บันทึก</button>
@@ -908,20 +908,20 @@
             <option value="anthropic">Anthropic Claude</option>
             <option value="openai">OpenAI / OpenAI-compatible (OpenRouter, DeepSeek, LM Studio ฯลฯ)</option>
           </select>
-          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
+          <div class="hint">
             * แต่ละผู้ให้บริการเก็บคีย์และโมเดลแยกกัน สลับไปมาได้โดยค่าเดิมไม่หาย
           </div>
         </div>
 
         <div class="form-group" id="llm-baseurl-group" style="display: none;">
           <label class="form-label">Base URL ของ API</label>
-          <input type="url" id="llm-baseurl-input" class="form-input" placeholder="https://api.openai.com/v1" style="font-family: monospace; font-size: 12px;">
-          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
+          <input type="url" id="llm-baseurl-input" class="form-input mono" placeholder="https://api.openai.com/v1">
+          <div class="hint">
             * เช่น https://openrouter.ai/api/v1, https://api.deepseek.com/v1 หรือ http://localhost:1234/v1 (ต้องรองรับ /chat/completions และอนุญาต CORS จากเบราว์เซอร์)
           </div>
           <label class="form-label" for="llm-reasoning-select" style="margin-top: 10px;">🧠 การคิดก่อนตอบ (reasoning) — ใช้กับ OpenRouter</label>
           <select id="llm-reasoning-select" class="form-input" onchange="localStorage.setItem('nov_llm_reasoning_openai', this.value)"></select>
-          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
+          <div class="hint">
             * โมเดลอย่าง MiMo / GPT-6 คิดก่อนตอบ token ที่ใช้คิดคิดเงินเป็นขาออก และช้ามาก งานแปลปิดไว้ได้ (โมเดลที่ปิดไม่ได้ ระบบจะใช้ค่าเริ่มต้นของโมเดลแทนเอง)
           </div>
         </div>
@@ -929,12 +929,12 @@
         <div class="form-group">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
             <label class="form-label" style="margin: 0;" id="llm-keys-label">API Keys (คลังคีย์หมุนเวียน)</label>
-            <button class="btn btn-secondary" id="fetch-models-btn" onclick="fetchLiveModels()" style="padding: 2px 8px; font-size: 11px;">
+            <button class="btn btn-secondary btn-sm" id="fetch-models-btn" onclick="fetchLiveModels()">
               ตรวจเช็กโมเดล
             </button>
           </div>
-          <textarea id="llm-keys-area" class="form-input" rows="3" style="resize: vertical; font-family: monospace; font-size: 12px;" placeholder="วาง API Key (1 คีย์ต่อ 1 บรรทัด)"></textarea>
-          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
+          <textarea id="llm-keys-area" class="form-input mono" rows="3" style="resize: vertical;" placeholder="วาง API Key (1 คีย์ต่อ 1 บรรทัด)"></textarea>
+          <div class="hint">
             * สามารถใส่ได้หลายคีย์ (คั่นด้วยบรรทัดใหม่) เมื่อคีย์ตัวแรกโควต้าเต็ม (ติด Rate Limit 429) ระบบจะสลับไปใช้คีย์ถัดไปให้อัตโนมัติทันที
           </div>
           <div id="fetch-status-text" style="font-size: 11px; margin-top: 4px; display: none;"></div>
@@ -942,17 +942,17 @@
 
         <div class="form-group">
           <label class="form-label">โมเดล AI ตัวหลัก (Primary Model)</label>
-          <input type="text" id="llm-model-input" class="form-input" list="llm-model-list" autocomplete="off" placeholder="เลือกหรือพิมพ์ชื่อโมเดล" style="font-family: monospace; font-size: 12px;">
+          <input type="text" id="llm-model-input" class="form-input mono" list="llm-model-list" autocomplete="off" placeholder="เลือกหรือพิมพ์ชื่อโมเดล">
           <datalist id="llm-model-list"></datalist>
-          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
+          <div class="hint">
             * กด "ตรวจเช็กโมเดล" เพื่อดึงรายชื่อโมเดลที่คีย์นี้ใช้ได้ หรือพิมพ์ชื่อโมเดลเองก็ได้
           </div>
         </div>
 
         <div class="form-group">
           <label class="form-label" for="llm-aux-model-input">โมเดลสำหรับงานรอง (ไม่บังคับ)</label>
-          <input type="text" id="llm-aux-model-input" class="form-input" list="llm-model-list" autocomplete="off" placeholder="เว้นว่าง = ใช้โมเดลหลัก" style="font-family: monospace; font-size: 12px;">
-          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
+          <input type="text" id="llm-aux-model-input" class="form-input mono" list="llm-model-list" autocomplete="off" placeholder="เว้นว่าง = ใช้โมเดลหลัก">
+          <div class="hint">
             * ใช้กับการสแกนคำศัพท์/ตัวละคร การตรวจทาน และการตรวจความหมาย แนะนำให้ใช้โมเดลที่ถูกกว่า แล้วเลือกโมเดลที่เก่งกว่าเป็นโมเดลหลักสำหรับแปลและเกลาสำนวน
           </div>
         </div>
@@ -965,7 +965,7 @@
             <option value="anthropic">Anthropic Claude</option>
             <option value="openai">OpenAI / OpenAI-compatible</option>
           </select>
-          <div style="font-size: 11px; opacity: 0.7; margin-top: 4px; line-height: 1.4;">
+          <div class="hint">
             * เช่นฉากต่อสู้รุนแรงที่ AI ตัวหลักไม่ยอมแปล จะส่งต่อให้ผู้ให้บริการนี้ (ต้องใส่คีย์และเลือกโมเดลของผู้ให้บริการนั้นไว้แล้ว)
           </div>
         </div>
@@ -985,7 +985,7 @@
             <option value="thorough">ละเอียด — แปล + ตรวจทุกย่อหน้าเทียบต้นฉบับ (~2 เท่า)</option>
             <option value="best">ดีที่สุด — แปล + บรรณาธิการเกลาสำนวน + ตรวจความหมาย (~1.5-3 เท่า ขึ้นกับโมเดล ลองเทียบด้วย 🧪 เทียบโมเดล)</option>
           </select>
-          <div style="font-size: 11px; opacity: 0.65; margin-top: 4px; line-height: 1.4;">
+          <div class="hint">
             ทุกโหมดมีการแก้อักษรจีนที่หลงเหลือ และทำความสะอาดเครื่องหมาย/คำสะกดผิดอัตโนมัติ (ไม่เสีย token)<br>
             โหมด "ดีที่สุด": ชื่อในคลังศัพท์ถูกล็อกระหว่างเกลา และย่อหน้าที่ตรวจแล้วความหมายเพี้ยนจะกลับไปใช้ฉบับก่อนเกลา
           </div>
@@ -1043,7 +1043,7 @@
         <div class="form-group">
           <div class="form-label">พื้นที่จัดเก็บ</div>
           <div id="storage-status" style="font-size: 12px; line-height: 1.6;"></div>
-          <button class="btn btn-secondary" id="persist-storage-btn" style="display: none; margin-top: 6px; padding: 3px 10px; font-size: 11px;" onclick="requestPersistFromSettings()">ขอพื้นที่จัดเก็บแบบถาวร</button>
+          <button class="btn btn-secondary btn-sm" id="persist-storage-btn" style="display: none; margin-top: 6px;" onclick="requestPersistFromSettings()">ขอพื้นที่จัดเก็บแบบถาวร</button>
         </div>
         <div class="form-group">
           <label class="form-label" for="backup-remind-days">เตือนให้สำรองข้อมูล เมื่อไม่ได้สำรองนานเกิน</label>
@@ -1057,18 +1057,18 @@
         </div>
         <div class="form-group">
           <div class="form-label">สำรองอัตโนมัติลงโฟลเดอร์ในเครื่อง</div>
-          <div id="auto-backup-status" style="font-size: 11px; opacity: 0.75; line-height: 1.5;"></div>
+          <div class="hint" id="auto-backup-status" style="margin-top: 0;"></div>
           <div id="auto-backup-actions" style="display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px;"></div>
         </div>
         <div class="form-group">
           <label style="display: flex; align-items: flex-start; gap: 8px; cursor: pointer; font-size: 12px; font-weight: 500;">
-            <input type="checkbox" id="secrets-session-only" style="cursor: pointer; width: 16px; height: 16px; accent-color: #2563eb; margin-top: 2px;">
+            <input type="checkbox" id="secrets-session-only" style="margin-top: 2px;">
             <div>
               <span>ไม่จำ API Key หลังปิดแท็บ</span>
-              <div style="font-size: 11px; opacity: 0.65; margin-top: 2px;">ปลอดภัยกว่าบนเครื่องที่ใช้ร่วมกับคนอื่น แต่ต้องใส่ Key ใหม่ทุกครั้งที่เปิดแท็บใหม่ (มีผลกับ Jina Key ด้วย)</div>
+              <div class="hint" style="margin-top: 2px;">ปลอดภัยกว่าบนเครื่องที่ใช้ร่วมกับคนอื่น แต่ต้องใส่ Key ใหม่ทุกครั้งที่เปิดแท็บใหม่ (มีผลกับ Jina Key ด้วย)</div>
             </div>
           </label>
-          <button class="btn btn-danger" style="margin-top: 8px; padding: 3px 10px; font-size: 11px;" onclick="clearAllApiKeys()">ลบ API Key ทั้งหมดออกจากเบราว์เซอร์นี้</button>
+          <button class="btn btn-danger btn-sm" style="margin-top: 8px;" onclick="clearAllApiKeys()">ลบ API Key ทั้งหมดออกจากเบราว์เซอร์นี้</button>
         </div>
         <details style="font-size: 11px; line-height: 1.6; margin-bottom: 6px;">
           <summary style="cursor: pointer; font-weight: 600;">🔒 ข้อมูลของคุณถูกส่งไปที่ไหนบ้าง</summary>
