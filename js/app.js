@@ -2006,6 +2006,32 @@ function openSettingsModal() {
   renderSafetySettings();
 }
 
+// รูปแบบคีย์ที่บอกได้ว่าเป็นของผู้ให้บริการไหน (ใช้เตือนเมื่อ Base URL ไม่ตรงกับคีย์)
+const KEY_PREFIX_BASE_URLS = [
+  { prefix: 'sk-or-', name: 'OpenRouter', url: 'https://openrouter.ai/api/v1' },
+  { prefix: 'gsk_', name: 'Groq', url: 'https://api.groq.com/openai/v1' },
+  { prefix: 'xai-', name: 'xAI', url: 'https://api.x.ai/v1' }
+];
+
+/** คืน { name, url } ถ้าคีย์เป็นของผู้ให้บริการที่รู้จัก แต่ Base URL ชี้ไปที่อื่น ไม่งั้น null */
+function suggestBaseUrlForKey(key, baseUrl) {
+  const hit = KEY_PREFIX_BASE_URLS.find(k => String(key || '').startsWith(k.prefix));
+  if (!hit) return null;
+  try {
+    return baseUrl && new URL(baseUrl).host === new URL(hit.url).host ? null : hit;
+  } catch (e) {
+    return hit;
+  }
+}
+
+function applySuggestedBaseUrl(url) {
+  document.getElementById('llm-baseurl-input').value = url;
+  const statusText = document.getElementById('fetch-status-text');
+  statusText.style.display = 'block';
+  statusText.style.color = '#2563eb';
+  statusText.innerText = 'ใส่ Base URL ให้แล้ว กด "บันทึกการตั้งค่า" แล้วรีโหลดหน้า (ระบบความปลอดภัยอนุญาตปลายทางใหม่ตอนเปิดหน้า) จากนั้นกด "ตรวจเช็กโมเดล" อีกครั้ง';
+}
+
 async function fetchLiveModels() {
   const provider = document.getElementById('llm-provider-select').value;
   const firstKey = document.getElementById('llm-keys-area').value.split('\n').map(k => k.trim()).find(k => k.length > 5);
@@ -2014,6 +2040,15 @@ async function fetchLiveModels() {
   const fetchBtn = document.getElementById('fetch-models-btn');
 
   if (!firstKey) return alert("กรุณากรอก API Key ก่อนกดตรวจเช็กโมเดล");
+  // คีย์ของผู้ให้บริการที่รู้รูปแบบ (เช่น OpenRouter sk-or-) แต่ Base URL ยังชี้ไปที่อื่น: คีย์จะถูกส่งผิดที่และถูกปฏิเสธ
+  const suggested = provider === 'openai' ? suggestBaseUrlForKey(firstKey, baseUrl) : null;
+  if (suggested) {
+    statusText.style.display = 'block';
+    statusText.style.color = '#b45309';
+    statusText.innerHTML = `คีย์นี้เป็นของ <b>${escapeHtml(suggested.name)}</b> แต่ Base URL ยังเป็น ${escapeHtml(baseUrl || '(ว่าง)')} คีย์จะถูกส่งไปผิดที่
+      <button class="btn btn-primary" style="padding: 2px 8px; font-size: 11px; margin-left: 4px;" onclick="applySuggestedBaseUrl(${jsArg(suggested.url)})">ใช้ ${escapeHtml(suggested.url)}</button>`;
+    return;
+  }
   if (provider === 'openai' && baseUrl && !isConnectAllowedByCsp(baseUrl)) {
     statusText.style.display = 'block';
     statusText.style.color = '#b45309';
@@ -2081,7 +2116,9 @@ function saveSettings() {
 
   renderSafetyBanner();
   const cfg = getActiveLlmConfig();
-  const warning = cfg.model ? '' : '\n⚠️ ยังไม่ได้เลือกโมเดล กรุณากด "ตรวจเช็กโมเดล" แล้วเลือกโมเดลก่อนใช้งาน';
+  const mismatch = suggestBaseUrlForKey(getProviderKeys('openai')[0], getProviderBaseUrl('openai'));
+  const warning = (cfg.model ? '' : '\n⚠️ ยังไม่ได้เลือกโมเดล กรุณากด "ตรวจเช็กโมเดล" แล้วเลือกโมเดลก่อนใช้งาน') +
+    (mismatch ? `\n⚠️ คีย์ OpenAI-compatible เป็นของ ${mismatch.name} แต่ Base URL ไม่ใช่ ${mismatch.url} คีย์จะถูกส่งผิดที่ กรุณาแก้ Base URL` : '');
   const openaiBase = getProviderBaseUrl('openai');
   const needsReload = openaiBase && !isConnectAllowedByCsp(openaiBase);
   alert(`บันทึกการตั้งค่าเรียบร้อยแล้ว\nใช้งาน ${LLM_PROVIDERS[cfg.provider].label} (${cfg.model || 'ยังไม่เลือกโมเดล'}) — คลัง API Key ${cfg.keys.length} ตัว${warning}`);
