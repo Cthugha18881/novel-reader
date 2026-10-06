@@ -567,6 +567,8 @@ async function addGlossary() {
     books: booksList,
     count: existing ? (existing.count || 1) + 1 : 1,
     overrides,
+    ...(existing?.previousTgts ? { previousTgts: existing.previousTgts } : {}),
+    ...(existing?.auto ? { auto: true, confirmed: true } : {}),
     updatedAt: Date.now()
   };
   await dbSaveGlossaryItem(item);
@@ -629,6 +631,8 @@ async function saveEditedGlossaryTerm() {
   }
   cur.category = newCat;
   cur.updatedAt = Date.now();
+  // ผู้ใช้ดู/แก้คำนี้แล้ว ไม่ต้องแสดงเป็นคำใหม่ที่รอยืนยันอีก
+  if (cur.auto) cur.confirmed = true;
 
   await dbSaveGlossaryItem(cur);
   await syncTermChange(before, cur);
@@ -636,6 +640,8 @@ async function saveEditedGlossaryTerm() {
   closeModal('edit-term-modal');
   await renderGlossaryUI();
   renderVirtualWindow(currentChapterIndex);
+  // แก้จากรายงานคุณภาพ: อัปเดตรายการคำที่รอยืนยัน
+  if (document.getElementById('reader-quality-panel')?.style.display === 'block' && typeof renderQualityReport === 'function') renderQualityReport();
 }
 
 async function researchGlossaryTermDirect(src, persist = true, ctx = getCurrentBookContext()) {
@@ -866,6 +872,8 @@ ${isBibleEnabled ? `\n${buildCharacterExtractionInstruction(extras.bible, rawTex
         books: [bookId],
         count: 1,
         overrides: {},
+        // AI เพิ่มเอง ยังไม่มีใครตรวจ (แสดงในรายงานคุณภาพจนกว่าผู้ใช้จะยืนยันหรือแก้)
+        auto: true,
         updatedAt: Date.now()
       };
       await dbSaveGlossaryItem(newItem);

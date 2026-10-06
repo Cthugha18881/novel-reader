@@ -93,6 +93,18 @@ function isTaskRunning(name) {
   return runningTasks.has(name);
 }
 
+// ---------- ใช้โมเดลอื่นเฉพาะงานหนึ่ง (เทียบโมเดล) ----------
+// ผูกกับ signal ของงาน: ทุกคำขอในงานนั้น (แปล/ตรวจทาน/เกลา) ใช้ผู้ให้บริการ+โมเดลนี้ ไม่แตะการตั้งค่าหลัก
+const modelOverrides = new WeakMap();
+
+function setModelOverride(signal, override) {
+  if (signal && override?.provider && override?.model) modelOverrides.set(signal, override);
+}
+
+function getModelOverride(signal) {
+  return signal ? modelOverrides.get(signal) || null : null;
+}
+
 // ---------- Settings ----------
 function migrateLegacyLlmSettings() {
   if (localStorage.getItem('nov_llm_provider')) return;
@@ -462,7 +474,8 @@ async function callLLM(prompt, options = {}) {
   } catch (err) {
     // AI ปฏิเสธเนื้อหา (เช่นฉากรุนแรง): ส่งต่อให้ผู้ให้บริการสำรองที่ตั้งไว้ 1 ครั้ง
     const fallback = getFallbackProvider();
-    if (err?.kind !== 'blocked' || options.providerOverride || !fallback || fallback === getActiveProvider()) throw err;
+    // งานที่กำหนดโมเดลเอง (เทียบโมเดล) ไม่ส่งต่อ ผลต้องมาจากโมเดลที่เลือกเท่านั้น
+    if (err?.kind !== 'blocked' || options.providerOverride || getModelOverride(options.signal) || !fallback || fallback === getActiveProvider()) throw err;
     const fbCfg = getActiveLlmConfig(options.role || 'main', fallback);
     if (fbCfg.keys.length === 0 || !fbCfg.model) throw err;
     if (options.onStatus) options.onStatus(`${LLM_PROVIDERS[getActiveProvider()].label} ปฏิเสธเนื้อหา กำลังส่งต่อให้ ${LLM_PROVIDERS[fallback].label}...`);
@@ -471,7 +484,10 @@ async function callLLM(prompt, options = {}) {
 }
 
 async function callLLMWithProvider(prompt, { json = true, schema = null, system = '', signal = null, onStatus = null, maxRetries = getRetryLimit(), role = 'main', providerOverride = '' } = {}) {
-  const cfg = getActiveLlmConfig(role, providerOverride);
+  const override = getModelOverride(signal);
+  const cfg = override
+    ? { ...getActiveLlmConfig(role, override.provider), model: override.model, mainModel: override.model, auxModel: override.model }
+    : getActiveLlmConfig(role, providerOverride);
   if (cfg.keys.length === 0) throw new LLMError(`กรุณาใส่ API Key ของ ${LLM_PROVIDERS[cfg.provider].label} ในเมนู 'ตั้งค่า' ก่อน`, 'config');
   if (!cfg.model) throw new LLMError("กรุณาเลือกโมเดลในเมนู 'ตั้งค่า' ก่อน", 'config');
 

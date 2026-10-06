@@ -37,6 +37,9 @@
   <script src="../js/assistant.js"></script>
   <script src="../js/reader.js"></script>
   <script src="../js/bgm.js"></script>
+  <script src="../js/quality.js"></script>
+  <script src="../js/glossary-io.js"></script>
+  <script src="../js/benchmark.js"></script>
   <script src="../js/export.js"></script>
   <script>
     const results = [];
@@ -451,7 +454,7 @@
         bookData: [{ bookId: 'b', replaceRules: 'bad', bible: { characters: 'bad' } }] });
       const b = up.books[0], c = up.chapters[0], g = up.glossaries[0], d = up.bookData[0];
       return eq([up.dropped, b.title, b.lastUrl, 'totalChapters' in b, c.order, c.paragraphs, c.nextUrl, c.sourceUrl, g.books, g.overrides, 'replaceRules' in d, d.bible.characters],
-        [{ books: 2, chapters: 1, glossaries: 1, bookData: 0, usage: 0 }, '5', '', false, 0, [{ src: '甲', th: '1' }], null, 'https://a.com/1', ['b'], { b: 'ข' }, false, []]);
+        [{ books: 2, chapters: 1, glossaries: 1, bookData: 0, usage: 0, chapterVersions: 0 }, '5', '', false, 0, [{ src: '甲', th: '1' }], null, 'https://a.com/1', ['b'], { b: 'ข' }, false, []]);
     });
     test('upgradeBackup: ตัด key __proto__ ที่ซ่อนมาในไฟล์', () => {
       const up = upgradeBackup(JSON.parse('{"format":"NovelTranslateBackup","version":3,"books":[{"bookId":"b","__proto__":{"polluted":1},"extra":{"constructor":{"x":1},"keep":2}}],"chapters":[],"glossaries":[]}'));
@@ -866,6 +869,79 @@
       const r = getTtsRate();
       if (saved !== null) localStorage.setItem('nov_tts_rate', saved);
       return r === 1 && clampNumber('3', [0.5, 2.5], 1) === 2.5;
+    });
+    // ---------- ขั้นที่ 5: คุณภาพงานแปล ----------
+    test('parseDelimited: จุลภาค/ขึ้นบรรทัด/เครื่องหมายคำพูดในช่อง, BOM, ไทย+จีน', () => {
+      const csv = '﻿src,tgt\r\n林动,"หลิน, ต้ง"\n"萧""炎""","บรรทัด1\nบรรทัด2"\n\n古元,กู่หยวน';
+      return eq(parseDelimited(csv), [['src', 'tgt'], ['林动', 'หลิน, ต้ง'], ['萧"炎"', 'บรรทัด1\nบรรทัด2'], ['古元', 'กู่หยวน']]);
+    });
+    test('toCsv -> parseDelimited ได้ค่าเดิม (รวมช่องว่างหัว-ท้าย)', () => {
+      const rows = [['a,b', 'ค"ำ"'], [' x ', 'y\nz'], ['', 'ok']];
+      return eq(parseDelimited(toCsv(rows)), rows);
+    });
+    test('detectDelimiter: TSV จาก Excel / CSV / อัฒภาค', () => eq([detectDelimiter('src\ttgt\n林\tหลิน'), detectDelimiter('src,tgt'), detectDelimiter('src;tgt'), detectDelimiter('คำเดียว')], ['\t', ',', ';', ',']));
+    test('parseGlossaryFile: หัวคอลัมน์ไทย, ไม่มีหัว, คำซ้ำใช้แถวหลัง, ข้ามแถวเสีย, หมวด/ขอบเขต', () => {
+      const a = parseGlossaryFile('หมวด,ต้นฉบับ,คำแปล\nrealm,元丹境,ขั้นแก่นปราณ\nxx,林动,หลินตง\n,林动,หลินต้ง\n,,ไม่มีต้นฉบับ');
+      const b = parseGlossaryFile('萧炎\tเซียวเหยียน\tcharacter\tzh\tglobal');
+      return eq(a.terms.map(t => [t.src, t.tgt, t.category]), [['元丹境', 'ขั้นแก่นปราณ', 'realm'], ['林动', 'หลินต้ง', '']]) && a.skipped === 1 &&
+        eq(b.terms[0], { src: '萧炎', tgt: 'เซียวเหยียน', category: 'character', lang: 'zh', scope: 'global' });
+    });
+    test('parseGlossaryFile: JSON ของแอพ / อาร์เรย์ / JSON เสีย', () => {
+      const a = parseGlossaryFile(JSON.stringify({ format: GLOSSARY_FILE_FORMAT, terms: [{ src: '林动', tgt: 'หลินต้ง' }] }), 'x.json');
+      const b = parseGlossaryFile('[{"src":"萧炎","tgt":"เซียวเหยียน","category":"character"}]');
+      let bad = false;
+      try { parseGlossaryFile('{bad', 'x.json'); } catch (e) { bad = true; }
+      return a.terms.length === 1 && b.terms[0].category === 'character' && bad;
+    });
+    test('classifyImportedTerms: ใหม่/เหมือน/ชนกัน ใช้คำแปลเฉพาะเรื่องเมื่อเทียบกับเรื่องนี้', () => {
+      const existing = [{ src: '林动', tgt: 'หลินต้ง', overrides: { b1: 'หลินตง' } }, { src: '萧炎', tgt: 'เซียวเหยียน' }];
+      const terms = [{ src: '林动', tgt: 'หลินตง' }, { src: '萧炎', tgt: 'เสี่ยวเหยียน' }, { src: '古元', tgt: 'กู่หยวน' }];
+      const book = classifyImportedTerms(terms, existing, 'b1', 'book').map(t => t.status);
+      const global = classifyImportedTerms(terms, existing, 'b1', 'global').map(t => t.status);
+      return eq(book, ['same', 'conflict', 'new']) && eq(global, ['conflict', 'conflict', 'new']);
+    });
+    test('alignVersionParagraphs: จับคู่ด้วยต้นฉบับแม้ย่อหน้าเลื่อน/เพิ่ม/หาย', () => {
+      const cur = [{ src: 'ใหม่', th: 'n' }, { src: 'A', th: 'a2' }, { src: 'B', th: 'b' }];
+      const old = [{ src: 'A', th: 'a1' }, { src: 'B', th: 'b' }, { src: 'C', th: 'c' }];
+      return eq(alignVersionParagraphs(cur, old), [
+        { cur: 0, old: null, changed: true }, { cur: 1, old: 0, changed: true }, { cur: 2, old: 1, changed: false }, { cur: null, old: 2, changed: true }]);
+    });
+    test('getVersionKeep / chapterHasTranslation / buildVersionRecord', () => {
+      const saved = localStorage.getItem('nov_version_keep');
+      localStorage.removeItem('nov_version_keep');
+      const def = getVersionKeep();
+      localStorage.setItem('nov_version_keep', '99');
+      const max = getVersionKeep();
+      localStorage.setItem('nov_version_keep', '0');
+      const off = getVersionKeep();
+      if (saved === null) localStorage.removeItem('nov_version_keep'); else localStorage.setItem('nov_version_keep', saved);
+      const chap = { id: 'c1', bookId: 'b', title: 't', paragraphs: [{ src: 'x', th: 'ไทย' }] };
+      const rec = buildVersionRecord(chap, 'weird', 123);
+      rec.paragraphs[0].th = 'แก้';
+      return def === 3 && max === 10 && off === 0 && chapterHasTranslation(chap) && !chapterHasTranslation({ status: 'pending', paragraphs: [{ th: 'x' }] }) &&
+        !chapterHasTranslation({ paragraphs: [{ src: 'x', th: UNTRANSLATED_MARK }] }) && rec.id === 'c1_v123' && rec.reason === 'retranslate' && chap.paragraphs[0].th === 'ไทย';
+    });
+    test('makeParagraphDiagnoser: เหตุผลที่ย่อหน้าน่าสงสัย', () => {
+      const d = makeParagraphDiagnoser({ '林动': { resolvedTgt: 'หลินต้ง' } }, 'zh');
+      return eq(d({ src: '林动走了过来，看着远方的天空说道', th: 'เขาเดินมามองท้องฟ้าที่ไกลออกไปแล้วพูดว่า' }), ['glossary']) &&
+        d({ src: '你好吗朋友今天天气很好啊', th: 'สบายดีไหม 朋友' }).includes('leftover-script') &&
+        eq(d({ src: 'x', th: UNTRANSLATED_MARK }), ['untranslated']) && eq(d({ src: '他笑了', th: 'เขายิ้ม' }), []);
+    });
+    test('sanitizeChapterVersionRecord + ไฟล์สำรองมี chapterVersions (ไฟล์เก่าไม่มีก็ได้)', () => {
+      const ok = sanitizeChapterVersionRecord({ id: 'v1', chapId: 'c', bookId: 'b', at: 'x', paragraphs: [{ src: 1, th: null }, 'bad'], __proto__x: 1 });
+      const bad = sanitizeChapterVersionRecord({ id: 'v2', chapId: '', bookId: 'b' });
+      const up = upgradeBackup({ format: 'NovelTranslateBackup', version: 3, books: [], chapters: [], glossaries: [] });
+      return ok.at === 0 && eq(ok.paragraphs, [{ src: '1', th: '' }]) && bad === null && BACKUP_STORES.includes('chapterVersions') && eq(up.chapterVersions, []);
+    });
+    test('setModelOverride/getModelOverride: ผูกกับ signal เท่านั้น', () => {
+      const a = new AbortController(), b = new AbortController();
+      setModelOverride(a.signal, { provider: 'openai', model: 'xiaomi/mimo-v2.6-flash' });
+      setModelOverride(b.signal, { provider: 'openai' });
+      return getModelOverride(a.signal).model === 'xiaomi/mimo-v2.6-flash' && getModelOverride(b.signal) === null && getModelOverride(null) === null;
+    });
+    test('benchmarkCost: คิดจาก token จริง + ราคาที่ใส่ / ไม่ใส่ราคา = null', () => {
+      const c = benchmarkCost({ provider: 'openai', model: 'm', input: 1e6, output: 1e6, priceIn: 0.14, priceOut: 0.28 });
+      return Math.abs(c - 0.42) < 1e-9 && benchmarkCost({ model: 'm', input: 1, output: 1, priceIn: null, priceOut: 1 }) === null;
     });
     test('getBackupSettingNames: มีตั้งค่าการอ่าน/เสียงอ่าน แต่ไม่มีเสียงที่เลือก (ขึ้นกับเครื่อง)', () => {
       const names = getBackupSettingNames();

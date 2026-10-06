@@ -981,14 +981,30 @@ function cleanThaiOutput(th, src) {
  * @returns {number[]} index ของย่อหน้าที่น่าสงสัย
  */
 function findSuspiciousParagraphs(paragraphs, activeTerms, lang = DEFAULT_SOURCE_LANG) {
-  const termEntries = Object.entries(activeTerms);
+  const check = makeParagraphDiagnoser(activeTerms, lang);
+  return paragraphs.map((p, idx) => (check(p).length ? idx : -1)).filter(i => i >= 0);
+}
+
+// เหตุผลที่ย่อหน้าน่าสงสัย (ใช้ทั้งเลือกย่อหน้าส่งตรวจทาน และแสดงในรายงานคุณภาพ)
+const SUSPICIOUS_REASON_LABELS = {
+  'leftover-script': 'มีตัวอักษรต้นฉบับหลงเหลือ',
+  'empty-bracket': 'วงเล็บว่าง',
+  'bracket-count': 'จำนวนวงเล็บ 【 】 ไม่ตรงต้นฉบับ',
+  length: 'ความยาวต่างจากต้นฉบับผิดปกติ',
+  glossary: 'ชื่อ/คำศัพท์ไม่ตรงคลังศัพท์',
+  untranslated: 'ยังไม่ได้แปล'
+};
+
+/** คืนฟังก์ชันตรวจย่อหน้า -> รายการเหตุผล (เตรียม regex/คลังศัพท์ครั้งเดียว ใช้ซ้ำได้ทั้งเรื่อง) */
+function makeParagraphDiagnoser(activeTerms, lang = DEFAULT_SOURCE_LANG) {
+  const termEntries = Object.entries(activeTerms || {});
   const leftover = getLeftoverRegex(lang);
   const [minRatio, maxRatio] = getLengthRatioRange(lang);
-  const suspicious = [];
-  paragraphs.forEach((p, idx) => {
-    const th = p.th || '';
-    const src = p.src || '';
+  return (p) => {
+    const th = p?.th || '';
+    const src = p?.src || '';
     const reasons = [];
+    if (th === UNTRANSLATED_MARK) return ['untranslated'];
     if (leftover && leftover.test(th)) reasons.push('leftover-script');
     if (/【\s*】|\[\s*\]/.test(th)) reasons.push('empty-bracket');
     if ((src.match(/【/g) || []).length !== (th.match(/【/g) || []).length) reasons.push('bracket-count');
@@ -1002,9 +1018,8 @@ function findSuspiciousParagraphs(paragraphs, activeTerms, lang = DEFAULT_SOURCE
         break;
       }
     }
-    if (reasons.length) suspicious.push(idx);
-  });
-  return suspicious;
+    return reasons;
+  };
 }
 
 // โหมดตรวจทานคำนวณจากโหมดคุณภาพ (โหมด best ใช้การตรวจความหมายหลังเกลาแทนการตรวจทุกย่อหน้า)
@@ -1185,6 +1200,8 @@ ${JSON.stringify(chunk)}
   return { paragraphs: result, changed };
 }
 
+const FIDELITY_ISSUE_LABELS = { unchecked: 'ตัวตรวจไม่ตอบย่อหน้านี้ (ใช้ร่างแรกเพื่อความปลอดภัย)', 'check-failed': 'ตรวจความหมายไม่สำเร็จ (ใช้ร่างแรกเพื่อความปลอดภัย)' };
+
 /** ตรวจว่าย่อหน้าที่ถูกเกลายังมีความหมายตรงกับต้นฉบับ ย่อหน้าที่ไม่ผ่านจะกลับไปใช้ร่างแรก */
 async function fidelityCheck(paragraphs, changedIdx, ctx, pctx, { signal = null, onStatus = null } = {}) {
   if (changedIdx.length === 0) return paragraphs;
@@ -1223,10 +1240,11 @@ ${JSON.stringify(chunk)}
       chunk.forEach(c => { result[c.i] = { ...result[c.i], th: result[c.i].thDraft, polishRejected: 'check-failed' }; });
     }
   }
-  // ย่อหน้าที่กลับไปใช้ร่างแรก ไม่ต้องเก็บร่างซ้ำ
+  // ย่อหน้าที่กลับไปใช้ร่างแรก ไม่ต้องเก็บร่างซ้ำ แต่จำไว้ว่าตรวจความหมายไม่ผ่าน (แสดงในรายงานคุณภาพ)
   return result.map(p => {
     if (p.thDraft && p.th === p.thDraft) {
       const { thDraft, polishRejected, ...rest } = p;
+      if (polishRejected) rest.fidelityIssue = String(polishRejected === true ? 'ความหมายหลังเกลาไม่ตรงต้นฉบับ' : FIDELITY_ISSUE_LABELS[polishRejected] || polishRejected).slice(0, 200);
       return rest;
     }
     return p;
@@ -1285,6 +1303,7 @@ async function saveUsedEntities(entities, bookId, lang = DEFAULT_SOURCE_LANG) {
         books: [bookId],
         count: 1,
         overrides: {},
+        auto: true,
         updatedAt: Date.now()
       });
     } else {
@@ -1418,13 +1437,13 @@ const UNTRANSLATED_MARK = '⚠️ (ย่อหน้านี้แปลไม
 
 async function executeApiCall(rawText, ctx, {
   rawChapTitle = "", rawBookTitle = "", prevSummary = "", prevChapterTail = "", signal = null, onStatus = null,
-  sourceParas = null, ruleKinds = null, chapterRule = null, noteMode = false
+  sourceParas = null, ruleKinds = null, chapterRule = null, noteMode = false, benchmark = false, qualityModeOverride = ''
 } = {}) {
   const paras = sourceParas || splitSourceParagraphs(rawText);
   if (paras.length === 0) throw new Error('ไม่พบย่อหน้าต้นฉบับสำหรับแปล');
   const kindsByRule = ruleKinds || labelParagraphsByRules(paras);
   const rule = chapterRule || classifyChapterByRules(rawChapTitle, rawText);
-  const qualityMode = getQualityMode();
+  const qualityMode = QUALITY_MODES.includes(qualityModeOverride) ? qualityModeOverride : getQualityMode();
 
   // ข้อความจากหน้าเว็บไม่ส่งให้ AI แปล (เก็บต้นฉบับไว้ และซ่อนตอนแสดงผล)
   const items = paras
@@ -1524,13 +1543,14 @@ async function executeApiCall(rawText, ctx, {
   const isStoryLike = chapterType !== 'author_note' && chapterType !== 'placeholder';
 
   // ประกาศผู้เขียนไม่ควรเพิ่มชื่อเว็บ/ชื่อแพลตฟอร์มเข้าคลังศัพท์
-  if (isStoryLike && entities.length) {
+  // โหมดเทียบโมเดล: ไม่เขียนคำศัพท์ใหม่ลงคลัง (ผลของแต่ละโมเดลต้องไม่ไปกระทบกันและไม่กระทบเรื่องจริง)
+  if (isStoryLike && entities.length && !benchmark) {
     await saveUsedEntities(entities, ctx.bookId, ctx.sourceLang);
     pctx = await loadPromptContext(ctx);
   }
 
   if (isStoryLike) {
-    paragraphs = await bilingualCrossVerificationPass(paragraphs, ctx, { signal, onStatus, pctx });
+    paragraphs = await bilingualCrossVerificationPass(paragraphs, ctx, { signal, onStatus, pctx, mode: ({ fast: 'off', balanced: 'smart', thorough: 'full', best: 'smart' })[qualityMode] });
     if (qualityMode === 'best') {
       const polished = await polishParagraphs(paragraphs, ctx, pctx, { signal, onStatus });
       paragraphs = await fidelityCheck(polished.paragraphs, polished.changed, ctx, pctx, { signal, onStatus });
@@ -1552,7 +1572,7 @@ async function executeApiCall(rawText, ctx, {
     paragraphs,
     missingCount: stillMissing,
     chapterType,
-    translationMeta: buildTranslationMeta()
+    translationMeta: { ...buildTranslationMeta(), qualityMode }
   };
 }
 
@@ -1584,7 +1604,8 @@ function buildChapterTail(chapter, maxParas = 4, maxChars = 500) {
  * -> ตรวจทาน -> (โหมด best) เกลา + ตรวจความหมาย -> แก้อักษรจีนที่หลงเหลือ -> ทำความสะอาด
  * @param {object} [options.prevChapter] ตอนเนื้อเรื่องก่อนหน้า (ใช้ทั้งสรุปและท้ายตอนเป็นบริบท)
  */
-async function translateChapter(rawText, ctx, { onStatus = null, signal = null, rawChapTitle = "", rawBookTitle = "", prevSummary = "", prevChapter = null, lockInfo = null } = {}) {
+// benchmark: ใช้ตอนเทียบโมเดล ไม่สแกน/เขียนคลังศัพท์ ไม่ทำบันทึกเหตุการณ์ ไม่นับเข้าค่าเฉลี่ยต่อตอน
+async function translateChapter(rawText, ctx, { onStatus = null, signal = null, rawChapTitle = "", rawBookTitle = "", prevSummary = "", prevChapter = null, lockInfo = null, benchmark = false, qualityMode = '' } = {}) {
   if (!ctx?.bookId) throw new Error('ไม่พบข้อมูลนิยายสำหรับการแปล');
   throwIfAborted(signal);
   // ใช้ signal เป็นตัวผูกสถิติการใช้งานกับเรื่อง/ตอนนี้ (usage.js) จึงต้องมีเสมอ
@@ -1607,7 +1628,7 @@ async function translateChapter(rawText, ctx, { onStatus = null, signal = null, 
 
   // สแกนคำศัพท์และตัวละครจากเนื้อเรื่องเท่านั้น (ไม่รวมข้อความผู้เขียนและข้อความเว็บ)
   const storyText = sourceParas.filter((_, i) => ruleKinds[i] === 'story').join('\n\n');
-  if (!noteMode && storyText) {
+  if (!noteMode && storyText && !benchmark) {
     if (onStatus) onStatus("กำลังสแกนหาชื่อเฉพาะ ตัวละคร และระดับพลังใหม่...");
     try {
       await extractAndStoreAutoGlossary(storyText, ctx, { signal, onStatus });
@@ -1621,8 +1642,9 @@ async function translateChapter(rawText, ctx, { onStatus = null, signal = null, 
     rawChapTitle, rawBookTitle, signal, onStatus,
     prevSummary: prevChapter?.summary || prevSummary,
     prevChapterTail: buildChapterTail(prevChapter),
-    sourceParas, ruleKinds, chapterRule, noteMode
+    sourceParas, ruleKinds, chapterRule, noteMode, benchmark, qualityModeOverride: qualityMode
   });
+  if (benchmark) return result;
   // บันทึกเหตุการณ์ของตอน (สำหรับผู้ช่วย AI) ทำพลาดไม่เป็นไร การแปลยังสำเร็จ
   if (!noteMode && typeof isStoryLogEnabled === 'function' && isStoryLogEnabled() && ['story', 'side_story'].includes(result.chapterType)) {
     try {

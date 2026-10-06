@@ -87,6 +87,8 @@ async function recordUsage(u, signal = null) {
   if (info.chapter) {
     info.chapter.input += input;
     info.chapter.output += output;
+    info.chapter.cacheRead = (info.chapter.cacheRead || 0) + Math.max(0, Math.round(u.cacheRead || 0));
+    info.chapter.cacheWrite = (info.chapter.cacheWrite || 0) + Math.max(0, Math.round(u.cacheWrite || 0));
   }
   const bookId = info.bookId || (signal ? '' : (typeof currentBookId === 'string' && currentBookId !== 'default_novel' ? currentBookId : ''));
   const day = localDayKey();

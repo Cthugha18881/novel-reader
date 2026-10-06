@@ -413,6 +413,7 @@ async function openBookshelfModal() {
       </div>
       <div class="batch-bar" style="padding-top: 6px; padding-bottom: 6px; flex-wrap: wrap;">
         <button class="btn" style="padding: 2px 8px; font-size: 10px;" onclick="checkNewChaptersForBook(${jsArg(b.bookId)})" title="เช็กว่าเว็บต้นฉบับมีตอนใหม่หรือยัง (ไม่ใช้โควตา AI)">🔔 เช็กตอนใหม่</button>
+        <button class="btn" style="padding: 2px 8px; font-size: 10px;" onclick="openQualityReport(${jsArg(b.bookId)})" title="รวมจุดที่ควรตรวจของเรื่องนี้: ย่อหน้าน่าสงสัย คำศัพท์ที่ยังไม่ยืนยัน ตอนที่แปลด้วยคำสั่งรุ่นเก่า (ไม่ใช้โควตา AI)">📋 รายงานคุณภาพ</button>
         <span id="newchap-${escapeHtml(b.bookId)}" style="display: flex; gap: 6px; align-items: center; flex-wrap: wrap;">${newChapterBadgeHtml(b.bookId)}</span>
       </div>
 

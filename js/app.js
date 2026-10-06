@@ -29,12 +29,12 @@ let selectedParagraphContext = { th: "", src: "", uniqueKey: "" };
 function createGuideChapters() {
   return [{
     id: "guide_chap_1",
-    title: "คู่มือเริ่มต้น v3.6.0",
+    title: "คู่มือเริ่มต้น v3.7.0",
     paragraphs: [
-      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.6.0", src: "欢迎来到 NovelTranslate" },
+      { th: "ยินดีต้อนรับสู่ NovelTranslate AI v3.7.0", src: "欢迎来到 NovelTranslate" },
       { th: "ระบบได้ทำการแยกโครงสร้างโค้ดเป็น Modular Architecture เรียบร้อยแล้ว", src: "已完全重构为模块化架构" }
     ],
-    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.6.0"
+    summary: "ผู้ใช้เริ่มต้นใช้งาน NovelTranslate AI v3.7.0"
   }];
 }
 
@@ -182,6 +182,12 @@ async function savePastedChapter() {
   if (text.length > IMPORT_LIMITS.pasteChars) return alert('ข้อความยาวเกินไป');
   const chapter = await findChapterAnywhere(pasteChapterId);
   if (!chapter) return alert('ไม่พบตอนนี้');
+  // คำแปลเดิม (เช่นแปลจากตัวอย่าง) เก็บไว้ในประวัติเวอร์ชันก่อนถูกแทน
+  try {
+    if (await saveChapterVersion(chapter, 'paste')) chapter.hasVersions = true;
+  } catch (err) {
+    console.warn('Save chapter version failed:', err);
+  }
   chapter.paragraphs = splitSourceParagraphs(text).map(src => ({ th: '', src }));
   chapter.status = 'pending';
   chapter.chapterType = 'story';
@@ -216,7 +222,7 @@ async function translateLockedPreview(chapId) {
     // ตัวอย่างไม่ครบตอน: ไม่ใช้สรุปของตอนนี้เป็นบริบทของตอนถัดไป
     result.summary = '';
     result.previewOnly = true;
-    await applyTranslationToChapter(chapter, result, { updateTitle: false });
+    await applyTranslationToChapter(chapter, result, { updateTitle: false, reason: 'preview' });
     if (lockInfo) {
       chapter.lockInfo = lockInfo;
       await dbSaveChapter(chapter);
@@ -292,6 +298,7 @@ function buildChapterBlockHtml(chap, chapIdx, activeTerms) {
       <div class="chapter-block chapter-type-${chapterType}" id="chapter-block-${chapIdx}" data-index="${chapIdx}" data-id="${escapeHtml(chap.id)}">
       <div class="chapter-block-divider">
         <span class="chapter-divider-pill">📖 ${escapeHtml(chap.title)}</span>
+        ${chap.hasVersions ? `<button class="chapter-version-btn" onclick="openVersionHistory(${jsArg(chap.id)})" title="ดู/เทียบ/กู้คืนคำแปลฉบับก่อนหน้าของตอนนี้">🕘 ฉบับก่อน</button>` : ''}
       </div>
       ${typeBadge ? `<div style="text-align: center; margin: -10px 0 16px;">${typeBadge}</div>` : ''}
       <div class="chapter-body${isNoteChapter ? ' note-chapter-body' : ''}">${parasHtml}</div>
@@ -339,6 +346,8 @@ async function saveEditedParagraph() {
     if (!p.userEdited && !p.thDraft) p.thDraft = p.th;
     p.th = newTh;
     p.userEdited = true;
+    // ผู้ใช้แก้แล้ว ไม่ต้องแสดงว่าตรวจความหมายไม่ผ่านอีก
+    delete p.fidelityIssue;
     await dbSaveChapter(chap);
     if (document.getElementById('edit-para-as-example').checked && (p.kind || 'story') === 'story') {
       await addStyleExample(chap.bookId, p.src, newTh);
@@ -358,6 +367,7 @@ async function swapParagraphDraft(e, chapIdx, pIdx) {
   [p.th, p.thDraft] = [p.thDraft, p.th];
   // ผู้ใช้เลือกฉบับเองแล้ว ถือว่าเป็นคำแปลที่ยืนยันแล้ว จะไม่ถูกทับตอนแปลใหม่
   p.userEdited = true;
+  delete p.fidelityIssue;
   await dbSaveChapter(chap);
   renderVirtualWindow(currentChapterIndex);
 }
@@ -923,7 +933,14 @@ function mergeUserEdits(oldParas, newParas) {
 }
 
 // บันทึกผลแปลทับตอนเดิม (คง id/ลำดับ/URL ไว้) แล้วอัปเดตหน้าจอที่เกี่ยวข้อง
-async function applyTranslationToChapter(chapter, result, { updateTitle = false, nextUrl = undefined } = {}) {
+// reason: เหตุที่คำแปลเดิมถูกแทน (เก็บไว้ในประวัติเวอร์ชัน) ดู VERSION_REASON_LABELS ใน quality.js
+async function applyTranslationToChapter(chapter, result, { updateTitle = false, nextUrl = undefined, reason = 'retranslate' } = {}) {
+  // เก็บคำแปลเดิมไว้ก่อนแทน (เทียบ/กู้คืนได้) เก็บไม่สำเร็จก็ยังแปลต่อได้
+  try {
+    if (await saveChapterVersion(chapter, reason)) chapter.hasVersions = true;
+  } catch (err) {
+    console.warn('Save chapter version failed:', err);
+  }
   chapter.paragraphs = result.paragraphs;
   chapter.summary = result.summary || '';
   chapter.chapterType = result.chapterType || 'story';
@@ -993,7 +1010,7 @@ async function translatePendingChapterUnlocked(chapter, ctx, { signal = null, on
     signal, onStatus, rawChapTitle, lockInfo,
     prevChapter: findPrevStoryChapter(bookChaps, chapter.order ?? 0)
   });
-  await applyTranslationToChapter(chapter, result, { updateTitle: true, nextUrl });
+  await applyTranslationToChapter(chapter, result, { updateTitle: true, nextUrl, reason: 'translate' });
   return result;
 }
 
@@ -1072,7 +1089,7 @@ async function refetchChapterFromSource(chapId) {
       rawBookTitle: scraped.rawBookTitle,
       prevChapter: findPrevStoryChapter(bookChaps, chapter.order ?? 0)
     });
-    await applyTranslationToChapter(chapter, result, { updateTitle: true, nextUrl: scraped.nextUrlSource === 'link' ? scraped.nextUrl : undefined });
+    await applyTranslationToChapter(chapter, result, { updateTitle: true, nextUrl: scraped.nextUrlSource === 'link' ? scraped.nextUrl : undefined, reason: 'refetch' });
     alert(`ดึงและแปล "${chapter.title}" เรียบร้อยแล้ว`);
   } catch (err) {
     if (!isAbortError(err)) alert(`ดึงเนื้อหาใหม่ไม่สำเร็จ: ${describeScrapeError(err)}`);
@@ -2167,7 +2184,7 @@ function renderBackupImportModal(current) {
     <div style="margin-bottom: 6px;">ไฟล์: <b>${escapeHtml(fileName)}</b>${exportedAt ? ` · สำรองเมื่อ ${escapeHtml(exportedAt)}` : ''}</div>
     <table class="backup-compare-table">
       <thead><tr><th></th><th>ในเครื่องนี้</th><th>ในไฟล์</th></tr></thead>
-      <tbody>${row('นิยาย (เรื่อง)', 'books')}${row('ตอน', 'chapters')}${row('คำศัพท์', 'glossaries')}${row('คู่มือเรื่อง / สารบัญ', 'bookData')}${row('สถิติการใช้ AI', 'usage')}</tbody>
+      <tbody>${row('นิยาย (เรื่อง)', 'books')}${row('ตอน', 'chapters')}${row('คำศัพท์', 'glossaries')}${row('คู่มือเรื่อง / สารบัญ', 'bookData')}${row('สถิติการใช้ AI', 'usage')}${row('ฉบับแปลก่อนหน้า (ประวัติเวอร์ชัน)', 'chapterVersions')}</tbody>
     </table>
     ${dropped ? `<div style="color: #b45309; margin-top: 6px;">⚠️ จะข้ามข้อมูลที่เสียหรือรูปแบบไม่ถูกต้อง ${dropped.toLocaleString()} รายการ</div>` : ''}`;
 

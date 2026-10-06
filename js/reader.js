@@ -749,8 +749,10 @@ function bookmarkMarkHtml(bm, chapIdx, pIdx) {
 // ==================== หน้าต่างค้นหา / บุ๊กมาร์ก ====================
 let readerToolsTab = 'search';
 
-async function openReaderTools(tab = 'search') {
+// reportBookId: รายงานคุณภาพของเรื่องอื่น (เปิดจากชั้นหนังสือ) ไม่ระบุ = เรื่องที่เปิดอยู่
+async function openReaderTools(tab = 'search', reportBookId = null) {
   readerToolsTab = tab;
+  if (typeof qualityReportBookId !== 'undefined') qualityReportBookId = reportBookId;
   openModal('reader-tools-modal');
   switchReaderToolsTab(tab);
 }
@@ -760,8 +762,10 @@ function switchReaderToolsTab(tab) {
   document.querySelectorAll('#reader-tools-modal .reader-tab').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === tab));
   document.getElementById('reader-search-panel').style.display = tab === 'search' ? 'block' : 'none';
   document.getElementById('reader-bookmark-panel').style.display = tab === 'bookmarks' ? 'block' : 'none';
+  document.getElementById('reader-quality-panel').style.display = tab === 'quality' ? 'block' : 'none';
   if (tab === 'search') setTimeout(() => document.getElementById('reader-search-input')?.focus(), 100);
-  else renderBookmarkList();
+  else if (tab === 'bookmarks') renderBookmarkList();
+  else if (tab === 'quality') renderQualityReport();
 }
 
 async function runReaderSearch() {

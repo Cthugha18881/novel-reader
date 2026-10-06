@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/csp.js"></script>
-  <title>NovelTranslate AI v3.6.0</title>
+  <title>NovelTranslate AI v3.7.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#2563eb">
   <link rel="manifest" href="manifest.webmanifest">
@@ -408,12 +408,13 @@
   <div class="modal-overlay" id="reader-tools-modal" style="z-index: 60;">
     <div class="modal-box" style="max-width: 600px;">
       <div class="modal-head">
-        <div class="modal-title">ค้นหาและบุ๊กมาร์ก</div>
+        <div class="modal-title">ค้นหา · บุ๊กมาร์ก · คุณภาพ</div>
         <button class="modal-close" onclick="closeModal('reader-tools-modal')">✕</button>
       </div>
       <div class="reader-tabs">
         <button class="reader-tab active" data-tab="search" onclick="switchReaderToolsTab('search')">🔎 ค้นหา</button>
         <button class="reader-tab" data-tab="bookmarks" onclick="switchReaderToolsTab('bookmarks')">🔖 บุ๊กมาร์ก/โน้ต</button>
+        <button class="reader-tab" data-tab="quality" onclick="switchReaderToolsTab('quality')">📋 คุณภาพ</button>
       </div>
       <div id="reader-search-panel">
         <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px;">
@@ -435,6 +436,47 @@
       </div>
       <div id="reader-bookmark-panel" style="display: none;">
         <div id="reader-bookmark-list" class="modal-scrollable-body" style="max-height: 60vh;"></div>
+      </div>
+      <div id="reader-quality-panel" class="modal-scrollable-body" style="display: none; max-height: 65vh;"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: ประวัติเวอร์ชันของตอน -->
+  <div class="modal-overlay" id="version-modal" style="z-index: 64;">
+    <div class="modal-box" style="max-width: 860px;">
+      <div class="modal-head">
+        <div class="modal-title" id="version-modal-title">ฉบับก่อนหน้า</div>
+        <button class="modal-close" onclick="closeModal('version-modal')">✕</button>
+      </div>
+      <div id="version-modal-body" class="modal-scrollable-body" style="max-height: 70vh;"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: นำเข้าคำศัพท์ -->
+  <div class="modal-overlay" id="glossary-import-modal" style="z-index: 66;">
+    <div class="modal-box" style="max-width: 560px;">
+      <div class="modal-head">
+        <div class="modal-title">นำเข้าคำศัพท์</div>
+        <button class="modal-close" onclick="closeModal('glossary-import-modal')">✕</button>
+      </div>
+      <div id="glossary-import-body" class="modal-scrollable-body" style="max-height: 60vh;"></div>
+      <div style="display: flex; gap: 6px; justify-content: flex-end; margin-top: 12px;">
+        <button class="btn" onclick="closeModal('glossary-import-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" id="gloss-import-confirm-btn" onclick="confirmGlossaryImport()">นำเข้า</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: เทียบโมเดล -->
+  <div class="modal-overlay" id="benchmark-modal" style="z-index: 63;">
+    <div class="modal-box" style="max-width: 1000px;">
+      <div class="modal-head">
+        <div class="modal-title">🧪 เทียบโมเดล</div>
+        <button class="modal-close" onclick="closeModal('benchmark-modal')">✕</button>
+      </div>
+      <div class="modal-scrollable-body" style="max-height: 78vh;">
+        <div id="benchmark-setup"></div>
+        <div id="benchmark-results"></div>
       </div>
     </div>
   </div>
@@ -785,6 +827,18 @@
         </button>
       </div>
 
+      <div class="glossary-filter-bar gloss-io-bar">
+        <span style="font-size: 11px; opacity: 0.75;">ไฟล์คำศัพท์:</span>
+        <select id="gloss-io-scope" class="form-input" style="width: auto; padding: 4px 8px; font-size: 11px;" title="ส่งออกคำไหนบ้าง">
+          <option value="book">เฉพาะคำที่เรื่องนี้ใช้</option>
+          <option value="all">ทั้งคลัง</option>
+        </select>
+        <button class="btn" style="padding: 4px 8px; font-size: 11px;" onclick="exportGlossaryFile('csv')" title="เปิดแก้ใน Excel / Google Sheets ได้">⬇ ส่งออก CSV</button>
+        <button class="btn" style="padding: 4px 8px; font-size: 11px;" onclick="exportGlossaryFile('json')">⬇ JSON</button>
+        <button class="btn" style="padding: 4px 8px; font-size: 11px;" onclick="triggerGlossaryImport()" title="นำเข้า CSV / TSV / JSON ดูตัวอย่างและเลือกวิธีจัดการคำที่ชนกันก่อน">⬆ นำเข้า</button>
+        <input type="file" id="gloss-import-file" accept=".csv,.tsv,.txt,.json,text/csv,application/json" style="display: none;" onchange="handleGlossaryImportFile(this)">
+      </div>
+
       <div class="gloss-batch-toolbar" id="gloss-batch-toolbar">
         <span id="gloss-batch-count" style="font-weight: 600;">เลือกไว้ 0 คำ</span>
         <div style="display: flex; gap: 4px; flex-wrap: wrap;">
@@ -925,6 +979,9 @@
 
         <div class="form-group">
           <button class="btn btn-secondary" style="width: 100%;" onclick="openUsageModal()">📊 การใช้งาน AI, เพดานค่าใช้จ่าย และบันทึกข้อผิดพลาด</button>
+        </div>
+        <div class="form-group">
+          <button class="btn btn-secondary" style="width: 100%;" onclick="openBenchmarkModal()">🧪 เทียบโมเดล (แปลตอนเดียวกันหลายโมเดล เทียบคำแปลและราคา)</button>
         </div>
         <div class="form-group">
           <button class="btn btn-secondary" style="width: 100%;" onclick="openSiteProfilesModal()">🌐 ตั้งค่าเว็บต้นฉบับ (โปรไฟล์เว็บ, Jina Key, AI ช่วยแยกเนื้อหา)</button>
@@ -1068,6 +1125,9 @@
   <script src="js/assistant.js"></script>
   <script src="js/reader.js"></script>
   <script src="js/bgm.js"></script>
+  <script src="js/quality.js"></script>
+  <script src="js/glossary-io.js"></script>
+  <script src="js/benchmark.js"></script>
   <script src="js/export.js"></script>
   <script src="js/app.js"></script>
 </body>
