@@ -1,0 +1,10 @@
+{
+  "name": "dusktale-server",
+  "private": true,
+  "description": "Dusktale hosted translation API (Vercel Functions + Supabase + OpenRouter). No runtime dependencies.",
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test"
+  }
+}
