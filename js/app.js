@@ -6,7 +6,7 @@ let nextUrlCalculated = "";
 let isPrefetching = false;
 let lastPrefetchError = '';
 let currentBookId = "default_novel";
-let currentBookTitle = "NovelTranslate";
+let currentBookTitle = "Dusktale";
 let currentAuthor = "";
 let currentBookGenre = "xianxia";
 let currentSourceLang = DEFAULT_SOURCE_LANG;
@@ -42,6 +42,8 @@ async function buildWelcomeHtml() {
   const books = (await dbGetAllBooks().catch(() => [])).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
   const last = books[0];
   return `<section class="welcome" aria-labelledby="welcome-title">
+    <img class="welcome-logo" src="icons/icon-192.png" alt="" width="72" height="72">
+    <div class="welcome-brand">Dusk<span class="brand-title-accent">tale</span></div>
     <h1 class="welcome-title" id="welcome-title">อ่านนิยายจีน ญี่ปุ่น เกาหลี เป็นภาษาไทย</h1>
     <p class="welcome-lead">วางลิงก์ตอนนิยาย แล้ว AI แปลให้อ่านต่อเนื่อง ชื่อตัวละครและคำศัพท์ตรงกันทุกตอน ข้อมูลทั้งหมดเก็บในเครื่องนี้</p>
     ${last ? `<div class="welcome-continue"><b>อ่านต่อ: ${escapeHtml(last.title || '')}</b>
@@ -70,7 +72,7 @@ async function buildWelcomeHtml() {
         </div>
       </div>
     </div>
-    <p class="welcome-note">มีคำถามเรื่องการใช้งาน กดปุ่ม 💬 มุมขวาล่างเพื่อถามผู้ช่วย AI ได้ · ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น อย่าลืมสำรองข้อมูลที่ชั้นหนังสือ</p>
+    <p class="welcome-note">มีคำถามเรื่องการใช้งาน กดปุ่ม 💬 มุมขวาล่างเพื่อถามผู้ช่วย AI ได้ · ข้อมูลอยู่ในเบราว์เซอร์นี้เท่านั้น อย่าลืมสำรองข้อมูลที่ ตั้งค่า → 💾 ข้อมูล</p>
   </section>`;
 }
 
@@ -80,7 +82,7 @@ let currentChapterIndex = 0;
 function resetToGuideBook() {
   localStorage.removeItem('nov_last_book_id');
   currentBookId = 'default_novel';
-  currentBookTitle = 'NovelTranslate';
+  currentBookTitle = 'Dusktale';
   currentAuthor = '';
   currentBookGenre = 'xianxia';
   currentSourceLang = DEFAULT_SOURCE_LANG;
@@ -2409,7 +2411,7 @@ async function handleBackupFileSelected(input) {
   } catch (e) {
     return appAlert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูล JSON ที่ถูกต้อง');
   }
-  if (!isValidBackup(raw)) return appAlert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูลของ NovelTranslate หรือมาจากแอพรุ่นที่ใหม่กว่า');
+  if (!isValidBackup(raw)) return appAlert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูลของ Dusktale (หรือ NovelTranslate เดิม) หรือมาจากแอพรุ่นที่ใหม่กว่า');
 
   const data = upgradeBackup(raw);
   pendingBackupImport = { raw, data, settings: splitImportedSettings(data.settings), fileName: file.name };
@@ -2463,7 +2465,7 @@ async function confirmBackupImport() {
   try {
     abortAllRunningProcesses();
     if (mode === 'replace' && document.getElementById('backup-import-safety').checked) {
-      await downloadBackupFile('noveltranslate-before-replace');
+      await downloadBackupFile('dusktale-before-replace');
     }
     const { raw, settings } = pendingBackupImport;
     await dbImportAll(raw, { mode });
@@ -2866,7 +2868,7 @@ async function runGeminiOverheadTest() {
 
 async function exportDiagnosticLog() {
   const report = await buildDiagnosticReport();
-  downloadBlob(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }), `noveltranslate-diagnostics-${backupFileStamp()}.json`);
+  downloadBlob(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }), `dusktale-diagnostics-${backupFileStamp()}.json`);
 }
 
 async function clearDiagnosticLogFromUi() {

@@ -1,4 +1,4 @@
-// ตัวอย่าง proxy สำรองสำหรับ NovelTranslate AI (Cloudflare Workers แผนฟรีใช้ได้)
+// ตัวอย่าง proxy สำรองสำหรับ Dusktale (Cloudflare Workers แผนฟรีใช้ได้)
 // ใช้เมื่อ r.jina.ai ล่มหรือโดนจำกัดจำนวนครั้ง: แอพจะส่งลิงก์หน้านิยายมา แล้ว Worker ดึง HTML ของหน้านั้นส่งกลับ
 //
 // วิธีติดตั้ง

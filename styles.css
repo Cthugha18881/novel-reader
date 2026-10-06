@@ -82,12 +82,12 @@ header {
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
 .brand-box { display: flex; align-items: center; gap: 8px; }
-.brand-icon {
-  width: 32px; height: 32px; border-radius: var(--radius);
-  background: var(--accent); color: var(--on-accent); font-family: var(--font-ui);
-  font-weight: 700; font-size: 16px; display: flex; align-items: center; justify-content: center;
-}
-.brand-title { font-family: var(--font-ui); font-weight: 700; font-size: 16px; line-height: 1.2; }
+/* โลโก้ Dusktale: หนังสือกับดวงอาทิตย์ยามโพล้เพล้บนพื้นกรมท่า (icons/) */
+.brand-icon { width: 32px; height: 32px; border-radius: var(--radius); display: block; flex-shrink: 0; }
+.brand-title { font-family: var(--font-ui); font-weight: 700; font-size: 17px; line-height: 1.2; letter-spacing: .01em; }
+/* "tale" สีทองตามโลโก้ (พื้นสว่างใช้ทองเข้มให้อ่านออก) */
+.brand-title-accent { color: var(--brand-gold, #946410); }
+body.theme-dark { --brand-gold: #debe8b; }
 
 .header-actions { display: flex; align-items: center; gap: 6px; }
 /* ปุ่มเล็กสุดสูง 28px (WCAG 2.5.8 ≥ 24px) จอสัมผัส 36px */
@@ -772,6 +772,8 @@ body.theme-dark .bench-paras th { background: #1e2533; }
 
 /* ---------- หน้าต้อนรับผู้ใช้ใหม่ ---------- */
 .welcome { max-width: 560px; margin: 8px auto 40px; font-family: var(--font-ui); }
+.welcome-logo { display: block; width: 72px; height: 72px; border-radius: 18px; box-shadow: var(--shadow-lg); margin-bottom: 10px; }
+.welcome-brand { font-size: 15px; font-weight: 700; letter-spacing: .02em; margin-bottom: 4px; }
 .welcome-title { font-size: 24px; font-weight: 700; line-height: 1.35; margin-bottom: 6px; }
 .welcome-lead { font-size: 15px; color: var(--text-muted); line-height: 1.7; margin-bottom: 20px; }
 .welcome-steps { display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px; }

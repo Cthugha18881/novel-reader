@@ -917,7 +917,7 @@ function sanitizeSiteProfile(raw) {
 
 function exportSiteProfiles() {
   const data = { format: 'NovelTranslateSiteProfiles', version: 1, profiles: siteProfilesDraft.filter(p => p.host).map(sanitizeSiteProfile).filter(Boolean) };
-  downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), `noveltranslate-site-profiles-${backupFileStamp()}.json`);
+  downloadBlob(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }), `dusktale-site-profiles-${backupFileStamp()}.json`);
 }
 
 function triggerSiteProfilesImport() {

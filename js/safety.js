@@ -244,7 +244,7 @@ function backupFileStamp(d = new Date()) {
 }
 
 // downloadBlob อยู่ใน export.js
-async function downloadBackupFile(prefix = 'noveltranslate-backup') {
+async function downloadBackupFile(prefix = 'dusktale-backup') {
   const data = await buildBackupPayload();
   downloadBlob(new Blob([JSON.stringify(data)], { type: 'application/json' }), `${prefix}-${backupFileStamp()}.json`);
   markBackupDone();

@@ -129,7 +129,7 @@ p { text-indent: 1.5em; margin: 0 0 0.8em 0; }`);
     <dc:title>${xmlEscape(title)}</dc:title>
     <dc:language>th</dc:language>
     ${book.author ? `<dc:creator>${xmlEscape(book.author)}</dc:creator>` : ''}
-    <dc:contributor>NovelTranslate AI</dc:contributor>
+    <dc:contributor>Dusktale</dc:contributor>
     <meta property="dcterms:modified">${modified}</meta>
   </metadata>
   <manifest>

@@ -1,6 +1,8 @@
-# NovelTranslate AI
+<p align="center"><img src="icons/logo-full.jpg" alt="Dusktale" width="240"></p>
 
-เว็บแอพอ่านนิยายจีนแปลไทยด้วย AI ทำงานในเบราว์เซอร์ล้วนๆ ไม่มี backend และไม่ต้อง build
+# Dusktale
+
+(ชื่อเดิม NovelTranslate AI) เว็บแอพอ่านนิยายจีน ญี่ปุ่น เกาหลี อังกฤษ แปลไทยด้วย AI ทำงานในเบราว์เซอร์ล้วนๆ ไม่มี backend และไม่ต้อง build
 ข้อมูลนิยาย ตอน และคลังศัพท์ทั้งหมดเก็บใน IndexedDB ของเบราว์เซอร์เครื่องนั้น
 
 ## ความสามารถหลัก
@@ -66,7 +68,9 @@
 | `docs/cloudflare-worker.js` | ตัวอย่าง proxy สำรอง (Cloudflare Worker) พร้อมวิธีติดตั้ง |
 | `js/export.js` | ส่งออก TXT / EPUB (ใช้ `vendor/jszip.min.js` 3.10.1 ที่เก็บใน repo) |
 | `js/app.js` | state ของหน้าอ่าน, การแสดงผล, import, ตั้งค่า, PWA |
-| `sw.js` / `manifest.webmanifest` / `icons/` | PWA และ cache สำหรับออฟไลน์ |
+| `sw.js` / `manifest.webmanifest` / `icons/` | PWA และ cache สำหรับออฟไลน์ ไอคอน Dusktale (`logo-full.jpg` = โลโก้เต็มพร้อมชื่อ) |
+
+> ชื่อภายในยังเป็นของเดิมโดยตั้งใจ: ฐานข้อมูล `NovelTranslateDB_v12`, รูปแบบไฟล์สำรอง `NovelTranslateBackup`, ไฟล์คำศัพท์ `NovelTranslateGlossary`, ชื่อไฟล์สำรองอัตโนมัติ `noveltranslate-auto-*`, cache `noveltranslate-*` เปลี่ยนแล้วข้อมูลและไฟล์สำรองเก่าจะเปิดไม่ได้
 | `tests/index.html` | unit test ของฟังก์ชันหลัก (เปิดในเบราว์เซอร์) |
 
 ### หลักการสำคัญในโค้ด

@@ -32,7 +32,7 @@ const APP_SHELL = [
   'js/export.js',
   'js/app.js',
   'vendor/jszip.min.js',
-  'icons/icon.svg',
+  'icons/icon-64.png',
   'icons/icon-192.png',
   'icons/icon-512.png'
 ];
