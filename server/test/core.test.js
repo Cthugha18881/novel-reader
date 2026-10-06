@@ -3,7 +3,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   LIMITS, parseAllowedOrigins, isOriginAllowed, corsHeaders, bearerToken, validateChatBody, estimateTokens,
-  reservationTokens, buildUpstreamBody, usageFromResponse, mapUpstreamError, quotaExceededMessage, readEnv, serviceHeaders
+  reservationTokens, buildUpstreamBody, usageFromResponse, mapUpstreamError, quotaExceededMessage, readEnv, serviceHeaders,
+  normalizeSupabaseUrl
 } from '../lib/core.js';
 
 test('origins: ค่าเริ่มต้น GitHub Pages + localhost เท่านั้น', () => {
@@ -64,6 +65,14 @@ test('usageFromResponse / mapUpstreamError / quotaExceededMessage', () => {
   assert.equal(mapUpstreamError(400, 'response_format not supported').message, 'response_format not supported');
   assert.equal(mapUpstreamError(500).status, 502);
   assert.match(quotaExceededMessage({ used: 400000, limit: 400000 }), /400K จาก 400K/);
+});
+
+test('normalizeSupabaseUrl: ตัด /rest/v1 ที่คัดลอกติดมา', () => {
+  assert.equal(normalizeSupabaseUrl('https://abc.supabase.co/rest/v1/'), 'https://abc.supabase.co');
+  assert.equal(normalizeSupabaseUrl(' https://abc.supabase.co/auth/v1 '), 'https://abc.supabase.co');
+  assert.equal(normalizeSupabaseUrl('https://abc.supabase.co//'), 'https://abc.supabase.co');
+  assert.equal(normalizeSupabaseUrl(''), '');
+  assert.equal(readEnv({ SUPABASE_URL: 'https://abc.supabase.co/rest/v1/' }).supabaseUrl, 'https://abc.supabase.co');
 });
 
 test('readEnv / serviceHeaders', () => {

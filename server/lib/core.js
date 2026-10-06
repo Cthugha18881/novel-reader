@@ -122,10 +122,15 @@ export function quotaExceededMessage({ used = 0, limit = 0 } = {}) {
     'รอรอบเดือนใหม่ อัปเกรดแพ็กเกจ หรือใช้ API Key ของคุณเองในหน้าตั้งค่า';
 }
 
+/** Project URL ของ Supabase: ตัด /rest/v1 หรือ /auth/v1 ที่คัดลอกติดมา และ / ท้าย */
+export function normalizeSupabaseUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '').replace(/\/(rest|auth)\/v1$/i, '').replace(/\/+$/, '');
+}
+
 /** ค่าตั้งของเซิร์ฟเวอร์จาก environment variables พร้อมรายการที่ยังขาด (ไม่คืนค่าลับออกไป) */
 export function readEnv(env) {
   const cfg = {
-    supabaseUrl: String(env.SUPABASE_URL || '').replace(/\/+$/, ''),
+    supabaseUrl: normalizeSupabaseUrl(env.SUPABASE_URL),
     anonKey: env.SUPABASE_ANON_KEY || '',
     serviceKey: env.SUPABASE_SERVICE_ROLE_KEY || '',
     openrouterKey: env.OPENROUTER_API_KEY || '',

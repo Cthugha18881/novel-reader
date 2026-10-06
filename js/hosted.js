@@ -9,7 +9,8 @@ const HOSTED = (() => {
   const clean = (u) => String(u || '').trim().replace(/\/+$/, '');
   return {
     apiBase: clean(c.apiBase),
-    supabaseUrl: clean(c.supabaseUrl),
+    // Project URL อย่างเดียว (ตัด /rest/v1 ที่อาจคัดลอกติดมา)
+    supabaseUrl: clean(c.supabaseUrl).replace(/\/(rest|auth)\/v1$/i, ''),
     anonKey: String(c.supabaseAnonKey || '').trim(),
     emailHasCode: c.emailHasCode === true,
     freeTokens: Number(c.freeMonthlyTokens) || 400000,
