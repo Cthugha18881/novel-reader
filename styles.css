@@ -109,6 +109,16 @@ body.theme-dark .btn-danger { background: #b91c1c !important; }
 
 .desktop-controls { display: none; align-items: center; gap: 4px; }
 @media (min-width: 768px) { .desktop-controls { display: flex; } }
+.header-sep { width: 1px; height: 20px; background: var(--border-strong); margin: 0 4px; }
+/* มือถือ: หัวจอเหลือ "+ วางลิงก์" กับ ⋯ ปุ่มอื่นอยู่ในแถบล่าง/เมนู (ไม่ต้องเลื่อนหัวจอหาปุ่มตั้งค่า) */
+.hdr-more { display: none; font-size: 16px; padding: 4px 10px; }
+@media (max-width: 767px) {
+  .hdr-secondary { display: none !important; }
+  .hdr-more { display: inline-flex; }
+  /* ปุ่มเต็มจอทับปุ่ม "⋯ ตอนนี้" บนจอแคบ: ย้ายเข้าเมนู ⋯ แต่ตอนเต็มจอยังต้องมีไว้กดออก */
+  body:not(.is-fullscreen) #fullscreen-btn { display: none; }
+  body.is-fullscreen .chapter-toolbar { padding-right: 40px; }
+}
 
 #prefetch-badge {
   display: none; font-size: 10px; padding: 2px 7px; border-radius: 999px;
@@ -138,8 +148,6 @@ body.theme-dark .top-floating-btn { background: rgba(255,255,255,0.08); border-c
 body.theme-dark .top-floating-btn:hover { background-color: rgba(255,255,255,0.15); }
 
 #fullscreen-btn { right: 16px; }
-#scan-terms-btn { right: 54px; font-size: 13px; }
-#retranslate-chap-btn { right: 92px; font-size: 13px; }
 
 body.is-fullscreen header { transform: translateY(-100%); opacity: 0; pointer-events: none; }
 body.is-fullscreen .mobile-dock { transform: translateY(100%); opacity: 0; pointer-events: none; }
@@ -784,8 +792,7 @@ body.theme-dark .welcome-step.done .welcome-num { color: #86efac; }
 .welcome-continue { padding: 14px 16px; border-radius: var(--radius-lg); background: var(--accent-soft); margin-bottom: 18px; }
 .welcome-continue b { display: block; margin-bottom: 6px; }
 .welcome-note { font-size: 12px; color: var(--text-muted); line-height: 1.7; }/* ยังไม่ได้เปิดนิยาย: ซ่อนเครื่องมือของตอน (แก้ชื่อ, ส่งออก, แปลใหม่, สแกนคำศัพท์) */
-body.no-book .chapter-toolbar .edit-badge-btn, body.no-book .chapter-toolbar > .btn,
-body.no-book #retranslate-chap-btn, body.no-book #scan-terms-btn { display: none; }
+body.no-book .chapter-toolbar .edit-badge-btn, body.no-book .chapter-toolbar > .btn { display: none; }
 body.no-book .editable-title-wrap { pointer-events: none; }
 body.no-book .chapter-toolbar { display: none; }
 /* checkbox / radio ใหญ่ขึ้นให้กดง่าย (WCAG 2.5.8) และใช้สีเน้นของธีม */
@@ -798,3 +805,33 @@ details > summary { min-height: 28px; padding: 4px 0; cursor: pointer; }
 .app-dialog-input-wrap:not(:empty) { margin-top: 10px; }
 .app-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 16px; }
 .app-dialog-actions .btn { min-height: 36px; padding: 6px 14px; font-size: 13px; }
+/* ---------- เมนู ⋯ (เมนูหลักบนมือถือ / เมนูของตอน) ---------- */
+.action-menu-backdrop { position: fixed; inset: 0; z-index: 89; background: transparent; }
+.action-menu {
+  position: fixed; z-index: 90; min-width: 240px; max-width: min(320px, calc(100vw - 16px));
+  background: var(--surface); color: var(--text); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg, 0 12px 32px rgba(0,0,0,0.18)); padding: 6px;
+  font-family: var(--font-ui);
+}
+.action-menu-title { font-size: 11px; font-weight: 600; color: var(--text-muted); padding: 6px 10px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.action-menu-item {
+  display: flex; align-items: center; gap: 10px; width: 100%; min-height: 40px; padding: 8px 10px;
+  border: none; background: transparent; color: inherit; font: inherit; font-size: 14px; text-align: left;
+  border-radius: var(--radius-sm); cursor: pointer;
+}
+.action-menu-item:hover, .action-menu-item:focus-visible { background: var(--surface-2); }
+.action-menu-item.danger { color: var(--danger); }
+.action-menu-icon { width: 22px; text-align: center; flex-shrink: 0; font-size: 16px; }
+.action-menu-text { display: flex; flex-direction: column; min-width: 0; }
+.action-menu-hint { font-size: 11px; color: var(--text-muted); line-height: 1.4; }
+/* มือถือ: แผ่นเลื่อนขึ้นจากล่าง ปุ่มสูง 48px กดด้วยนิ้วโป้งได้ */
+.action-menu-sheet {
+  left: 0 !important; right: 0; bottom: 0; top: auto !important; max-width: none; width: 100%;
+  border-radius: var(--radius-lg, 16px) var(--radius-lg, 16px) 0 0; padding: 8px 8px calc(12px + env(safe-area-inset-bottom));
+  animation: actionSheetUp 0.18s ease-out;
+}
+.action-menu-sheet .action-menu-item { min-height: 48px; }
+.action-menu-backdrop:has(+ .action-menu-sheet) { background: rgba(0,0,0,0.35); }
+@keyframes actionSheetUp { from { transform: translateY(24px); opacity: 0; } to { transform: none; opacity: 1; } }
+.chapter-menu-btn { font-size: 12px; flex-shrink: 0; white-space: nowrap; }
+.mobile-dock .btn { white-space: nowrap; }

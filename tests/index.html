@@ -934,6 +934,28 @@
       const up = upgradeBackup({ format: 'NovelTranslateBackup', version: 3, books: [], chapters: [], glossaries: [] });
       return ok.at === 0 && eq(ok.paragraphs, [{ src: '1', th: '' }]) && bad === null && BACKUP_STORES.includes('chapterVersions') && eq(up.chapterVersions, []);
     });
+    test('openActionMenu: ซ่อนรายการ hidden, กดรายการ = ปิดแล้วทำงาน, กดปุ่มเดิมซ้ำ = ปิด, Esc คืนโฟกัส', () => {
+      const anchor = document.createElement('button');
+      document.body.appendChild(anchor);
+      let picked = '';
+      const items = [{ label: 'ก', onSelect: () => { picked += 'a'; } }, { label: 'ซ่อน', hidden: true }, { label: 'ข', hint: 'คำอธิบาย', onSelect: () => { picked += 'b'; } }];
+      openActionMenu(anchor, items, { title: 'หัว' });
+      const menu = document.getElementById('action-menu');
+      const labels = [...menu.querySelectorAll('.action-menu-label')].map(x => x.textContent);
+      const roleOk = menu.getAttribute('role') === 'menu' && anchor.getAttribute('aria-expanded') === 'true' && menu.querySelector('.action-menu-hint').textContent === 'คำอธิบาย';
+      menu.querySelectorAll('.action-menu-item')[1].click();
+      const closedAfterPick = !document.getElementById('action-menu') && anchor.getAttribute('aria-expanded') === 'false';
+      openActionMenu(anchor, items);
+      openActionMenu(anchor, items);
+      const toggledClosed = !document.getElementById('action-menu');
+      openActionMenu(anchor, items);
+      document.querySelector('#action-menu .action-menu-item').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      const escOk = !document.getElementById('action-menu') && !document.getElementById('action-menu-backdrop') && document.activeElement === anchor;
+      openActionMenu(anchor, [{ label: 'x', hidden: true }]);
+      const emptyNoMenu = !document.getElementById('action-menu');
+      anchor.remove();
+      return eq(labels, ['ก', 'ข']) && roleOk && picked === 'b' && closedAfterPick && toggledClosed && escOk && emptyNoMenu;
+    });
     test('setModelOverride/getModelOverride: ผูกกับ signal เท่านั้น', () => {
       const a = new AbortController(), b = new AbortController();
       setModelOverride(a.signal, { provider: 'openai', model: 'xiaomi/mimo-v2.6-flash' });

@@ -131,6 +131,105 @@ function appPrompt(message, defaultValue = '', { title = '', confirmLabel = 'บ
   });
 }
 
+// ==================== ACTION MENU (เมนู ⋯) ====================
+// openActionMenu(anchorButton, [{ icon, label, hint, danger, hidden, onSelect }], { title })
+// จอกว้าง: เมนูเล็กใต้ปุ่ม / มือถือ: แผ่นเลื่อนขึ้นจากล่าง (กดถึงง่ายด้วยนิ้วโป้ง)
+// ลูกศรขึ้นลงเลื่อนรายการ, Esc / แตะข้างนอก = ปิด แล้วคืนโฟกัสให้ปุ่มที่เปิด
+const ACTION_MENU_ID = 'action-menu';
+let actionMenuState = null;
+
+function closeActionMenu({ restoreFocus = true } = {}) {
+  const state = actionMenuState;
+  if (!state) return;
+  actionMenuState = null;
+  document.removeEventListener('pointerdown', state.onOutside, true);
+  window.removeEventListener('resize', state.onResize);
+  document.getElementById(ACTION_MENU_ID)?.remove();
+  document.getElementById(`${ACTION_MENU_ID}-backdrop`)?.remove();
+  state.anchor?.setAttribute('aria-expanded', 'false');
+  if (restoreFocus && state.anchor?.isConnected) state.anchor.focus();
+}
+
+function positionActionMenu(menu, anchor) {
+  const sheet = window.innerWidth < 768 || !anchor;
+  menu.classList.toggle('action-menu-sheet', sheet);
+  if (sheet) {
+    menu.style.left = menu.style.top = menu.style.right = '';
+    return;
+  }
+  const r = anchor.getBoundingClientRect();
+  const width = menu.offsetWidth;
+  const left = Math.max(8, Math.min(r.right - width, window.innerWidth - width - 8));
+  const below = r.bottom + 6;
+  const top = below + menu.offsetHeight > window.innerHeight - 8 ? Math.max(8, r.top - menu.offsetHeight - 6) : below;
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
+}
+
+function openActionMenu(anchor, items, { title = '' } = {}) {
+  const sameAnchor = actionMenuState?.anchor === anchor;
+  closeActionMenu({ restoreFocus: false });
+  if (sameAnchor) return; // กดปุ่มเดิมซ้ำ = ปิด
+  const visible = (items || []).filter(it => it && !it.hidden);
+  if (!visible.length) return;
+
+  const backdrop = document.createElement('div');
+  backdrop.id = `${ACTION_MENU_ID}-backdrop`;
+  backdrop.className = 'action-menu-backdrop';
+  const menu = document.createElement('div');
+  menu.id = ACTION_MENU_ID;
+  menu.className = 'action-menu';
+  menu.setAttribute('role', 'menu');
+  if (title) {
+    menu.setAttribute('aria-label', title);
+    const head = document.createElement('div');
+    head.className = 'action-menu-title';
+    head.textContent = title;
+    menu.appendChild(head);
+  }
+  visible.forEach(it => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = `action-menu-item${it.danger ? ' danger' : ''}`;
+    btn.setAttribute('role', 'menuitem');
+    btn.innerHTML = `<span class="action-menu-icon" aria-hidden="true"></span><span class="action-menu-text"><span class="action-menu-label"></span>${it.hint ? '<span class="action-menu-hint"></span>' : ''}</span>`;
+    btn.querySelector('.action-menu-icon').textContent = it.icon || '';
+    btn.querySelector('.action-menu-label').textContent = it.label;
+    if (it.hint) btn.querySelector('.action-menu-hint').textContent = it.hint;
+    btn.addEventListener('click', () => {
+      closeActionMenu({ restoreFocus: true });
+      try { it.onSelect?.(); } catch (err) { console.error(err); }
+    });
+    menu.appendChild(btn);
+  });
+  menu.addEventListener('keydown', (e) => {
+    const list = [...menu.querySelectorAll('.action-menu-item')];
+    const i = list.indexOf(document.activeElement);
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeActionMenu(); }
+    else if (e.key === 'ArrowDown') { e.preventDefault(); list[(i + 1) % list.length].focus(); }
+    else if (e.key === 'ArrowUp') { e.preventDefault(); list[(i - 1 + list.length) % list.length].focus(); }
+    else if (e.key === 'Home') { e.preventDefault(); list[0].focus(); }
+    else if (e.key === 'End') { e.preventDefault(); list[list.length - 1].focus(); }
+    else if (e.key === 'Tab') closeActionMenu({ restoreFocus: false });
+  });
+
+  document.body.appendChild(backdrop);
+  document.body.appendChild(menu);
+  positionActionMenu(menu, anchor);
+  anchor?.setAttribute('aria-haspopup', 'menu');
+  anchor?.setAttribute('aria-expanded', 'true');
+  const onOutside = (e) => {
+    const path = e.composedPath ? e.composedPath() : [];
+    if (path.includes(menu) || (anchor && path.includes(anchor))) return;
+    closeActionMenu({ restoreFocus: false });
+  };
+  const onResize = () => positionActionMenu(menu, anchor);
+  actionMenuState = { anchor, onOutside, onResize };
+  document.addEventListener('pointerdown', onOutside, true);
+  window.addEventListener('resize', onResize);
+  menu.querySelector('.action-menu-item')?.focus();
+}
+
 /** เลือก 1 จากหลายทาง choices: [{ label, value, variant: 'primary' | 'danger' | '' }] คืน value หรือ null ถ้ายกเลิก */
 function appChoose(message, choices, { title = '', cancelLabel = 'ยกเลิก' } = {}) {
   return openAppDialog({

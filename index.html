@@ -36,31 +36,24 @@
 
     <div class="header-actions">
       <div class="desktop-controls">
-        <button class="btn" onclick="adjustFontSize(-1)" title="ลดขนาดตัวอักษร">A-</button>
-        <button class="btn" onclick="adjustFontSize(1)" title="เพิ่มขนาดตัวอักษร">A+</button>
-        <button class="btn" id="desktop-theme-btn" onclick="cycleTheme()" title="เปลี่ยนธีม">ถนอมสายตา</button>
-        <button class="btn" data-reader-panel-toggle onclick="toggleReaderPanel()" title="ตั้งค่าการอ่าน: ฟอนต์ ระยะบรรทัด ความกว้าง โหมดเลื่อน">Aa</button>
+        <button class="btn" data-reader-panel-toggle onclick="toggleReaderPanel()" title="ตั้งค่าการอ่าน: ธีม ขนาดตัวอักษร ฟอนต์ ระยะบรรทัด ความกว้าง">Aa</button>
         <button class="btn" onclick="openReaderTools('search')" title="ค้นหาข้อความ และบุ๊กมาร์ก/โน้ต">🔎</button>
         <button class="btn" onclick="toggleTts()" title="ฟังเสียงอ่าน (เริ่มจากย่อหน้าที่เห็นบนจอ)">🎧</button>
+        <span class="header-sep" aria-hidden="true"></span>
       </div>
 
       <div id="prefetch-badge">ตอนถัดไปพร้อม</div>
-      <button class="btn" id="install-app-btn" style="display: none;" onclick="promptInstallApp()" title="ติดตั้งเป็นแอพบนเครื่อง ใช้อ่านแบบออฟไลน์ได้">📲 ติดตั้งแอพ</button>
-      <button class="btn" onclick="openBookshelfModal()">ชั้นหนังสือ</button>
+      <button class="btn hdr-secondary" id="install-app-btn" style="display: none;" onclick="promptInstallApp()" title="ติดตั้งเป็นแอพบนเครื่อง ใช้อ่านแบบออฟไลน์ได้">📲 ติดตั้งแอพ</button>
+      <button class="btn hdr-secondary" onclick="openBookshelfModal()">ชั้นหนังสือ</button>
+      <button class="btn hdr-secondary" onclick="openGlossaryModal()">คลังศัพท์</button>
+      <button class="btn hdr-secondary" onclick="openBibleModal()" title="ตัวละคร สรรพนาม แนวทางสำนวน กฎแทนคำ และตัวอย่างสำนวนของเรื่องนี้">คู่มือเรื่อง</button>
+      <button class="btn hdr-secondary" onclick="openSettingsModal()">ตั้งค่า</button>
       <button class="btn btn-primary" onclick="openImportModal()">+ วางลิงก์</button>
-      <button class="btn" onclick="openGlossaryModal()">คลังศัพท์</button>
-      <button class="btn" onclick="openBibleModal()" title="ตัวละคร สรรพนาม แนวทางสำนวน กฎแทนคำ และตัวอย่างสำนวนของเรื่องนี้">คู่มือเรื่อง</button>
-      <button class="btn" onclick="openSettingsModal()">ตั้งค่า</button>
+      <button class="btn hdr-more" onclick="openMoreMenu(this)" title="เมนู: คลังศัพท์ คู่มือเรื่อง ตั้งค่า">⋯</button>
     </div>
   </header>
 
   <!-- TOP-RIGHT FLOATING BUTTONS -->
-  <button id="retranslate-chap-btn" class="top-floating-btn" onclick="retranslateCurrentActiveChapter()" title="แปลบทปัจจุบันนี้ใหม่ตามคลังศัพท์ล่าสุด">
-    🔄
-  </button>
-  <button id="scan-terms-btn" class="top-floating-btn" onclick="scanTermsInCurrentChapter()" title="สแกนหาคำศัพท์เฉพาะในบทนี้ที่ยังไม่มีในคลัง">
-    🔍+
-  </button>
   <button id="fullscreen-btn" class="top-floating-btn" onclick="toggleFullscreenMode()" title="โหมดอ่านเต็มจอ">
     <span id="fullscreen-icon">⛶</span>
   </button>
@@ -124,7 +117,7 @@
           </div>
         </div>
       </div>
-      <button class="btn" onclick="exportTxt()" style="font-size: 11px; flex-shrink: 0;">.TXT</button>
+      <button class="btn chapter-menu-btn" id="chapter-menu-btn" onclick="openChapterMenu(this)" title="เมนูของตอนนี้: แปลใหม่ สแกนคำศัพท์ ประวัติคำแปล รายงานคุณภาพ ส่งออก .TXT">⋯ ตอนนี้</button>
     </div>
 
     <div id="reading-content"></div>
@@ -152,7 +145,7 @@
     <button class="btn" data-reader-panel-toggle onclick="toggleReaderPanel()" title="ตั้งค่าการอ่าน (ธีม ขนาด ฟอนต์)">Aa</button>
     <button class="btn" onclick="openReaderTools('search')" title="ค้นหา / บุ๊กมาร์ก">🔎</button>
     <button class="btn" onclick="toggleTts()" title="ฟังเสียงอ่าน">🎧</button>
-    <button class="btn" onclick="openGlossaryModal()">คลังศัพท์</button>
+    <button class="btn" onclick="openMoreMenu(this)" title="เมนู: คลังศัพท์ คู่มือเรื่อง ตั้งค่า">⋯ เมนู</button>
   </nav>
 
   <!-- ตั้งค่าการอ่าน (ไม่บังหน้าอ่าน ดูผลได้ทันที) -->

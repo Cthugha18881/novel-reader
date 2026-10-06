@@ -886,6 +886,8 @@ ${isBibleEnabled ? `\n${buildCharacterExtractionInstruction(extras.bible, rawTex
   return addedCount;
 }
 
+let scanTermsRunning = false;
+
 async function scanTermsInCurrentChapter() {
   const curChap = chapters[currentChapterIndex];
   if (!curChap || !Array.isArray(curChap.paragraphs) || curChap.paragraphs.length === 0) {
@@ -894,11 +896,8 @@ async function scanTermsInCurrentChapter() {
 
   if (!hasActiveApiKey()) return appAlert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
 
-  const btn = document.getElementById('scan-terms-btn');
-  const originalText = btn.innerHTML;
-
-  btn.disabled = true;
-  btn.innerHTML = `<span class="spinner-icon" style="margin:0; width:12px; height:12px;"></span>`;
+  if (scanTermsRunning) return showGlobalToast('กำลังสแกนตอนนี้อยู่...');
+  scanTermsRunning = true;
   showGlobalToast(`กำลังสแกนหาคำศัพท์เฉพาะใน "${curChap.title}"...`);
 
   const srcText = curChap.paragraphs.map(p => p.src || "").filter(Boolean).join("\n\n");
@@ -906,7 +905,7 @@ async function scanTermsInCurrentChapter() {
   try {
     const addedCount = await extractAndStoreAutoGlossary(srcText, getCurrentBookContext(), { onStatus: showGlobalToast, force: true });
     if (addedCount > 0) {
-      appAlert(`✓ สแกน "${curChap.title}" เสร็จสิ้น!\nพบชื่อเฉพาะใหม่ ${addedCount} คำ และบันทึกเข้าคลังคำศัพท์เรียบร้อยแล้ว\n(หากต้องการให้บทนี้เปลี่ยนคำตามศัพท์ใหม่ สามารถกดปุ่ม 🔄 ที่มุมขวาบนเพื่อแปลใหม่ได้ทันที)`);
+      appAlert(`✓ สแกน "${curChap.title}" เสร็จสิ้น!\nพบชื่อเฉพาะใหม่ ${addedCount} คำ และบันทึกเข้าคลังคำศัพท์เรียบร้อยแล้ว\n(หากต้องการให้บทนี้เปลี่ยนคำตามศัพท์ใหม่ เปิดเมนู ⋯ ของตอนแล้วเลือก "แปลตอนนี้ใหม่")`);
     } else {
       appAlert(`ตรวจสอบ "${curChap.title}" เรียบร้อยแล้ว ไม่พบชื่อเฉพาะใหม่ตกหล่น (ทุกคำมีอยู่ในคลังแล้ว)`);
     }
@@ -915,8 +914,7 @@ async function scanTermsInCurrentChapter() {
   } catch (err) {
     appAlert("สแกนไม่สำเร็จ: " + err.message);
   } finally {
-    btn.disabled = false;
-    btn.innerHTML = originalText;
+    scanTermsRunning = false;
     hideGlobalToast();
   }
 }
