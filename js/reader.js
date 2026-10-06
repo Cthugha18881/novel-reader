@@ -313,13 +313,13 @@ async function waitForTtsVoices(timeout = 1500) {
 
 /** เริ่มอ่านจากย่อหน้าที่ระบุ หรือจากย่อหน้าบนสุดที่เห็นบนจอ */
 async function startTts(chapIdx = null, paraIdx = null) {
-  if (!ttsSupported()) return alert('เบราว์เซอร์นี้ไม่รองรับการอ่านออกเสียง ลองใช้ Chrome, Edge หรือ Safari รุ่นใหม่');
+  if (!ttsSupported()) return appAlert('เบราว์เซอร์นี้ไม่รองรับการอ่านออกเสียง ลองใช้ Chrome, Edge หรือ Safari รุ่นใหม่');
   // ต้องปลดล็อกเสียงเพลงตอนนี้ (ยังอยู่ในจังหวะที่ผู้ใช้กดปุ่ม) ก่อน await ใดๆ
   bgmUnlock();
   const voices = await waitForTtsVoices();
   // ไม่มีเสียงไทย: บอกวิธีแก้ก่อน แทนที่จะอ่านข้ามไปเงียบๆ (เสียงภาษาอื่นอ่านได้แค่ตัวเลข/คำอังกฤษ)
   if (!getThaiVoices(voices).length) {
-    alert(TTS_NO_THAI_HELP);
+    appAlert(TTS_NO_THAI_HELP);
     return;
   }
   tts.silentCount = 0;
@@ -445,7 +445,7 @@ function speakChunks(chunks, k, token, onDone) {
     tts.silentCount = tooFast ? (tts.silentCount || 0) + 1 : 0;
     if (tts.silentCount >= 3) {
       stopTts();
-      alert(`เสียงที่ใช้อยู่ (${voice ? voice.name : 'เสียงเริ่มต้นของเครื่อง'}) อ่านภาษาไทยไม่ได้\n\n${TTS_NO_THAI_HELP}`);
+      appAlert(`เสียงที่ใช้อยู่ (${voice ? voice.name : 'เสียงเริ่มต้นของเครื่อง'}) อ่านภาษาไทยไม่ได้\n\n${TTS_NO_THAI_HELP}`);
       return;
     }
     speakChunks(chunks, k + 1, token, onDone);
@@ -649,7 +649,7 @@ function openBookmarkEditor(e, chapIdx, pIdx) {
   if (e) e.stopPropagation();
   const chap = chapters[chapIdx];
   const p = chap?.paragraphs?.[pIdx];
-  if (!p || currentBookId === 'default_novel') return alert('เปิดนิยายจากชั้นหนังสือก่อน จึงจะบุ๊กมาร์กได้');
+  if (!p || currentBookId === 'default_novel') return appAlert('เปิดนิยายจากชั้นหนังสือก่อน จึงจะบุ๊กมาร์กได้');
   const existing = findBookmark(chap.id, pIdx);
   bookmarkBeingEdited = { bookId: currentBookId, chapId: chap.id, paraIdx: pIdx, id: existing?.id || null };
   document.getElementById('bookmark-excerpt').textContent = (p.th || p.src || '').slice(0, 200);
@@ -708,7 +708,7 @@ async function saveBookmarkFromEditor() {
 
 async function deleteBookmarkFromEditor() {
   const edit = bookmarkBeingEdited;
-  if (!edit || !confirm('ลบบุ๊กมาร์กนี้?')) return;
+  if (!edit || !(await appConfirm('บุ๊กมาร์กและโน้ตนี้จะถูกลบ', { title: 'ลบบุ๊กมาร์ก', confirmLabel: 'ลบบุ๊กมาร์ก', danger: true }))) return;
   await updateBookmarks(edit.bookId, (list) => list.filter(b => b.id !== edit.id));
   closeModal('bookmark-modal');
   bookmarkBeingEdited = null;
@@ -717,7 +717,7 @@ async function deleteBookmarkFromEditor() {
 }
 
 async function deleteBookmarkById(bookId, id) {
-  if (!confirm('ลบบุ๊กมาร์กนี้?')) return;
+  if (!(await appConfirm('บุ๊กมาร์กและโน้ตนี้จะถูกลบ', { title: 'ลบบุ๊กมาร์ก', confirmLabel: 'ลบบุ๊กมาร์ก', danger: true }))) return;
   await updateBookmarks(bookId, (list) => list.filter(b => b.id !== id));
   refreshBookmarkMarkers();
   renderBookmarkList();
@@ -843,7 +843,7 @@ async function jumpToBookmark(bookId, id) {
   const bm = (await loadBookmarks(bookId)).find(b => b.id === id);
   if (!bm) return;
   const chap = (await dbGetChaptersByBook(bookId)).find(c => c.id === bm.chapId);
-  if (!chap) return alert('ตอนนี้ถูกลบไปแล้ว');
+  if (!chap) return appAlert('ตอนนี้ถูกลบไปแล้ว');
   await jumpToParagraph(bookId, bm.chapId, resolveBookmarkParagraph(chap, bm), true);
 }
 

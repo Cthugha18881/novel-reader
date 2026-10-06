@@ -85,7 +85,7 @@ function renderBenchmarkSetup(rows) {
 
 function addBenchmarkRow() {
   const box = document.getElementById('bench-rows');
-  if (box.querySelectorAll('.bench-row').length >= BENCHMARK_MAX_MODELS) return alert(`เทียบได้ครั้งละไม่เกิน ${BENCHMARK_MAX_MODELS} โมเดล`);
+  if (box.querySelectorAll('.bench-row').length >= BENCHMARK_MAX_MODELS) return appAlert(`เทียบได้ครั้งละไม่เกิน ${BENCHMARK_MAX_MODELS} โมเดล`);
   box.insertAdjacentHTML('beforeend', benchmarkRowHtml({}, box.children.length));
 }
 
@@ -106,12 +106,12 @@ function benchmarkCost(r) {
 
 async function runBenchmark() {
   const rows = readBenchmarkRows();
-  if (!rows.length) return alert('ใส่อย่างน้อย 1 โมเดล');
+  if (!rows.length) return appAlert('ใส่อย่างน้อย 1 โมเดล');
   const chap = chapters[currentChapterIndex];
   const rawText = (chap?.paragraphs || []).map(p => p.src || '').filter(Boolean).join('\n\n');
-  if (!rawText) return alert('ตอนนี้ไม่มีต้นฉบับ');
+  if (!rawText) return appAlert('ตอนนี้ไม่มีต้นฉบับ');
   const qualityMode = document.getElementById('bench-quality').value;
-  if (!confirm(`จะแปลตอน "${chap.title}" ด้วย ${rows.length} โมเดล (โหมด ${qualityMode})\nใช้โควตา/ค่าใช้จ่ายประมาณเท่าแปล ${rows.length} ตอน\n\nเริ่มเลยหรือไม่?`)) return;
+  if (!(await appConfirm(`แปลตอน "${chap.title}" ด้วย ${rows.length} โมเดล (โหมด ${qualityMode})\nใช้โควตา/ค่าใช้จ่ายประมาณเท่าแปล ${rows.length} ตอน`, { title: 'เทียบโมเดล', confirmLabel: `เริ่มเทียบ ${rows.length} โมเดล` }))) return;
 
   // จำโมเดลที่เลือกไว้ และราคาที่ใส่ (หน้าการใช้งาน AI ใช้ราคาเดียวกันคำนวณค่าใช้จ่าย)
   localStorage.setItem('nov_benchmark_models', JSON.stringify(rows.map(r => ({ provider: r.provider, model: r.model, reasoning: r.reasoning }))));
@@ -233,9 +233,17 @@ async function applyBenchmarkResult(i) {
   const r = benchmarkState?.results?.[i];
   const chap = chapters.find(c => c.id === benchmarkState?.chapId);
   if (!r?.ok || !chap) return;
-  if (!confirm(`ใช้คำแปลของ ${r.label} กับตอน "${chap.title}"?\nคำแปลปัจจุบันจะเก็บไว้ในประวัติเวอร์ชัน (🕘) กู้คืนได้`)) return;
+  if (!(await appConfirm(`คำแปลปัจจุบันจะเก็บไว้ในประวัติเวอร์ชัน (🕘) กู้คืนได้`, { title: `ใช้คำแปลของ ${r.label}`, confirmLabel: 'ใช้คำแปลนี้' }))) return;
   const editedCount = chap.paragraphs.filter(p => p.userEdited).length;
-  const keepEdits = editedCount > 0 && confirm(`มี ${editedCount} ย่อหน้าที่คุณแก้เอง\nOK = เก็บย่อหน้าที่แก้ไว้ / Cancel = ใช้ของโมเดลทั้งหมด`);
+  let keepEdits = false;
+  if (editedCount > 0) {
+    const choice = await appChoose(`มี ${editedCount} ย่อหน้าที่คุณแก้เอง`, [
+      { label: 'ใช้ของโมเดลทั้งหมด', value: 'all' },
+      { label: 'เก็บที่แก้ไว้', value: 'keep', variant: 'primary' }
+    ], { title: 'ย่อหน้าที่แก้เอง' });
+    if (!choice) return;
+    keepEdits = choice === 'keep';
+  }
   let paragraphs = benchmarkState.src.map((src, k) => ({ ...(r.paragraphs[k] || { th: '' }), src }));
   if (keepEdits) paragraphs = mergeUserEdits(chap.paragraphs, paragraphs);
   await applyTranslationToChapter(chap, {

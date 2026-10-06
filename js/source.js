@@ -716,7 +716,7 @@ async function renderTocSummary(entries, isSaved) {
 
 async function fetchTocForModal() {
   const url = document.getElementById('toc-url-input').value.trim();
-  if (!/^https?:\/\//i.test(url)) return alert('กรุณาวางลิงก์หน้าสารบัญที่ขึ้นต้นด้วย http:// หรือ https://');
+  if (!/^https?:\/\//i.test(url)) return appAlert('กรุณาวางลิงก์หน้าสารบัญที่ขึ้นต้นด้วย http:// หรือ https://');
   const controller = beginTask('toc');
   showGlobalToast('กำลังดึงสารบัญ...');
   try {
@@ -727,7 +727,7 @@ async function fetchTocForModal() {
     await renderTocSummary(entries, false);
     document.getElementById('toc-save-btn').disabled = false;
   } catch (err) {
-    if (!isAbortError(err)) alert(`ดึงสารบัญไม่สำเร็จ: ${err.message}`);
+    if (!isAbortError(err)) appAlert(`ดึงสารบัญไม่สำเร็จ: ${err.message}`);
   } finally {
     endTask('toc', controller);
     hideGlobalToast();
@@ -791,7 +791,7 @@ async function reorderChaptersByToc(bookId, { silent = false } = {}) {
   });
   await dbSaveChapters(changed);
   if (currentBookId === bookId) await loadBookFromDB(bookId, chapters[currentChapterIndex]?.id);
-  if (!silent) alert(changed.length ? `เรียงตอนตามสารบัญแล้ว (ย้ายตำแหน่ง ${changed.length} ตอน)` : 'ลำดับตอนตรงกับสารบัญอยู่แล้ว');
+  if (!silent) appAlert(changed.length ? `เรียงตอนตามสารบัญแล้ว (ย้ายตำแหน่ง ${changed.length} ตอน)` : 'ลำดับตอนตรงกับสารบัญอยู่แล้ว');
   return changed.length;
 }
 
@@ -803,8 +803,8 @@ async function queueMissingTocEntries() {
   const chaps = await dbGetChaptersByBook(bookId);
   const have = new Set(chaps.map(c => normalizeUrl(c.sourceUrl)).filter(Boolean));
   const missing = toc.entries.filter(en => !have.has(normalizeUrl(en.url)));
-  if (missing.length === 0) return alert('ทุกตอนในสารบัญมีในชั้นหนังสือแล้ว');
-  if (!confirm(`เพิ่ม ${missing.length} ตอนที่ยังไม่มี เป็น "ตอนที่รอแปล" ใช่หรือไม่?\n(ยังไม่ใช้โควตา AI จนกว่าจะกดแปล)`)) return;
+  if (missing.length === 0) return appAlert('ทุกตอนในสารบัญมีในชั้นหนังสือแล้ว');
+  if (!(await appConfirm(`ตอนที่ยังไม่มีในเครื่อง ${missing.length} ตอนจะถูกเพิ่มเป็น "ตอนที่รอแปล" ยังไม่ใช้โควตา AI จนกว่าจะกดแปล`, { title: 'เพิ่มตอนจากสารบัญ', confirmLabel: `เพิ่ม ${missing.length} ตอน` }))) return;
   let order = chaps.reduce((m, c) => Math.max(m, c.order || 0), 0);
   const now = Date.now();
   const records = missing.map((en, k) => ({
@@ -823,11 +823,11 @@ async function queueMissingTocEntries() {
   await reorderChaptersByToc(bookId, { silent: true });
   await renderTocSummary(toc.entries, true);
   refreshShelfViewOnly(bookId);
-  alert(`เพิ่มตอนที่รอแปล ${records.length} ตอนแล้ว กด "⚡ เริ่มแปลล่วงหน้า" ที่ชั้นหนังสือเพื่อแปลตามลำดับ`);
+  appAlert(`เพิ่มตอนที่รอแปล ${records.length} ตอนแล้ว กด "⚡ เริ่มแปลล่วงหน้า" ที่ชั้นหนังสือเพื่อแปลตามลำดับ`);
 }
 
 async function removeBookToc() {
-  if (!confirm('ลบสารบัญที่บันทึกไว้ของเรื่องนี้ใช่หรือไม่? (ตอนที่แปลแล้วไม่ถูกลบ)')) return;
+  if (!(await appConfirm('สารบัญที่บันทึกไว้ของเรื่องนี้จะถูกลบ (ตอนที่แปลแล้วไม่ถูกลบ)', { title: 'ลบสารบัญ', confirmLabel: 'ลบสารบัญ', danger: true }))) return;
   await saveBookToc(tocEditingBookId, null);
   await renderTocSummary(null, false);
 }
@@ -893,8 +893,8 @@ function addSiteProfile() {
   renderSiteProfiles();
 }
 
-function resetSiteProfiles() {
-  if (!confirm('คืนค่าโปรไฟล์เว็บเป็นค่าเริ่มต้นใช่หรือไม่? (โปรไฟล์ที่เพิ่มเองจะหายไป)')) return;
+async function resetSiteProfiles() {
+  if (!(await appConfirm('โปรไฟล์เว็บจะกลับเป็นค่าเริ่มต้น โปรไฟล์ที่เพิ่มเองจะหายไป', { title: 'คืนค่าโปรไฟล์เว็บ', confirmLabel: 'คืนค่าเริ่มต้น', danger: true }))) return;
   siteProfilesDraft = BUILTIN_SITE_PROFILES.map(p => ({ ...p, builtin: true }));
   renderSiteProfiles();
 }
@@ -933,13 +933,13 @@ async function handleSiteProfilesFile(input) {
     const data = JSON.parse(await file.text());
     list = Array.isArray(data) ? data : data?.profiles;
   } catch (e) {
-    return alert('ไฟล์นี้ไม่ใช่ไฟล์ JSON ที่ถูกต้อง');
+    return appAlert('ไฟล์นี้ไม่ใช่ไฟล์ JSON ที่ถูกต้อง');
   }
   const clean = (Array.isArray(list) ? list : []).map(sanitizeSiteProfile).filter(Boolean);
-  if (!clean.length) return alert('ไม่พบโปรไฟล์เว็บที่ใช้ได้ในไฟล์นี้');
+  if (!clean.length) return appAlert('ไม่พบโปรไฟล์เว็บที่ใช้ได้ในไฟล์นี้');
   const existing = new Set(siteProfilesDraft.map(p => p.host));
   const replaced = clean.filter(p => existing.has(p.host)).map(p => p.host);
-  if (!confirm(`พบโปรไฟล์ ${clean.length} เว็บ${replaced.length ? `\nจะแทนที่โปรไฟล์เดิมของ: ${replaced.join(', ')}` : ''}\n\nนำเข้าหรือไม่? (กด "บันทึก" ด้านล่างเพื่อใช้งาน)`)) return;
+  if (!(await appConfirm(`พบโปรไฟล์ ${clean.length} เว็บ${replaced.length ? `\nจะแทนที่โปรไฟล์เดิมของ: ${replaced.join(', ')}` : ''}\nกด "บันทึก" ด้านล่างหลังนำเข้าเพื่อใช้งาน`, { title: 'นำเข้าโปรไฟล์เว็บ', confirmLabel: `นำเข้า ${clean.length} โปรไฟล์` }))) return;
   clean.forEach(p => {
     const i = siteProfilesDraft.findIndex(x => x.host === p.host);
     if (i === -1) siteProfilesDraft.unshift(p);
@@ -964,7 +964,7 @@ function addProxy() {
   renderProxies();
 }
 
-function saveSiteProfilesModal() {
+async function saveSiteProfilesModal() {
   const profiles = siteProfilesDraft.filter(p => p.host);
   saveSiteProfiles(profiles);
   rememberRemovedBuiltins(profiles);
@@ -978,7 +978,7 @@ function saveSiteProfilesModal() {
   htmlNavMisses.clear();
   closeModal('site-profiles-modal');
   const blocked = proxies.filter(p => typeof isConnectAllowedByCsp === 'function' && !isConnectAllowedByCsp(buildProxyUrl(p.url, 'https://example.com/')));
-  if (blocked.length && confirm(`proxy ใหม่ (${blocked.map(p => p.name || p.url).join(', ')}) จะใช้ได้หลังรีโหลดหน้า (ระบบความปลอดภัยอนุญาตปลายทางตอนเปิดหน้าเท่านั้น)\n\nรีโหลดตอนนี้เลยหรือไม่?`)) {
+  if (blocked.length && await appConfirm(`proxy ใหม่ (${blocked.map(p => p.name || p.url).join(', ')}) จะใช้ได้หลังรีโหลดหน้า เพราะระบบความปลอดภัยอนุญาตปลายทางตอนเปิดหน้าเท่านั้น`, { title: 'รีโหลดหน้า', confirmLabel: 'รีโหลดตอนนี้', cancelLabel: 'ไว้ทีหลัง' })) {
     location.reload();
   }
 }
@@ -986,7 +986,7 @@ function saveSiteProfilesModal() {
 async function testSiteProfile() {
   const url = document.getElementById('site-test-url').value.trim();
   const box = document.getElementById('site-test-result');
-  if (!/^https?:\/\//i.test(url)) return alert('กรุณาวางลิงก์หน้าตอนที่ต้องการทดสอบ');
+  if (!/^https?:\/\//i.test(url)) return appAlert('กรุณาวางลิงก์หน้าตอนที่ต้องการทดสอบ');
   const saved = localStorage.getItem('nov_site_profiles');
   const savedRemoved = localStorage.getItem('nov_site_profiles_removed');
   const draft = siteProfilesDraft.filter(p => p.host);

@@ -91,7 +91,7 @@ let versionView = { chapId: null, versions: [], index: 0, onlyChanged: true };
 
 async function openVersionHistory(chapId) {
   const chap = await findChapterAnywhere(chapId);
-  if (!chap) return alert('ไม่พบตอนนี้');
+  if (!chap) return appAlert('ไม่พบตอนนี้');
   versionView = { chapId, versions: await dbGetChapterVersions(chapId), index: 0, onlyChanged: true };
   openModal('version-modal');
   await renderVersionHistory();
@@ -164,7 +164,7 @@ async function restoreChapterVersion() {
   const chap = await findChapterAnywhere(versionView.chapId);
   const v = versionView.versions[versionView.index];
   if (!chap || !v) return;
-  if (!confirm(`กู้คืนคำแปลทั้งตอนเป็นฉบับ ${versionLabel(v)}?\n\nคำแปลปัจจุบันจะถูกเก็บไว้ในประวัติ กู้กลับได้`)) return;
+  if (!(await appConfirm(`คำแปลทั้งตอนจะกลับเป็นฉบับ ${versionLabel(v)}\nคำแปลปัจจุบันจะเก็บไว้ในประวัติ กู้กลับได้`, { title: 'กู้คืนทั้งตอน', confirmLabel: 'กู้คืน' }))) return;
   if (await saveChapterVersion(chap, 'restore')) chap.hasVersions = true;
   chap.paragraphs = v.paragraphs.map(p => ({ ...p }));
   chap.summary = v.summary || '';
@@ -195,7 +195,7 @@ async function restoreVersionParagraph(curIdx, oldIdx) {
 
 async function deleteCurrentVersion() {
   const v = versionView.versions[versionView.index];
-  if (!v || !confirm(`ลบฉบับ ${versionLabel(v)} ออกจากประวัติ?`)) return;
+  if (!v || !(await appConfirm(`ฉบับ ${versionLabel(v)} จะถูกลบออกจากประวัติ`, { title: 'ลบฉบับเก่า', confirmLabel: 'ลบฉบับนี้', danger: true }))) return;
   await dbDeleteChapterVersion(v.id);
   versionView.versions = await dbGetChapterVersions(versionView.chapId);
   versionView.index = 0;
@@ -338,7 +338,7 @@ async function confirmGlossaryTerms(srcList) {
 
 async function confirmAllNewTerms(bookId) {
   const list = inMemoryGlossaryCache.filter(t => t.auto && !t.confirmed && Array.isArray(t.books) && t.books.includes(bookId)).map(t => t.src);
-  if (!list.length || !confirm(`ยืนยันคำศัพท์ใหม่ทั้ง ${list.length} คำว่าคำแปลถูกต้องแล้ว?`)) return;
+  if (!list.length || !(await appConfirm(`คำศัพท์ใหม่ ${list.length} คำจะถูกบันทึกว่าตรวจแล้ว คำแปลไม่เปลี่ยน`, { title: 'ยืนยันคำศัพท์', confirmLabel: `ยืนยัน ${list.length} คำ` }))) return;
   await confirmGlossaryTerms(list);
   await renderQualityReport();
 }

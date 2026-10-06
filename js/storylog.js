@@ -509,7 +509,7 @@ async function saveStoryLogEditor(chapId, btn) {
 async function regenerateStoryLog(chapId) {
   const chap = await findChapterAnywhere(chapId);
   if (!chap) return;
-  if (chap.storyLog?.edited && !confirm('บันทึกของตอนนี้ถูกแก้เองไว้ ทำใหม่จะทับที่แก้ ต้องการทำใหม่หรือไม่?')) return;
+  if (chap.storyLog?.edited && !(await appConfirm('บันทึกของตอนนี้ถูกแก้เองไว้ ทำใหม่จะทับที่แก้ (ใช้โควตา AI)', { title: 'ทำบันทึกใหม่', confirmLabel: 'ทำใหม่ ทับที่แก้', danger: true }))) return;
   const book = (await dbGetAllBooks()).find(b => b.bookId === chap.bookId);
   const all = (await dbGetChaptersByBook(chap.bookId)).sort((a, b) => (a.order || 0) - (b.order || 0));
   const prev = all.filter(c => (c.order || 0) < (chap.order || 0) && c.storyLog).pop();
@@ -524,7 +524,7 @@ async function regenerateStoryLog(chapId) {
       if (mem) mem.storyLog = log;
     }
   } catch (err) {
-    if (!isAbortError(err)) alert(`ทำบันทึกไม่สำเร็จ: ${err.message}`);
+    if (!isAbortError(err)) appAlert(`ทำบันทึกไม่สำเร็จ: ${err.message}`);
   } finally {
     endTask('storylog', controller);
     hideGlobalToast();
@@ -540,7 +540,7 @@ async function runStoryLogBackfill() {
   if (!missing.length) return;
   const book = (await dbGetAllBooks()).find(b => b.bookId === bookId);
   const est = estimateStoryLogTokens(missing, getBookSourceLang(book));
-  if (!confirm(`สร้างบันทึกเหตุการณ์ ${missing.length} ตอน ด้วยโมเดลงานรอง\nใช้ประมาณ ${formatTokenCount(est.input)} input + ${formatTokenCount(est.output)} output token (ค่าประมาณ ยอดจริงอาจสูงกว่า)\n\nเริ่มเลยหรือไม่? (หยุดกลางคันได้ ส่วนที่ทำแล้วเก็บไว้)`)) return;
+  if (!(await appConfirm(`ใช้โมเดลงานรองประมาณ ${formatTokenCount(est.input)} input + ${formatTokenCount(est.output)} output token (ค่าประมาณ ยอดจริงอาจสูงกว่า)\nหยุดกลางคันได้ ส่วนที่ทำแล้วเก็บไว้`, { title: `สร้างบันทึกเหตุการณ์ ${missing.length} ตอน`, confirmLabel: `สร้าง ${missing.length} ตอน` }))) return;
   const controller = beginTask('storylog');
   const progress = document.getElementById('story-log-progress');
   document.getElementById('story-log-stop-btn').style.display = 'inline-flex';

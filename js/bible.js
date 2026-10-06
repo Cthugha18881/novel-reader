@@ -214,7 +214,7 @@ let bibleDraft = null;
 let bibleActiveTab = 'characters';
 
 async function openBibleModal() {
-  if (currentBookId === 'default_novel') return alert('กรุณาเปิดนิยายสักเรื่องก่อน');
+  if (currentBookId === 'default_novel') return appAlert('กรุณาเปิดนิยายสักเรื่องก่อน');
   bibleEditingBookId = currentBookId;
   bibleDraft = await getBookExtras(currentBookId);
   document.getElementById('bible-book-title').innerText = currentBookTitle;
@@ -319,17 +319,17 @@ function resolveBiblePending(idx, accept) {
   renderBibleCharacters();
 }
 
-function removeBibleCharacter(idx) {
+async function removeBibleCharacter(idx) {
   const ch = bibleDraft.bible.characters[idx];
-  if (!ch || !confirm(`ลบ "${ch.src}" ออกจากคู่มือเรื่องใช่หรือไม่? (คำในคลังศัพท์จะไม่ถูกลบ)`)) return;
+  if (!ch || !(await appConfirm(`ข้อมูลตัวละคร "${ch.src}" จะถูกลบออกจากคู่มือเรื่อง (คำในคลังศัพท์ไม่ถูกลบ)`, { title: 'ลบตัวละคร', confirmLabel: 'ลบตัวละคร', danger: true }))) return;
   bibleDraft.bible.characters.splice(idx, 1);
   renderBibleCharacters();
 }
 
-function addBibleCharacter() {
-  const src = cleanTermString(prompt('ชื่อตัวละครภาษาต้นฉบับ (เช่น 林动):', ''));
+async function addBibleCharacter() {
+  const src = cleanTermString(await appPrompt('ชื่อตามภาษาต้นฉบับ', '', { title: 'เพิ่มตัวละคร', confirmLabel: 'เพิ่ม', placeholder: 'เช่น 林动' }));
   if (!src) return;
-  if (findCharacter(bibleDraft.bible, src)) return alert('มีตัวละครนี้ในคู่มือแล้ว');
+  if (findCharacter(bibleDraft.bible, src)) return appAlert('มีตัวละครนี้ในคู่มือแล้ว');
   bibleDraft.bible.characters.unshift({
     id: newCharacterId(), src, aliases: [], gender: 'unknown', role: '', selfRef: '', addressing: [],
     notes: '', locked: true, source: 'user', pending: null, updatedAt: Date.now()
@@ -384,8 +384,8 @@ async function applyReplaceRulesToBook() {
   bibleDraft.replaceRules = bibleDraft.replaceRules.filter(r => r.from);
   await saveBibleDraft();
   const rules = normalizeReplaceRules(bibleDraft.replaceRules);
-  if (rules.length === 0) return alert('ยังไม่มีกฎที่เปิดใช้งาน');
-  if (!confirm(`ใช้กฎแทนคำ ${rules.length} ข้อกับทุกตอนที่แปลแล้วของเรื่องนี้ใช่หรือไม่?`)) return;
+  if (rules.length === 0) return appAlert('ยังไม่มีกฎที่เปิดใช้งาน');
+  if (!(await appConfirm(`กฎแทนคำ ${rules.length} ข้อจะถูกใช้กับทุกตอนที่แปลแล้วของเรื่องนี้`, { title: 'ใช้กฎแทนคำ', confirmLabel: `ใช้ ${rules.length} กฎ` }))) return;
   const opts = await getCleanupOptionsForBook(bibleEditingBookId);
   let changedChapters = 0;
   for (const chap of await dbGetChaptersByBook(bibleEditingBookId)) {
@@ -405,7 +405,7 @@ async function applyReplaceRulesToBook() {
     }
   }
   if (currentBookId === bibleEditingBookId) renderVirtualWindow(currentChapterIndex);
-  alert(`ใช้กฎแทนคำเรียบร้อย มีการแก้ไข ${changedChapters} ตอน`);
+  appAlert(`ใช้กฎแทนคำเรียบร้อย มีการแก้ไข ${changedChapters} ตอน`);
 }
 
 // ---------- Character extraction (AI) ----------
@@ -439,7 +439,7 @@ ${text}`;
 
 /** สร้าง/เติมคู่มือจากตอนเนื้อเรื่องที่แปลแล้ว (เหมาะกับเรื่องที่แปลไว้ก่อนมีระบบคู่มือ) */
 async function generateBibleFromChapters() {
-  if (!hasActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+  if (!hasActiveApiKey()) return appAlert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
   const books = await dbGetAllBooks();
   const ctx = makeBookContext(books.find(b => b.bookId === bibleEditingBookId) || getCurrentBookContext());
   const storyChaps = (await dbGetChaptersByBook(bibleEditingBookId)).filter(isStoryChapter).sort((a, b) => b.order - a.order);
@@ -449,16 +449,16 @@ async function generateBibleFromChapters() {
     if (text.length + chText.length > 12000) break;
     text = chText + '\n\n' + text;
   }
-  if (!text.trim()) return alert('ยังไม่มีตอนเนื้อเรื่องที่แปลไว้');
+  if (!text.trim()) return appAlert('ยังไม่มีตอนเนื้อเรื่องที่แปลไว้');
   showGlobalToast('AI กำลังวิเคราะห์ตัวละครจากตอนที่แปลแล้ว...');
   try {
     const updates = await extractCharacterProfiles(text, ctx, bibleDraft.bible);
     const result = mergeCharacterUpdates(bibleDraft.bible, updates);
     await saveBibleDraft();
     await renderBibleCharacters();
-    alert(`วิเคราะห์เสร็จแล้ว: เพิ่มตัวละครใหม่ ${result.added} ตัว, เสนอแก้ไข ${result.proposed} ตัว`);
+    appAlert(`วิเคราะห์เสร็จแล้ว: เพิ่มตัวละครใหม่ ${result.added} ตัว, เสนอแก้ไข ${result.proposed} ตัว`);
   } catch (err) {
-    if (!isAbortError(err)) alert(`สร้างคู่มือไม่สำเร็จ: ${err.message}`);
+    if (!isAbortError(err)) appAlert(`สร้างคู่มือไม่สำเร็จ: ${err.message}`);
   } finally {
     hideGlobalToast();
   }

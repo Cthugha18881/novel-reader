@@ -377,7 +377,7 @@ async function buildSummarySection(data, { allowGenerate = false, signal = null,
   }
   if (missing.length && allowGenerate) {
     const ok = missing.length <= ASSISTANT_LIMITS.arcConfirmAbove || !askConfirm ||
-      askConfirm(`ต้องสร้าง "สรุปช่วงเรื่อง" ${missing.length} ช่วง (ช่วงละ ${size} ตอน) ก่อนครั้งแรก ใช้ token ประมาณ ${formatTokenCount(missing.length * 3500)}\nครั้งต่อไปจะใช้ที่เก็บไว้ ไม่เสียซ้ำ\n\nสร้างเลยหรือไม่? (ถ้าไม่ จะใช้สรุปของตอนช่วงหลังแทน)`);
+      await askConfirm(`ต้องสร้าง "สรุปช่วงเรื่อง" ${missing.length} ช่วง (ช่วงละ ${size} ตอน) ก่อนครั้งแรก ใช้ token ประมาณ ${formatTokenCount(missing.length * 3500)}\nครั้งต่อไปจะใช้ที่เก็บไว้ ไม่เสียซ้ำ\n\nสร้างเลยหรือไม่? (ถ้าไม่ จะใช้สรุปของตอนช่วงหลังแทน)`);
     if (ok) {
       for (const b of missing) {
         const arc = arcs[b];
@@ -531,7 +531,7 @@ async function buildAssistantRequest(question, { bookId, scope = 'current', incl
       if (requested.chapters.length) {
         // ถามเจาะตอน (เช่น "สรุป 5 ตอนก่อนหน้า") ไม่ต้องส่ง/สร้างสรุปทั้งเรื่อง
       } else if (intents.summary || (!entities.length && !keywords.length)) {
-        const summary = await buildSummarySection(data, { allowGenerate: intents.summary, signal, onStatus, askConfirm: (m) => confirm(m) });
+        const summary = await buildSummarySection(data, { allowGenerate: intents.summary, signal, onStatus, askConfirm: (m) => appConfirm(m, { title: 'สร้างสรุปช่วงเรื่อง', confirmLabel: 'สร้างสรุป', cancelLabel: 'ใช้สรุปช่วงหลังแทน' }) });
         meta.summaryMode = summary.mode;
         sections.push(`สรุปเรื่องที่อ่านมา${summary.mode === 'arcs' ? ' (สรุปเป็นช่วงเรื่อง + รายตอนช่วงท้าย)' : ''}:\n${summary.text}`);
       } else {
@@ -611,7 +611,7 @@ async function addAssistantCorrection(bookId, question, correction, chapterNumbe
 
 async function deleteAssistantCorrection(index) {
   const bookId = typeof bibleEditingBookId !== 'undefined' ? bibleEditingBookId : null;
-  if (!bookId || !confirm('ลบข้อมูลที่แก้นี้?')) return;
+  if (!bookId || !(await appConfirm('ผู้ช่วยจะไม่ใช้ข้อมูลที่แก้นี้อีก', { title: 'ลบข้อมูลที่แก้', confirmLabel: 'ลบ', danger: true }))) return;
   const extras = await getBookExtras(bookId);
   (extras.assistantCorrections || []).splice(index, 1);
   await dbSaveBookData(extras);
@@ -759,7 +759,7 @@ async function rateAssistantMessage(i, rating) {
 async function saveAssistantFix(i) {
   const text = document.getElementById(`assistant-fix-${i}`)?.value || '';
   if (!text.trim()) return;
-  if (!assistantBookId) return alert('ยังไม่ได้เปิดนิยาย จึงบันทึกข้อมูลที่แก้ไม่ได้');
+  if (!assistantBookId) return appAlert('ยังไม่ได้เปิดนิยาย จึงบันทึกข้อมูลที่แก้ไม่ได้');
   const question = [...assistantMessages.slice(0, i)].reverse().find(x => x.role === 'user')?.text || '';
   const data = await loadAssistantBook(assistantBookId);
   await addAssistantCorrection(assistantBookId, question, text, data?.readingNumber || null);
@@ -844,7 +844,7 @@ function stopAssistant() {
 }
 
 async function clearAssistantChat() {
-  if (!confirm('ล้างบทสนทนาของเรื่องนี้?')) return;
+  if (!(await appConfirm('บทสนทนากับผู้ช่วยของเรื่องนี้จะถูกลบ (ข้อมูลที่แก้ให้ผู้ช่วยจำยังอยู่)', { title: 'ล้างบทสนทนา', confirmLabel: 'ล้างบทสนทนา', danger: true }))) return;
   assistantMessages = [];
   await saveChatHistory(assistantActiveBookId(), []);
   renderAssistantMessages();

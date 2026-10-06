@@ -236,7 +236,7 @@ let budgetWarnedDay = '';
 
 /**
  * เรียกก่อนเรียก AI ทุกครั้ง: เกินเพดานแล้ว งานเบื้องหลังหยุดทันที ส่วนงานที่ผู้ใช้กดเองต้องยืนยันก่อน
- * hook จาก app.js: askBudgetOverride(message) -> boolean, notifyBudgetWarning(message)
+ * hook จาก app.js: askBudgetOverride(message) -> Promise<boolean> (กล่องยืนยันของแอพ), notifyBudgetWarning(message)
  */
 async function checkBudgetBeforeCall(signal) {
   const budget = getBudgetSettings();
@@ -262,8 +262,9 @@ async function checkBudgetBeforeCall(signal) {
     throw new LLMError(`${message} หยุดงานเบื้องหลังไว้ก่อน เพิ่มเพดานได้ที่ ตั้งค่า → 📊 การใช้งาน AI`, 'budget');
   }
   if ((signal && budgetApprovedSignals.has(signal)) || Date.now() < budgetApprovedUntil) return;
+  // askBudgetOverride (app.js) ถามด้วยกล่องของแอพ คืน Promise / หน้าทดสอบไม่มี ใช้ confirm ของเบราว์เซอร์
   const ask = typeof askBudgetOverride === 'function' ? askBudgetOverride : (m) => confirm(m);
-  if (!ask(`${message}\n\nต้องการใช้ต่อสำหรับงานนี้หรือไม่?`)) {
+  if (!(await ask(`${message}\n\nต้องการใช้ต่อสำหรับงานนี้หรือไม่?`))) {
     throw new LLMError(`${message} ยกเลิกตามที่เลือก`, 'budget');
   }
   if (signal) budgetApprovedSignals.add(signal);

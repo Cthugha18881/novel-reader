@@ -92,15 +92,15 @@ async function estimateBatchTokens(bookId, bookChaps, lang) {
 }
 
 async function startBatchTranslateForBook(bookId) {
-  if (isBatchRunning) return alert("กำลังมีกระบวนการแปลล่วงหน้าทำงานอยู่ กรุณารอหรือกดยกเลิกก่อน");
+  if (isBatchRunning) return appAlert("กำลังมีกระบวนการแปลล่วงหน้าทำงานอยู่ กรุณารอหรือกดยกเลิกก่อน");
 
   const input = document.getElementById(`batch-input-${bookId}`);
   const count = parseInt(input.value || "5", 10);
-  if (isNaN(count) || count < 1 || count > 50) return alert("กรุณาระบุจำนวนบทระหว่าง 1 ถึง 50");
+  if (isNaN(count) || count < 1 || count > 50) return appAlert("กรุณาระบุจำนวนบทระหว่าง 1 ถึง 50");
 
   let bookChaps = await dbGetChaptersByBook(bookId);
   bookChaps.sort((a, b) => a.order - b.order);
-  if (bookChaps.length === 0) return alert("ไม่พบบทตั้งต้นของนิยายเรื่องนี้");
+  if (bookChaps.length === 0) return appAlert("ไม่พบบทตั้งต้นของนิยายเรื่องนี้");
 
   let lastChap = bookChaps[bookChaps.length - 1];
   let targetUrl = lastChap.nextUrl;
@@ -108,7 +108,7 @@ async function startBatchTranslateForBook(bookId) {
   const pendingQueue = bookChaps.filter(isPendingChapter);
 
   if (!targetUrl && pendingQueue.length === 0) {
-    const inputUrl = prompt(`ไม่พบ URL ตอนถัดไปสำหรับ "${lastChap.title}"\nกรุณาวาง URL ของตอนถัดไป:`, "");
+    const inputUrl = await appPrompt(`ไม่พบลิงก์ตอนถัดไปของ "${lastChap.title}" วางลิงก์ของตอนถัดไปเพื่อแปลต่อ`, '', { title: 'วาง URL ตอนถัดไป', confirmLabel: 'ใช้ลิงก์นี้', placeholder: 'https://...' });
     if (!inputUrl || !inputUrl.trim()) return;
     targetUrl = inputUrl.trim();
     lastChap.nextUrl = targetUrl;
@@ -119,11 +119,11 @@ async function startBatchTranslateForBook(bookId) {
   const knownBooks = await dbGetAllBooks();
   const ctx = makeBookContext(knownBooks.find(b => b.bookId === bookId) || { bookId });
 
-  if (count >= 3 && !confirm(formatBatchEstimate(await estimateBatchTokens(bookId, bookChaps, ctx.sourceLang), count))) return;
+  if (count >= 3 && !(await appConfirm(formatBatchEstimate(await estimateBatchTokens(bookId, bookChaps, ctx.sourceLang), count), { title: `แปลล่วงหน้า ${count} ตอน`, confirmLabel: `เริ่มแปล ${count} ตอน` }))) return;
 
   // แปลล่วงหน้าเรื่องเดียวกันได้ทีละแท็บ
   const releaseBatch = await acquireLock(lockNames.batch(bookId), { ifAvailable: true });
-  if (!releaseBatch) return alert('อีกแท็บกำลังแปลล่วงหน้าเรื่องนี้อยู่ กรุณารอให้เสร็จ หรือกดหยุดในแท็บนั้นก่อน');
+  if (!releaseBatch) return appAlert('อีกแท็บกำลังแปลล่วงหน้าเรื่องนี้อยู่ กรุณารอให้เสร็จ หรือกดหยุดในแท็บนั้นก่อน');
 
   const controller = beginTask('batch');
   const signal = controller.signal;
@@ -570,7 +570,7 @@ async function fixBookNextUrl(bookId) {
   if (bookChaps.length === 0) return;
   const lastChap = bookChaps[bookChaps.length - 1];
 
-  const input = prompt(`แก้ไข URL ตอนถัดไปสำหรับ "${lastChap.title}":`, lastChap.nextUrl || "");
+  const input = await appPrompt(`ลิงก์ของตอนถัดจาก "${lastChap.title}"`, lastChap.nextUrl || '', { title: 'แก้ URL ตอนถัดไป', placeholder: 'https://...' });
   if (input && input.trim()) {
     lastChap.nextUrl = input.trim();
     await dbSaveChapter(lastChap);
@@ -578,7 +578,7 @@ async function fixBookNextUrl(bookId) {
       nextUrlCalculated = lastChap.nextUrl;
       lastPrefetchError = '';
     }
-    alert("อัปเดต URL เรียบร้อยแล้ว ตอนนี้สามารถกด 'เริ่มแปลล่วงหน้า' ได้ทันที");
+    appAlert("อัปเดต URL เรียบร้อยแล้ว ตอนนี้สามารถกด 'เริ่มแปลล่วงหน้า' ได้ทันที");
     checkAndRefreshBottomStatus();
   }
 }

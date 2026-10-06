@@ -791,3 +791,10 @@ body.no-book .chapter-toolbar { display: none; }
 /* checkbox / radio ใหญ่ขึ้นให้กดง่าย (WCAG 2.5.8) และใช้สีเน้นของธีม */
 input[type="checkbox"], input[type="radio"] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; flex-shrink: 0; }
 details > summary { min-height: 28px; padding: 4px 0; cursor: pointer; }
+/* ---------- กล่องแจ้ง/ยืนยันของแอพ (แทน alert/confirm) ---------- */
+.app-dialog-overlay { z-index: 95; }
+.app-dialog-box { max-width: 440px; }
+.app-dialog-message { font-size: 14px; line-height: 1.7; white-space: pre-line; word-break: break-word; max-height: 50vh; overflow-y: auto; }
+.app-dialog-input-wrap:not(:empty) { margin-top: 10px; }
+.app-dialog-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; margin-top: 16px; }
+.app-dialog-actions .btn { min-height: 36px; padding: 6px 14px; font-size: 13px; }

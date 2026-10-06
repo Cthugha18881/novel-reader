@@ -137,7 +137,7 @@ let newChapterChecking = false;
 
 /** เช็กเรื่องเดียว แล้วถามว่าจะเพิ่มตอนใหม่เข้าคิวรอแปลเลยไหม */
 async function checkNewChaptersForBook(bookId) {
-  if (newChapterChecking) return alert('กำลังเช็กตอนใหม่อยู่ กรุณารอสักครู่');
+  if (newChapterChecking) return appAlert('กำลังเช็กตอนใหม่อยู่ กรุณารอสักครู่');
   newChapterChecking = true;
   const controller = beginTask('checknew');
   showGlobalToast('กำลังเช็กตอนใหม่...');
@@ -147,18 +147,18 @@ async function checkNewChaptersForBook(bookId) {
     setNewChapterState(bookId, { count: result.count, atLeast: !!result.atLeast, mode: result.mode, checkedAt: Date.now(), note: result.mode === 'none' ? result.reason : '' });
     renderNewChapterBadge(bookId);
     if (result.count > 0) {
-      if (confirm(`${describeNewChapterResult(result)}\n\nเพิ่มเป็น "ตอนที่รอแปล" เลยหรือไม่? (ยังไม่ใช้โควตา AI จนกว่าจะกดแปล)`)) {
+      if (await appConfirm(`${describeNewChapterResult(result)}\nเพิ่มเป็น "ตอนที่รอแปล" ได้เลย ยังไม่ใช้โควตา AI จนกว่าจะกดแปล`, { title: 'พบตอนใหม่', confirmLabel: 'เพิ่มเข้าคิว', cancelLabel: 'ไว้ทีหลัง' })) {
         const added = await queueNewChapters(bookId, result);
         renderNewChapterBadge(bookId);
         await refreshShelfViewOnly(bookId);
-        alert(`เพิ่มตอนที่รอแปล ${added} ตอนแล้ว กด "⚡ เริ่มแปลล่วงหน้า" เพื่อแปลต่อ${result.atLeast ? '\n(ตอนถัดจากนั้นจะหาต่อเองตอนแปล)' : ''}`);
+        appAlert(`เพิ่มตอนที่รอแปล ${added} ตอนแล้ว กด "⚡ เริ่มแปลล่วงหน้า" เพื่อแปลต่อ${result.atLeast ? '\n(ตอนถัดจากนั้นจะหาต่อเองตอนแปล)' : ''}`);
       }
     } else {
-      alert(describeNewChapterResult(result));
+      appAlert(describeNewChapterResult(result));
     }
   } catch (err) {
     hideGlobalToast();
-    if (!isAbortError(err)) alert(`เช็กตอนใหม่ไม่สำเร็จ: ${describeScrapeError(err)}`);
+    if (!isAbortError(err)) appAlert(`เช็กตอนใหม่ไม่สำเร็จ: ${describeScrapeError(err)}`);
   } finally {
     endTask('checknew', controller);
     newChapterChecking = false;
@@ -167,7 +167,7 @@ async function checkNewChaptersForBook(bookId) {
 
 /** เช็กทุกเรื่องทีละเรื่อง (เว้นช่วงเล็กน้อยไม่ให้โดนจำกัดจำนวนครั้ง) แล้วแสดงผลบนการ์ดของแต่ละเรื่อง */
 async function checkNewChaptersForAllBooks() {
-  if (newChapterChecking) return alert('กำลังเช็กตอนใหม่อยู่ กรุณารอสักครู่');
+  if (newChapterChecking) return appAlert('กำลังเช็กตอนใหม่อยู่ กรุณารอสักครู่');
   const books = await dbGetAllBooks();
   if (!books.length) return;
   newChapterChecking = true;
@@ -197,7 +197,7 @@ async function checkNewChaptersForAllBooks() {
     newChapterChecking = false;
     hideGlobalToast();
   }
-  alert(`เช็กตอนใหม่เสร็จแล้ว: มีตอนใหม่ ${found} เรื่อง${failed ? ` · เช็กไม่ได้ ${failed} เรื่อง` : ''}\nกด "เพิ่มเข้าคิว" บนการ์ดของเรื่องที่มีตอนใหม่ เพื่อเพิ่มเป็นตอนที่รอแปล`);
+  appAlert(`เช็กตอนใหม่เสร็จแล้ว: มีตอนใหม่ ${found} เรื่อง${failed ? ` · เช็กไม่ได้ ${failed} เรื่อง` : ''}\nกด "เพิ่มเข้าคิว" บนการ์ดของเรื่องที่มีตอนใหม่ เพื่อเพิ่มเป็นตอนที่รอแปล`);
 }
 
 /** ปุ่ม "เพิ่มเข้าคิว" บนการ์ด: เช็กซ้ำอีกครั้ง (ได้ข้อมูลล่าสุด) แล้วเพิ่มเลย */
@@ -213,10 +213,10 @@ async function queueNewChaptersFromBadge(bookId) {
     renderNewChapterBadge(bookId);
     await refreshShelfViewOnly(bookId);
     hideGlobalToast();
-    alert(added ? `เพิ่มตอนที่รอแปล ${added} ตอนแล้ว` : 'ไม่พบตอนใหม่แล้ว');
+    appAlert(added ? `เพิ่มตอนที่รอแปล ${added} ตอนแล้ว` : 'ไม่พบตอนใหม่แล้ว');
   } catch (err) {
     hideGlobalToast();
-    if (!isAbortError(err)) alert(`เพิ่มตอนใหม่ไม่สำเร็จ: ${describeScrapeError(err)}`);
+    if (!isAbortError(err)) appAlert(`เพิ่มตอนใหม่ไม่สำเร็จ: ${describeScrapeError(err)}`);
   } finally {
     endTask('checknew', controller);
     newChapterChecking = false;

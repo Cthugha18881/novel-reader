@@ -70,7 +70,7 @@ async function exportBookTxt(bookId) {
     });
     downloadBlob(new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' }), `${safeFileName(book.title)}.txt`);
   } catch (err) {
-    alert(`ส่งออก TXT ไม่สำเร็จ: ${err.message}`);
+    appAlert(`ส่งออก TXT ไม่สำเร็จ: ${err.message}`);
   }
 }
 
@@ -171,7 +171,7 @@ ${files.map((f, i) => `    <navPoint id="nav${i + 1}" playOrder="${i + 1}"><navL
     const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/epub+zip', compression: 'DEFLATE' });
     downloadBlob(blob, `${safeFileName(title)}.epub`);
   } catch (err) {
-    alert(`ส่งออก EPUB ไม่สำเร็จ: ${err.message}`);
+    appAlert(`ส่งออก EPUB ไม่สำเร็จ: ${err.message}`);
   } finally {
     hideGlobalToast();
   }

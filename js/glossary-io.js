@@ -160,7 +160,7 @@ async function collectGlossaryForExport(scope, bookId) {
 async function exportGlossaryFile(format) {
   const scope = document.getElementById('gloss-io-scope')?.value === 'all' || currentBookId === 'default_novel' ? 'all' : 'book';
   const terms = await collectGlossaryForExport(scope, currentBookId);
-  if (!terms.length) return alert('ไม่มีคำศัพท์ให้ส่งออก');
+  if (!terms.length) return appAlert('ไม่มีคำศัพท์ให้ส่งออก');
   terms.sort((a, b) => a.src.localeCompare(b.src));
   const day = new Date().toISOString().slice(0, 10);
   const base = `glossary-${safeFileName(scope === 'book' ? currentBookTitle : 'ทั้งคลัง')}-${day}`;
@@ -187,14 +187,14 @@ async function handleGlossaryImportFile(input) {
   const file = input.files?.[0];
   input.value = '';
   if (!file) return;
-  if (file.size > GLOSSARY_IMPORT_MAX_BYTES) return alert('ไฟล์ใหญ่เกินไป (สูงสุด 10 MB)');
+  if (file.size > GLOSSARY_IMPORT_MAX_BYTES) return appAlert('ไฟล์ใหญ่เกินไป (สูงสุด 10 MB)');
   let parsed;
   try {
     parsed = parseGlossaryFile(await file.text(), file.name);
   } catch (err) {
-    return alert(`นำเข้าไม่ได้: ${err.message}`);
+    return appAlert(`นำเข้าไม่ได้: ${err.message}`);
   }
-  if (!parsed.terms.length) return alert('ไม่พบคำศัพท์ที่ใช้ได้ในไฟล์ (ต้องมีคอลัมน์ต้นฉบับและคำแปล)');
+  if (!parsed.terms.length) return appAlert('ไม่พบคำศัพท์ที่ใช้ได้ในไฟล์ (ต้องมีคอลัมน์ต้นฉบับและคำแปล)');
   pendingGlossaryImport = { ...parsed, fileName: file.name };
   // ไฟล์ใหม่เริ่มที่ตัวเลือกปลอดภัยเสมอ (ข้ามคำที่ชนกัน) ไม่ใช้ตัวเลือกที่ค้างจากการนำเข้าครั้งก่อน
   document.getElementById('glossary-import-body').innerHTML = '';
@@ -299,7 +299,7 @@ async function confirmGlossaryImport() {
   const target = glossaryImportTarget();
   const policy = glossaryImportPolicy();
   const changing = pending.classified.filter(t => t.status === 'conflict').length;
-  if (changing && policy !== 'skip' && !confirm(`จะเปลี่ยนคำแปล ${changing} คำ และแทนชื่อในตอนที่แปลแล้วของเรื่องที่เกี่ยวข้อง\n\nดำเนินการต่อหรือไม่?`)) return;
+  if (changing && policy !== 'skip' && !(await appConfirm(`คำแปล ${changing} คำจะเปลี่ยนตามไฟล์ และชื่อในตอนที่แปลแล้วของเรื่องที่เกี่ยวข้องจะถูกแทนด้วย`, { title: 'เปลี่ยนคำแปล', confirmLabel: `เปลี่ยน ${changing} คำ` }))) return;
   const btn = document.getElementById('gloss-import-confirm-btn');
   btn.disabled = true;
   showGlobalToast('กำลังนำเข้าคำศัพท์...');
@@ -310,9 +310,9 @@ async function confirmGlossaryImport() {
     pendingGlossaryImport = null;
     await renderGlossaryUI();
     renderVirtualWindow(currentChapterIndex);
-    alert(`นำเข้าเสร็จแล้ว\nคำใหม่ ${stats.added} · ผูกกับเรื่องนี้ ${stats.attached} · แทนคำแปลหลัก ${stats.replaced} · คำแปลเฉพาะเรื่อง ${stats.overridden} · ข้าม ${stats.skipped}`);
+    appAlert(`นำเข้าเสร็จแล้ว\nคำใหม่ ${stats.added} · ผูกกับเรื่องนี้ ${stats.attached} · แทนคำแปลหลัก ${stats.replaced} · คำแปลเฉพาะเรื่อง ${stats.overridden} · ข้าม ${stats.skipped}`);
   } catch (err) {
-    alert(`นำเข้าไม่สำเร็จ: ${err.message}`);
+    appAlert(`นำเข้าไม่สำเร็จ: ${err.message}`);
   } finally {
     btn.disabled = false;
     hideGlobalToast();

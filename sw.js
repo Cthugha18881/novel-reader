@@ -10,6 +10,7 @@ const APP_SHELL = [
   'js/csp.js',
   'js/db.js',
   'js/safety.js',
+  'js/dialogs.js',
   'js/llm.js',
   'js/usage.js',
   'js/lang.js',

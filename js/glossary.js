@@ -160,7 +160,7 @@ function showTermPopover(e, src, tgt) {
         });
       }
     } catch (err) {
-      alert(`ค้นหาคำแปลใหม่ไม่สำเร็จ: ${err.message}`);
+      appAlert(`ค้นหาคำแปลใหม่ไม่สำเร็จ: ${err.message}`);
     } finally {
       researchBtn.disabled = false;
       researchBtn.innerText = "🔄 ค้นหาใหม่";
@@ -366,7 +366,7 @@ function toggleSelectAllGlossary() {
 async function batchDeleteSelectedTerms() {
   const chks = document.querySelectorAll('.gloss-item-chk:checked');
   if (chks.length === 0) return;
-  if (!confirm(`ต้องการลบคำศัพท์ที่เลือกจำนวน ${chks.length} คำใช่หรือไม่?`)) return;
+  if (!(await appConfirm(`คำศัพท์ที่เลือก ${chks.length} คำจะถูกลบออกจากคลัง (ตอนที่แปลแล้วไม่เปลี่ยน)`, { title: 'ลบคำศัพท์', confirmLabel: `ลบ ${chks.length} คำ`, danger: true }))) return;
 
   const srcList = Array.from(chks).map(c => c.value);
   await dbDeleteMultipleGlossaryItems(srcList);
@@ -398,7 +398,7 @@ async function batchResearchSelectedTerms() {
   if (chks.length === 0) return;
 
   const count = chks.length;
-  if (!confirm(`ต้องการเริ่มให้ AI รีเสิร์ชคำศัพท์ที่เลือกจำนวน ${count} คำแบบเรียงคิวอัตโนมัติใช่หรือไม่?`)) return;
+  if (!(await appConfirm(`AI จะค้นคำแปลใหม่ให้คำที่เลือก ${count} คำทีละคำ (ใช้โควตา AI ${count} ครั้ง)`, { title: 'ค้นคำแปลใหม่', confirmLabel: `ค้น ${count} คำ` }))) return;
 
   const srcList = Array.from(chks).map(c => c.value);
   const countEl = document.getElementById('gloss-batch-count');
@@ -421,8 +421,8 @@ async function batchResearchSelectedTerms() {
 
   await renderGlossaryUI();
   renderVirtualWindow(currentChapterIndex);
-  if (failed.length) alert(`รีเสิร์ชสำเร็จ ${count - failed.length}/${count} คำ\nไม่สำเร็จ: ${failed.join(', ')}`);
-  else alert(`✓ รีเสิร์ชคำศัพท์เสร็จสมบูรณ์ทั้ง ${count} คำ`);
+  if (failed.length) appAlert(`รีเสิร์ชสำเร็จ ${count - failed.length}/${count} คำ\nไม่สำเร็จ: ${failed.join(', ')}`);
+  else appAlert(`✓ รีเสิร์ชคำศัพท์เสร็จสมบูรณ์ทั้ง ${count} คำ`);
 }
 
 async function openBookAssignModal(src) {
@@ -546,7 +546,7 @@ async function addGlossary() {
   const t = cleanTermString(document.getElementById('gloss-tgt').value);
   const cat = document.getElementById('gloss-cat').value;
 
-  if (!s || !t) return alert("กรุณาใส่ทั้งคำต้นฉบับและคำแปลไทย");
+  if (!s || !t) return appAlert("กรุณาใส่ทั้งคำต้นฉบับและคำแปลไทย");
 
   const existing = (await dbGetAllGlossaryItems()).find(it => it.src === s);
   const before = existing ? snapshotTerm(existing) : null;
@@ -616,7 +616,7 @@ async function saveEditedGlossaryTerm() {
   const newCat = document.getElementById('edit-term-cat-select').value;
   const bookOnly = document.getElementById('edit-term-book-only').checked && currentBookId !== 'default_novel';
 
-  if (!newTgt) return alert("กรุณาระบุคำแปลภาษาไทย");
+  if (!newTgt) return appAlert("กรุณาระบุคำแปลภาษาไทย");
 
   const before = snapshotTerm(cur);
   cur.overrides = { ...(cur.overrides || {}) };
@@ -700,7 +700,7 @@ async function researchGlossaryTermDirect(src, persist = true, ctx = getCurrentB
 }
 
 async function researchGlossaryTerm(src) {
-  if (!hasActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+  if (!hasActiveApiKey()) return appAlert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
 
   const tgtEl = document.getElementById(`gloss-tgt-val-${src}`);
   const btnEl = document.getElementById(`btn-research-${src}`);
@@ -715,7 +715,7 @@ async function researchGlossaryTerm(src) {
       if (cur && tgtEl) tgtEl.innerText = cur.tgt;
     }
   } catch (err) {
-    alert("รีเสิร์ชไม่สำเร็จ: " + err.message);
+    appAlert("รีเสิร์ชไม่สำเร็จ: " + err.message);
     const items = await dbGetAllGlossaryItems();
     const cur = items.find(x => x.src === src);
     if (cur && tgtEl) tgtEl.innerText = cur.tgt;
@@ -727,12 +727,12 @@ async function researchGlossaryTerm(src) {
 async function autoOrganizeGlossaryWithAI() {
   const genre = currentBookGenre || "xianxia";
 
-  if (!hasActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
+  if (!hasActiveApiKey()) return appAlert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อน");
 
   let items = await dbGetAllGlossaryItems();
-  if (items.length === 0) return alert("ไม่มีคำศัพท์ในคลัง");
+  if (items.length === 0) return appAlert("ไม่มีคำศัพท์ในคลัง");
 
-  if (!confirm(`ต้องการให้ AI วิเคราะห์และจัดหมวดหมู่คำศัพท์ทั้งหมด ${items.length} คำ ลงใน 7 หมวดหมู่อัตโนมัติใช่หรือไม่?`)) return;
+  if (!(await appConfirm(`AI จะจัดคำศัพท์ทั้ง ${items.length} คำลง 7 หมวด (ใช้โควตา AI)`, { title: 'จัดหมวดด้วย AI', confirmLabel: 'จัดหมวด' }))) return;
 
   const termList = items.map(it => ({ src: it.src, tgt: it.tgt }));
   const prompt = `คุณคือบรรณาธิการนิยายแนว "${genre}"
@@ -772,16 +772,16 @@ ${JSON.stringify(termList)}
       }
     }
     await renderGlossaryUI();
-    alert(`✓ จัดระเบียบเสร็จสมบูรณ์! อัปเดตหมวดหมู่คำศัพท์ไปทั้งหมด ${updatedCount} คำ`);
+    appAlert(`✓ จัดระเบียบเสร็จสมบูรณ์! อัปเดตหมวดหมู่คำศัพท์ไปทั้งหมด ${updatedCount} คำ`);
   } catch (err) {
-    alert("จัดหมวดหมู่อัตโนมัติไม่สำเร็จ: " + err.message);
+    appAlert("จัดหมวดหมู่อัตโนมัติไม่สำเร็จ: " + err.message);
   } finally {
     hideGlobalToast();
   }
 }
 
 async function delGloss(src) {
-  if (!confirm(`ต้องการลบคำว่า "${src}" ออกจากคลังศัพท์ใช่หรือไม่?`)) return;
+  if (!(await appConfirm(`คำว่า "${src}" จะถูกลบออกจากคลังศัพท์ (ตอนที่แปลแล้วไม่เปลี่ยน)`, { title: 'ลบคำศัพท์', confirmLabel: 'ลบคำนี้', danger: true }))) return;
   await dbDeleteGlossaryItem(src);
   await renderGlossaryUI();
   renderVirtualWindow(currentChapterIndex);
@@ -889,10 +889,10 @@ ${isBibleEnabled ? `\n${buildCharacterExtractionInstruction(extras.bible, rawTex
 async function scanTermsInCurrentChapter() {
   const curChap = chapters[currentChapterIndex];
   if (!curChap || !Array.isArray(curChap.paragraphs) || curChap.paragraphs.length === 0) {
-    return alert("ไม่พบเนื้อหาในบทปัจจุบันสำหรับสแกน");
+    return appAlert("ไม่พบเนื้อหาในบทปัจจุบันสำหรับสแกน");
   }
 
-  if (!hasActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+  if (!hasActiveApiKey()) return appAlert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
 
   const btn = document.getElementById('scan-terms-btn');
   const originalText = btn.innerHTML;
@@ -906,14 +906,14 @@ async function scanTermsInCurrentChapter() {
   try {
     const addedCount = await extractAndStoreAutoGlossary(srcText, getCurrentBookContext(), { onStatus: showGlobalToast, force: true });
     if (addedCount > 0) {
-      alert(`✓ สแกน "${curChap.title}" เสร็จสิ้น!\nพบชื่อเฉพาะใหม่ ${addedCount} คำ และบันทึกเข้าคลังคำศัพท์เรียบร้อยแล้ว\n(หากต้องการให้บทนี้เปลี่ยนคำตามศัพท์ใหม่ สามารถกดปุ่ม 🔄 ที่มุมขวาบนเพื่อแปลใหม่ได้ทันที)`);
+      appAlert(`✓ สแกน "${curChap.title}" เสร็จสิ้น!\nพบชื่อเฉพาะใหม่ ${addedCount} คำ และบันทึกเข้าคลังคำศัพท์เรียบร้อยแล้ว\n(หากต้องการให้บทนี้เปลี่ยนคำตามศัพท์ใหม่ สามารถกดปุ่ม 🔄 ที่มุมขวาบนเพื่อแปลใหม่ได้ทันที)`);
     } else {
-      alert(`ตรวจสอบ "${curChap.title}" เรียบร้อยแล้ว ไม่พบชื่อเฉพาะใหม่ตกหล่น (ทุกคำมีอยู่ในคลังแล้ว)`);
+      appAlert(`ตรวจสอบ "${curChap.title}" เรียบร้อยแล้ว ไม่พบชื่อเฉพาะใหม่ตกหล่น (ทุกคำมีอยู่ในคลังแล้ว)`);
     }
     await renderGlossaryUI();
     renderVirtualWindow(currentChapterIndex);
   } catch (err) {
-    alert("สแกนไม่สำเร็จ: " + err.message);
+    appAlert("สแกนไม่สำเร็จ: " + err.message);
   } finally {
     btn.disabled = false;
     btn.innerHTML = originalText;
@@ -927,8 +927,8 @@ async function lookupManualTermTranslation() {
   const categorySelect = document.getElementById('gloss-cat');
   const button = document.getElementById('lookup-manual-term-btn');
   const src = cleanTermString(srcInput.value);
-  if (!src) return alert('กรุณาใส่คำต้นฉบับที่ต้องการค้นหา');
-  if (!hasActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+  if (!src) return appAlert('กรุณาใส่คำต้นฉบับที่ต้องการค้นหา');
+  if (!hasActiveApiKey()) return appAlert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
 
   button.disabled = true;
   const oldLabel = button.innerText;
@@ -942,7 +942,7 @@ async function lookupManualTermTranslation() {
     }
     tgtInput.focus();
   } catch (err) {
-    alert(`ค้นหาคำแปลไม่สำเร็จ: ${err.message}`);
+    appAlert(`ค้นหาคำแปลไม่สำเร็จ: ${err.message}`);
   } finally {
     button.disabled = false;
     button.innerText = oldLabel;

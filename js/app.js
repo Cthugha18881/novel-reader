@@ -306,7 +306,7 @@ let pasteChapterId = null;
 
 async function openPasteChapterModal(chapId) {
   const chapter = await findChapterAnywhere(chapId);
-  if (!chapter) return alert('ไม่พบตอนนี้');
+  if (!chapter) return appAlert('ไม่พบตอนนี้');
   pasteChapterId = chapId;
   document.getElementById('paste-chapter-title').innerText = chapter.title || '';
   document.getElementById('paste-chapter-text').value = '';
@@ -316,10 +316,10 @@ async function openPasteChapterModal(chapId) {
 /** ใช้เนื้อหาที่ผู้ใช้วางเป็นต้นฉบับของตอนนี้ (คง id/ลำดับ/URL เดิม) แล้วแปล */
 async function savePastedChapter() {
   const text = document.getElementById('paste-chapter-text').value;
-  if (!text.trim()) return alert('กรุณาวางเนื้อหาของตอนนี้ก่อน');
-  if (text.length > IMPORT_LIMITS.pasteChars) return alert('ข้อความยาวเกินไป');
+  if (!text.trim()) return appAlert('กรุณาวางเนื้อหาของตอนนี้ก่อน');
+  if (text.length > IMPORT_LIMITS.pasteChars) return appAlert('ข้อความยาวเกินไป');
   const chapter = await findChapterAnywhere(pasteChapterId);
-  if (!chapter) return alert('ไม่พบตอนนี้');
+  if (!chapter) return appAlert('ไม่พบตอนนี้');
   // คำแปลเดิม (เช่นแปลจากตัวอย่าง) เก็บไว้ในประวัติเวอร์ชันก่อนถูกแทน
   try {
     if (await saveChapterVersion(chapter, 'paste')) chapter.hasVersions = true;
@@ -342,9 +342,9 @@ async function savePastedChapter() {
 /** แปลข้อความตัวอย่างของตอนที่ต้องซื้อ และติดป้ายว่าเป็นแค่ตัวอย่าง */
 async function translateLockedPreview(chapId) {
   const chapter = await findChapterAnywhere(chapId);
-  if (!chapter) return alert('ไม่พบตอนนี้');
-  if (!confirm('แปลเฉพาะข้อความตัวอย่างที่ได้มา (เนื้อหาไม่ครบ) ใช่หรือไม่?')) return;
-  if (isTaskRunning('retranslate')) return alert('กำลังแปลบทอื่นอยู่ กรุณารอให้เสร็จก่อน');
+  if (!chapter) return appAlert('ไม่พบตอนนี้');
+  if (!(await appConfirm('แปลเฉพาะข้อความตัวอย่างที่ได้มา เนื้อหาจะไม่ครบตอน (ใช้โควตา AI)', { title: 'แปลเฉพาะตัวอย่าง', confirmLabel: 'แปลตัวอย่าง' }))) return;
+  if (isTaskRunning('retranslate')) return appAlert('กำลังแปลบทอื่นอยู่ กรุณารอให้เสร็จก่อน');
   const lockInfo = chapter.lockInfo || null;
   const books = await dbGetAllBooks();
   const ctx = makeBookContext(books.find(b => b.bookId === chapter.bookId) || getCurrentBookContext());
@@ -367,7 +367,7 @@ async function translateLockedPreview(chapId) {
       if (currentBookId === chapter.bookId) await renderVirtualWindow(currentChapterIndex);
     }
   } catch (err) {
-    if (!isAbortError(err)) alert(`แปลไม่สำเร็จ: ${err.message}`);
+    if (!isAbortError(err)) appAlert(`แปลไม่สำเร็จ: ${err.message}`);
   } finally {
     endTask('retranslate', controller);
     hideGlobalToast();
@@ -480,7 +480,7 @@ async function saveEditedParagraph() {
   if (!chap || chap.id !== chapId) return closeModal('edit-para-modal');
   const p = chap.paragraphs[pIdx];
   const newTh = document.getElementById('edit-para-th').value.trim();
-  if (!newTh) return alert('กรุณาใส่คำแปล');
+  if (!newTh) return appAlert('กรุณาใส่คำแปล');
   if (newTh !== p.th) {
     // เก็บคำแปลของ AI ไว้ครั้งแรก เพื่อสลับกลับได้
     if (!p.userEdited && !p.thDraft) p.thDraft = p.th;
@@ -804,9 +804,9 @@ function checkAndRefreshBottomStatus() {
 
 function triggerManualFetchNext() { triggerReadingPrefetchIfEnabled(true); }
 
-function promptFixNextUrlFromBottom() {
+async function promptFixNextUrlFromBottom() {
   const lastChap = chapters[chapters.length - 1];
-  const input = prompt(`กรุณาวาง URL ของตอนถัดไปสำหรับ "${lastChap.title}":`, "");
+  const input = await appPrompt(`ตอนถัดไปของ "${lastChap.title}"`, '', { title: 'วาง URL ตอนถัดไป', confirmLabel: 'แปลตอนนี้', placeholder: 'https://...' });
   if (input && input.trim()) {
     const cleanUrl = input.trim();
     lastChap.nextUrl = cleanUrl;
@@ -899,7 +899,7 @@ async function saveReadingPointer(idx, paraIdx = null) {
 }
 
 async function promptEditBookTitle() {
-  const newTitle = prompt("แก้ไขชื่อนิยายเรื่องนี้ (ชื่อที่ตั้งใหม่จะถูกล็อกไว้ถาวร):", currentBookTitle);
+  const newTitle = await appPrompt('ชื่อที่ตั้งเองจะถูกล็อกไว้ ระบบจะไม่เปลี่ยนตามเว็บต้นฉบับ', currentBookTitle, { title: 'แก้ชื่อเรื่อง' });
   if (newTitle !== null && newTitle.trim()) {
     currentBookTitle = newTitle.trim();
     isUserCustomTitle = true;
@@ -910,7 +910,7 @@ async function promptEditBookTitle() {
 
 async function promptEditChapterTitle() {
   const chap = chapters[currentChapterIndex];
-  const newTitle = prompt("แก้ไขชื่อตอนปัจจุบัน:", chap.title);
+  const newTitle = await appPrompt('', chap.title, { title: 'แก้ชื่อตอน' });
   if (newTitle !== null && newTitle.trim()) {
     chap.title = newTitle.trim();
     document.getElementById('display-chap-title').innerText = chap.title;
@@ -996,7 +996,7 @@ function cancelNextChapterFetch() {
 
 async function addFromSelectionBar() {
   const selected = selectedWordBuffer.trim();
-  if (!selected) return alert('กรุณาเลือกข้อความก่อน');
+  if (!selected) return appAlert('กรุณาเลือกข้อความก่อน');
   await openGlossaryModal();
   if (isSelectedChinese) {
     document.getElementById('gloss-src').value = selected;
@@ -1009,7 +1009,7 @@ async function addFromSelectionBar() {
 
 async function retranslateCurrentActiveChapter() {
   const chap = chapters[currentChapterIndex];
-  if (!chap) return alert('ไม่พบบทที่กำลังอ่าน');
+  if (!chap) return appAlert('ไม่พบบทที่กำลังอ่าน');
   await retranslateSpecificChapterDirect(chap.id);
 }
 
@@ -1022,20 +1022,29 @@ async function retranslateSpecificChapterDirect(chapId) {
       if (found) { chapter = found; break; }
     }
   }
-  if (!chapter || !Array.isArray(chapter.paragraphs)) return alert('ไม่พบบทนี้ในฐานข้อมูล');
+  if (!chapter || !Array.isArray(chapter.paragraphs)) return appAlert('ไม่พบบทนี้ในฐานข้อมูล');
   if (chapter.status === 'pending') return translatePendingChapterNow(chapId);
   // ตอนกันก๊อป: เนื้อหาจริงอาจถูกเปลี่ยนที่หน้าเว็บแล้ว ต้องดึงใหม่ ไม่ใช่แปลข้อความหลอกเดิม
   if (chapter.chapterType === 'placeholder' && chapter.sourceUrl) return refetchChapterFromSource(chapId);
   const rawText = chapter.paragraphs.map(p => p.src || '').filter(Boolean).join('\n\n');
-  if (!rawText) return alert('บทนี้ไม่มีข้อความต้นฉบับ จึงแปลใหม่ไม่ได้');
+  if (!rawText) return appAlert('บทนี้ไม่มีข้อความต้นฉบับ จึงแปลใหม่ไม่ได้');
 
-  if (isTaskRunning('retranslate')) return alert('กำลังแปลบทอื่นใหม่อยู่ กรุณารอให้เสร็จก่อน');
+  if (isTaskRunning('retranslate')) return appAlert('กำลังแปลบทอื่นใหม่อยู่ กรุณารอให้เสร็จก่อน');
 
-  // ย่อหน้าที่ผู้ใช้แก้เองจะไม่ถูกเขียนทับ ถ้าผู้ใช้ไม่ยืนยัน
+  // ถามก่อนเสมอ (ใช้โควตา AI) ย่อหน้าที่ผู้ใช้แก้เองจะไม่ถูกเขียนทับ ถ้าผู้ใช้ไม่เลือกให้ทับ
   const editedCount = chapter.paragraphs.filter(p => p.userEdited).length;
-  const keepEdits = editedCount > 0
-    ? confirm(`ตอนนี้มี ${editedCount} ย่อหน้าที่คุณแก้คำแปลเอง\n\nกด OK = เก็บย่อหน้าที่แก้ไว้ (แปลใหม่เฉพาะย่อหน้าอื่น)\nกด Cancel = แปลใหม่ทั้งหมด (ทับที่แก้ไว้)`)
-    : false;
+  const costNote = 'ใช้โควตา AI ประมาณเท่าแปล 1 ตอน คำแปลเดิมเก็บไว้ในประวัติ (🕘) กู้คืนได้';
+  let keepEdits = false;
+  if (editedCount > 0) {
+    const choice = await appChoose(`ตอนนี้มี ${editedCount} ย่อหน้าที่คุณแก้คำแปลเอง\n${costNote}`, [
+      { label: 'แปลใหม่ทั้งหมด (ทับที่แก้)', value: 'all' },
+      { label: 'เก็บที่แก้ไว้ แปลที่เหลือ', value: 'keep', variant: 'primary' }
+    ], { title: `แปล "${chapter.title}" ใหม่` });
+    if (!choice) return;
+    keepEdits = choice === 'keep';
+  } else if (!(await appConfirm(costNote, { title: `แปล "${chapter.title}" ใหม่`, confirmLabel: 'แปลใหม่' }))) {
+    return;
+  }
 
   const books = await dbGetAllBooks();
   const bookId = chapter.bookId || currentBookId;
@@ -1057,9 +1066,9 @@ async function retranslateSpecificChapterDirect(chapId) {
     if (chapter.previewOnly) { result.previewOnly = true; result.summary = ''; }
     await applyTranslationToChapter(chapter, result, { updateTitle: false });
     if (keptLock) { chapter.lockInfo = keptLock; await dbSaveChapter(chapter); }
-    alert(`แปล "${chapter.title}" ใหม่และบันทึกแล้ว${keepEdits ? ` (เก็บย่อหน้าที่แก้เองไว้ ${editedCount} ย่อหน้า)` : ''}`);
+    appAlert(`แปล "${chapter.title}" ใหม่และบันทึกแล้ว${keepEdits ? ` (เก็บย่อหน้าที่แก้เองไว้ ${editedCount} ย่อหน้า)` : ''}`);
   } catch (err) {
-    if (!isAbortError(err)) alert(`แปลบทใหม่ไม่สำเร็จ: ${err.message}`);
+    if (!isAbortError(err)) appAlert(`แปลบทใหม่ไม่สำเร็จ: ${err.message}`);
   } finally {
     endTask('retranslate', controller);
     hideGlobalToast();
@@ -1178,8 +1187,8 @@ async function findChapterAnywhere(chapId) {
 
 async function translatePendingChapterNow(chapId) {
   const chapter = await findChapterAnywhere(chapId);
-  if (!chapter) return alert('ไม่พบตอนนี้');
-  if (isTaskRunning('retranslate')) return alert('กำลังแปลบทอื่นอยู่ กรุณารอให้เสร็จก่อน');
+  if (!chapter) return appAlert('ไม่พบตอนนี้');
+  if (isTaskRunning('retranslate')) return appAlert('กำลังแปลบทอื่นอยู่ กรุณารอให้เสร็จก่อน');
   const books = await dbGetAllBooks();
   const ctx = makeBookContext(books.find(b => b.bookId === chapter.bookId) || getCurrentBookContext());
   const controller = beginTask('retranslate');
@@ -1187,8 +1196,8 @@ async function translatePendingChapterNow(chapId) {
   try {
     await translatePendingChapterCore(chapter, ctx, { signal: controller.signal, onStatus: showGlobalToast });
   } catch (err) {
-    if (err instanceof LockBusyError) alert(err.message);
-    else if (!isAbortError(err)) alert(`แปลไม่สำเร็จ: ${describeScrapeError(err)}`);
+    if (err instanceof LockBusyError) appAlert(err.message);
+    else if (!isAbortError(err)) appAlert(`แปลไม่สำเร็จ: ${describeScrapeError(err)}`);
   } finally {
     endTask('retranslate', controller);
     hideGlobalToast();
@@ -1216,8 +1225,8 @@ async function refetchChapterFromSource(chapId) {
       if (chapter) break;
     }
   }
-  if (!chapter?.sourceUrl) return alert('ตอนนี้ไม่มี URL ต้นฉบับ จึงดึงเนื้อหาใหม่ไม่ได้');
-  if (isTaskRunning('retranslate')) return alert('กำลังแปลบทอื่นใหม่อยู่ กรุณารอให้เสร็จก่อน');
+  if (!chapter?.sourceUrl) return appAlert('ตอนนี้ไม่มี URL ต้นฉบับ จึงดึงเนื้อหาใหม่ไม่ได้');
+  if (isTaskRunning('retranslate')) return appAlert('กำลังแปลบทอื่นใหม่อยู่ กรุณารอให้เสร็จก่อน');
 
   const books = await dbGetAllBooks();
   const ctx = makeBookContext(books.find(b => b.bookId === chapter.bookId) || getCurrentBookContext());
@@ -1226,11 +1235,11 @@ async function refetchChapterFromSource(chapId) {
   try {
     const scraped = await scrapePage(chapter.sourceUrl, controller.signal, { bookId: chapter.bookId });
     if (scraped.lockInfo) {
-      alert(`หน้าเว็บยังให้อ่านได้แค่ตัวอย่าง (${describeLockInfo(scraped.lockInfo).short})`);
+      appAlert(`หน้าเว็บยังให้อ่านได้แค่ตัวอย่าง (${describeLockInfo(scraped.lockInfo).short})`);
       return;
     }
     if (classifyChapterByRules(scraped.rawChapTitle, scraped.text).type === 'placeholder') {
-      alert('หน้าเว็บยังเป็นเนื้อหากันก๊อปอยู่ ผู้เขียนอาจยังไม่ได้อัปเดตเนื้อหาจริง ลองใหม่ภายหลังนะครับ');
+      appAlert('หน้าเว็บยังเป็นเนื้อหากันก๊อปอยู่ ผู้เขียนอาจยังไม่ได้อัปเดตเนื้อหาจริง ลองใหม่ภายหลังนะครับ');
       return;
     }
     const bookChaps = await dbGetChaptersByBook(chapter.bookId);
@@ -1242,9 +1251,9 @@ async function refetchChapterFromSource(chapId) {
       prevChapter: findPrevStoryChapter(bookChaps, chapter.order ?? 0)
     });
     await applyTranslationToChapter(chapter, result, { updateTitle: true, nextUrl: scraped.nextUrlSource === 'link' ? scraped.nextUrl : undefined, reason: 'refetch' });
-    alert(`ดึงและแปล "${chapter.title}" เรียบร้อยแล้ว`);
+    appAlert(`ดึงและแปล "${chapter.title}" เรียบร้อยแล้ว`);
   } catch (err) {
-    if (!isAbortError(err)) alert(`ดึงเนื้อหาใหม่ไม่สำเร็จ: ${describeScrapeError(err)}`);
+    if (!isAbortError(err)) appAlert(`ดึงเนื้อหาใหม่ไม่สำเร็จ: ${describeScrapeError(err)}`);
   } finally {
     endTask('retranslate', controller);
     hideGlobalToast();
@@ -1253,8 +1262,8 @@ async function refetchChapterFromSource(chapId) {
 
 async function findChineseForSelection() {
   const { th, src } = selectedParagraphContext;
-  if (!selectedWordBuffer || !th || !src) return alert('ไม่พบย่อหน้าต้นฉบับที่สัมพันธ์กับข้อความที่เลือก');
-  if (!hasActiveApiKey()) return alert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+  if (!selectedWordBuffer || !th || !src) return appAlert('ไม่พบย่อหน้าต้นฉบับที่สัมพันธ์กับข้อความที่เลือก');
+  if (!hasActiveApiKey()) return appAlert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
   const button = document.getElementById('reverse-pair-btn');
   const oldLabel = button.innerText;
   button.disabled = true;
@@ -1303,7 +1312,7 @@ ${neighbours.length ? `ต้นฉบับย่อหน้าข้างเ
     document.getElementById('gloss-tgt').value = selectedWordBuffer;
     document.getElementById('gloss-cat').focus();
   } catch (err) {
-    alert(`ค้นหาคำต้นฉบับไม่สำเร็จ: ${err.message}`);
+    appAlert(`ค้นหาคำต้นฉบับไม่สำเร็จ: ${err.message}`);
   } finally {
     button.disabled = false;
     button.innerText = oldLabel;
@@ -1330,7 +1339,7 @@ async function deleteSelectedChapters(bookId) {
   const count = chks.length;
   if (count === 0) return;
 
-  if (!confirm(`คุณต้องการลบตอนที่เลือกจำนวน ${count} ตอน ออกจากเครื่องใช่หรือไม่?`)) return;
+  if (!(await appConfirm(`ตอนที่เลือก ${count} ตอนจะถูกลบออกจากเครื่องนี้ ย้อนกลับไม่ได้ (ยกเว้นมีไฟล์สำรอง)`, { title: 'ลบตอน', confirmLabel: `ลบ ${count} ตอน`, danger: true }))) return;
 
   abortAllRunningProcesses();
 
@@ -1412,7 +1421,7 @@ async function confirmMoveChapters() {
   let toBook;
   if (choice === 'new') {
     const title = document.getElementById('move-chapters-new-title').value.trim();
-    if (!title) return alert('กรุณาตั้งชื่อเรื่องใหม่');
+    if (!title) return appAlert('กรุณาตั้งชื่อเรื่องใหม่');
     const firstMoved = (await dbGetChaptersByBook(fromBookId)).filter(c => ids.includes(c.id)).sort((a, b) => a.order - b.order)[0];
     const key = firstMoved?.sourceUrl ? deriveBookKey(firstMoved.sourceUrl) : { reliable: false };
     toBook = {
@@ -1428,7 +1437,7 @@ async function confirmMoveChapters() {
     };
   } else {
     toBook = books.find(b => b.bookId === choice);
-    if (!toBook) return alert('ไม่พบเรื่องปลายทาง');
+    if (!toBook) return appAlert('ไม่พบเรื่องปลายทาง');
   }
 
   try {
@@ -1439,9 +1448,9 @@ async function confirmMoveChapters() {
     closeModal('move-chapters-modal');
     if (currentBookId === fromBookId || currentBookId === toBook.bookId) await loadBookFromDB(currentBookId);
     await openBookshelfModal();
-    alert(`ย้าย ${ids.length} ตอนไปที่ "${toBook.title}" เรียบร้อยแล้ว`);
+    appAlert(`ย้าย ${ids.length} ตอนไปที่ "${toBook.title}" เรียบร้อยแล้ว`);
   } catch (err) {
-    alert(`ย้ายตอนไม่สำเร็จ: ${err.message}`);
+    appAlert(`ย้ายตอนไม่สำเร็จ: ${err.message}`);
   }
 }
 
@@ -1513,7 +1522,7 @@ async function loadBookFromDB(bookId, specifyChapIdOrIdx = null, { paraIdx = nul
 
 async function removeBookFromShelf(e, bookId) {
   e.stopPropagation();
-  if (!confirm("ต้องการลบนิยายเรื่องนี้และตอนที่เก็บไว้ทั้งหมดในเครื่องใช่หรือไม่?")) return;
+  if (!(await appConfirm('นิยายเรื่องนี้และทุกตอนที่เก็บไว้จะถูกลบออกจากเครื่องนี้ ย้อนกลับไม่ได้ (ยกเว้นมีไฟล์สำรอง)', { title: 'ลบทั้งเรื่อง', confirmLabel: 'ลบทั้งเรื่อง', danger: true }))) return;
   abortAllRunningProcesses();
   await dbDeleteBook(bookId);
   if (currentBookId === bookId) {
@@ -1738,7 +1747,7 @@ async function handleNextChapterClick() {
     if (isMissingPageError(err)) {
       openImportModal(chapterUrl, "ไม่พบหน้าตอนถัดไป (กรุณาวาง URL ที่ถูกต้อง)");
     } else {
-      alert(`แปลตอนถัดไปไม่สำเร็จ: ${err.message}`);
+      appAlert(`แปลตอนถัดไปไม่สำเร็จ: ${err.message}`);
     }
   } finally {
     if (releaseAppend) releaseAppend();
@@ -1887,8 +1896,8 @@ function renderImportTextPreview() {
 async function importTextChapters() {
   if (!importTextParsed) previewImportText();
   const list = importTextParsed?.chapters || [];
-  if (!list.length) return alert('กรุณาวางข้อความหรือเลือกไฟล์ก่อน');
-  try { checkImportChapterCount(list.length); } catch (err) { return alert(err.message); }
+  if (!list.length) return appAlert('กรุณาวางข้อความหรือเลือกไฟล์ก่อน');
+  try { checkImportChapterCount(list.length); } catch (err) { return appAlert(err.message); }
 
   const books = await dbGetAllBooks();
   const choice = document.getElementById('import-target-book')?.value || 'auto';
@@ -1943,7 +1952,7 @@ async function importTextChapters() {
   if (document.getElementById('import-text-translate-first').checked) {
     await translatePendingChapterNow(records[0].id);
   } else {
-    alert(`นำเข้า ${records.length} ตอนแล้ว (ยังไม่แปล)\nกด "⚡ แปลตอนนี้เลย" ในหน้าอ่าน หรือ "⚡ เริ่มแปลล่วงหน้า" ที่ชั้นหนังสือเพื่อแปลทีละหลายตอน`);
+    appAlert(`นำเข้า ${records.length} ตอนแล้ว (ยังไม่แปล)\nกด "⚡ แปลตอนนี้เลย" ในหน้าอ่าน หรือ "⚡ เริ่มแปลล่วงหน้า" ที่ชั้นหนังสือเพื่อแปลทีละหลายตอน`);
   }
 }
 
@@ -1967,7 +1976,7 @@ function resolveImportTarget(url, choice, books) {
 async function startTranslateFirst() {
   const url = document.getElementById('import-url').value.trim();
   const chosenGenre = document.getElementById('import-novel-genre').value;
-  if (!url) return alert("กรุณาใส่ URL หน้านิยาย");
+  if (!url) return appAlert("กรุณาใส่ URL หน้านิยาย");
   if (isTaskRunning('import')) return;
 
   const status = document.getElementById('import-status');
@@ -2196,7 +2205,7 @@ async function fetchLiveModels() {
   const statusText = document.getElementById('fetch-status-text');
   const fetchBtn = document.getElementById('fetch-models-btn');
 
-  if (!firstKey) return alert("กรุณากรอก API Key ก่อนกดตรวจเช็กโมเดล");
+  if (!firstKey) return appAlert("กรุณากรอก API Key ก่อนกดตรวจเช็กโมเดล");
   // คีย์ของผู้ให้บริการที่รู้รูปแบบ (เช่น OpenRouter sk-or-) แต่ Base URL ยังชี้ไปที่อื่น: คีย์จะถูกส่งผิดที่และถูกปฏิเสธ
   const suggested = provider === 'openai' ? suggestBaseUrlForKey(firstKey, baseUrl) : null;
   if (suggested) {
@@ -2239,7 +2248,7 @@ async function fetchLiveModels() {
   }
 }
 
-function saveSettings() {
+async function saveSettings() {
   stashSettingsForm();
   // ต้องเปลี่ยนที่เก็บ key ก่อนบันทึก key ใหม่
   setSessionOnlySecrets(document.getElementById('secrets-session-only').checked);
@@ -2278,8 +2287,8 @@ function saveSettings() {
     (mismatch ? `\n⚠️ คีย์ OpenAI-compatible เป็นของ ${mismatch.name} แต่ Base URL ไม่ใช่ ${mismatch.url} คีย์จะถูกส่งผิดที่ กรุณาแก้ Base URL` : '');
   const openaiBase = getProviderBaseUrl('openai');
   const needsReload = openaiBase && !isConnectAllowedByCsp(openaiBase);
-  alert(`บันทึกการตั้งค่าเรียบร้อยแล้ว\nใช้งาน ${LLM_PROVIDERS[cfg.provider].label} (${cfg.model || 'ยังไม่เลือกโมเดล'}) — คลัง API Key ${cfg.keys.length} ตัว${warning}`);
-  if (needsReload && confirm(`Base URL ใหม่ (${openaiBase}) จะใช้ได้หลังรีโหลดหน้า (ระบบความปลอดภัยอนุญาตปลายทางตอนเปิดหน้าเท่านั้น)\n\nรีโหลดตอนนี้เลยหรือไม่?`)) {
+  appAlert(`บันทึกการตั้งค่าเรียบร้อยแล้ว\nใช้งาน ${LLM_PROVIDERS[cfg.provider].label} (${cfg.model || 'ยังไม่เลือกโมเดล'}) — คลัง API Key ${cfg.keys.length} ตัว${warning}`);
+  if (needsReload && await appConfirm(`Base URL ใหม่ (${openaiBase}) จะใช้ได้หลังรีโหลดหน้า เพราะระบบความปลอดภัยอนุญาตปลายทางตอนเปิดหน้าเท่านั้น`, { title: 'รีโหลดหน้า', confirmLabel: 'รีโหลดตอนนี้', cancelLabel: 'ไว้ทีหลัง' })) {
     location.reload();
   }
 }
@@ -2340,7 +2349,7 @@ async function exportBackup() {
     renderSafetyBanner();
     renderBookshelfBackupNote();
   } catch (err) {
-    alert(`สำรองข้อมูลไม่สำเร็จ: ${err.message}`);
+    appAlert(`สำรองข้อมูลไม่สำเร็จ: ${err.message}`);
   }
 }
 
@@ -2359,9 +2368,9 @@ async function handleBackupFileSelected(input) {
   try {
     raw = JSON.parse(await file.text());
   } catch (e) {
-    return alert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูล JSON ที่ถูกต้อง');
+    return appAlert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูล JSON ที่ถูกต้อง');
   }
-  if (!isValidBackup(raw)) return alert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูลของ NovelTranslate หรือมาจากแอพรุ่นที่ใหม่กว่า');
+  if (!isValidBackup(raw)) return appAlert('ไฟล์นี้ไม่ใช่ไฟล์สำรองข้อมูลของ NovelTranslate หรือมาจากแอพรุ่นที่ใหม่กว่า');
 
   const data = upgradeBackup(raw);
   pendingBackupImport = { raw, data, settings: splitImportedSettings(data.settings), fileName: file.name };
@@ -2408,7 +2417,7 @@ function onBackupImportModeChange() {
 async function confirmBackupImport() {
   if (!pendingBackupImport) return;
   const mode = getBackupImportMode();
-  if (mode === 'replace' && !confirm('นิยาย ตอน คลังศัพท์ และคู่มือเรื่องทั้งหมดในเครื่องนี้จะถูกลบ แล้วแทนด้วยข้อมูลจากไฟล์\n\nยืนยันหรือไม่?')) return;
+  if (mode === 'replace' && !(await appConfirm('นิยาย ตอน คลังศัพท์ และคู่มือเรื่องทั้งหมดในเครื่องนี้จะถูกลบ แล้วแทนด้วยข้อมูลจากไฟล์', { title: 'แทนที่ข้อมูลทั้งหมด', confirmLabel: 'ลบแล้วแทนที่', danger: true }))) return;
 
   const btn = document.getElementById('backup-import-confirm-btn');
   btn.disabled = true;
@@ -2439,10 +2448,10 @@ async function confirmBackupImport() {
 
     const needsReload = (applyBaseUrl && !isConnectAllowedByCsp(settings.baseUrl)) ||
       (applyProxies && settings.proxies.some(p => !isConnectAllowedByCsp(p.url)));
-    alert(`✓ นำเข้าข้อมูลสำรองเรียบร้อยแล้ว (${mode === 'replace' ? 'แทนที่ทั้งหมด' : 'รวมกับของเดิม'})` +
+    appAlert(`✓ นำเข้าข้อมูลสำรองเรียบร้อยแล้ว (${mode === 'replace' ? 'แทนที่ทั้งหมด' : 'รวมกับของเดิม'})` +
       (needsReload ? '\n\nBase URL / proxy ใหม่จะใช้ได้หลังรีโหลดหน้า' : ''));
   } catch (err) {
-    alert(`นำเข้าข้อมูลไม่สำเร็จ (ข้อมูลเดิมไม่ถูกแก้ไข): ${err.message}`);
+    appAlert(`นำเข้าข้อมูลไม่สำเร็จ (ข้อมูลเดิมไม่ถูกแก้ไข): ${err.message}`);
   } finally {
     btn.disabled = false;
   }
@@ -2509,7 +2518,7 @@ async function backupNowFromBanner() {
     showGlobalToast('✓ สำรองข้อมูลแล้ว');
     setTimeout(hideGlobalToast, 1800);
   } catch (err) {
-    alert(`สำรองข้อมูลไม่สำเร็จ: ${err.message}`);
+    appAlert(`สำรองข้อมูลไม่สำเร็จ: ${err.message}`);
   }
   renderSafetyBanner();
   renderBookshelfBackupNote();
@@ -2568,9 +2577,9 @@ async function setupAutoBackupFolder() {
   try {
     await chooseAutoBackupFolder();
     const result = await runAutoBackup({ interactive: true });
-    if (result === 'done') alert('✓ ตั้งค่าโฟลเดอร์และสำรองข้อมูลครั้งแรกเรียบร้อย');
+    if (result === 'done') appAlert('✓ ตั้งค่าโฟลเดอร์และสำรองข้อมูลครั้งแรกเรียบร้อย');
   } catch (err) {
-    if (err?.name !== 'AbortError') alert(`ตั้งค่าโฟลเดอร์สำรองไม่สำเร็จ: ${err.message}`);
+    if (err?.name !== 'AbortError') appAlert(`ตั้งค่าโฟลเดอร์สำรองไม่สำเร็จ: ${err.message}`);
   }
   await renderAutoBackupSettings();
   renderSafetyBanner();
@@ -2579,10 +2588,10 @@ async function setupAutoBackupFolder() {
 async function runAutoBackupFromSettings() {
   try {
     const result = await runAutoBackup({ interactive: true });
-    if (result === 'needs-permission') alert('ยังไม่ได้รับอนุญาตให้เขียนโฟลเดอร์ กรุณากดอนุญาตเมื่อเบราว์เซอร์ถาม');
-    else if (result === 'done') alert('✓ สำรองข้อมูลลงโฟลเดอร์แล้ว');
+    if (result === 'needs-permission') appAlert('ยังไม่ได้รับอนุญาตให้เขียนโฟลเดอร์ กรุณากดอนุญาตเมื่อเบราว์เซอร์ถาม');
+    else if (result === 'done') appAlert('✓ สำรองข้อมูลลงโฟลเดอร์แล้ว');
   } catch (err) {
-    alert(`สำรองไม่สำเร็จ: ${err.message}`);
+    appAlert(`สำรองไม่สำเร็จ: ${err.message}`);
   }
   await renderAutoBackupSettings();
   renderSafetyBanner();
@@ -2595,16 +2604,16 @@ async function stopAutoBackup() {
 
 async function requestPersistFromSettings() {
   const ok = await requestPersistentStorage();
-  if (!ok) alert('เบราว์เซอร์ยังไม่อนุญาตพื้นที่ถาวร (Chrome จะอนุญาตเองเมื่อใช้งานบ่อยหรือติดตั้งเป็นแอพ) แนะนำให้สำรองข้อมูลเป็นระยะ');
+  if (!ok) appAlert('เบราว์เซอร์ยังไม่อนุญาตพื้นที่ถาวร (Chrome จะอนุญาตเองเมื่อใช้งานบ่อยหรือติดตั้งเป็นแอพ) แนะนำให้สำรองข้อมูลเป็นระยะ');
   await renderSafetySettings();
 }
 
-function clearAllApiKeys() {
-  if (!confirm('ลบ API Key ของผู้ให้บริการ AI ทุกเจ้าและ Jina Key ออกจากเบราว์เซอร์นี้?\n(นิยายและการตั้งค่าอื่นยังอยู่ครบ)')) return;
+async function clearAllApiKeys() {
+  if (!(await appConfirm('API Key ของผู้ให้บริการ AI ทุกเจ้าและ Jina Key จะถูกลบออกจากเบราว์เซอร์นี้ (นิยายและการตั้งค่าอื่นยังอยู่ครบ)', { title: 'ลบ API Key ทั้งหมด', confirmLabel: 'ลบ API Key', danger: true }))) return;
   clearAllSecrets();
   settingsDrafts = {};
   showSettingsForProvider(document.getElementById('llm-provider-select').value);
-  alert('ลบ API Key ทั้งหมดแล้ว');
+  appAlert('ลบ API Key ทั้งหมดแล้ว');
 }
 
 // ==================== AI USAGE DASHBOARD ====================
@@ -2620,7 +2629,7 @@ function notifyProfileFailing(host) {
 
 /** hook จาก usage.js: เกินเพดานแล้วแต่ผู้ใช้กดแปลเอง */
 function askBudgetOverride(message) {
-  return confirm(message);
+  return appConfirm(message, { title: 'เกินเพดานค่าใช้จ่าย', confirmLabel: 'แปลต่อครั้งนี้', cancelLabel: 'ไม่แปล' });
 }
 
 /** hook จาก usage.js: ใช้ไปแล้ว 80% ของเพดาน */
@@ -2821,13 +2830,13 @@ async function exportDiagnosticLog() {
 }
 
 async function clearDiagnosticLogFromUi() {
-  if (!confirm('ล้างบันทึกข้อผิดพลาดทั้งหมด?')) return;
+  if (!(await appConfirm('บันทึกข้อผิดพลาดทั้งหมดจะถูกลบ', { title: 'ล้างบันทึกข้อผิดพลาด', confirmLabel: 'ล้างบันทึก', danger: true }))) return;
   await clearDiagnosticLog();
   await renderUsageDashboard();
 }
 
 async function clearUsageHistory() {
-  if (!confirm('ล้างสถิติการใช้งาน AI ทั้งหมด (รวมค่าเฉลี่ยต่อตอนที่ใช้ประมาณก่อนแปลล่วงหน้า)?\nเพดานที่ตั้งไว้จะเริ่มนับใหม่จากศูนย์')) return;
+  if (!(await appConfirm('สถิติการใช้งาน AI ทั้งหมดจะถูกลบ รวมค่าเฉลี่ยต่อตอนที่ใช้ประมาณก่อนแปลล่วงหน้า เพดานที่ตั้งไว้จะเริ่มนับใหม่จากศูนย์', { title: 'ล้างสถิติการใช้งาน', confirmLabel: 'ล้างสถิติ', danger: true }))) return;
   await dbClearUsage();
   await renderUsageDashboard();
 }
