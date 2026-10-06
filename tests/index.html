@@ -1003,7 +1003,7 @@
       const g = PLAN_DEFAULTS.guest, f = PLAN_DEFAULTS.free, p = PLAN_DEFAULTS.plus;
       return g.byokChaptersPerDay === 20 && g.maxBooks === 3 && g.batchMax === 5 && g.assistantPerDay === 10 && !g.autoBible && !g.epub && !g.bgm && !g.bestMode &&
         f.byokChaptersPerDay === 40 && f.maxBooks === 10 && f.batchMax === 10 && f.assistantPerDay === 30 && f.autoBible && f.epub && f.bgm && !f.bestMode &&
-        p.byokChaptersPerDay === null && p.maxBooks === null && p.batchMax === 50 && p.bestMode && PLAN_DEFAULTS.pro.batchMax === 50;
+        p.byokChaptersPerDay === null && p.maxBooks === null && p.batchMax === 50 && p.bestMode && PLAN_DEFAULTS.pro.batchMax === 100;
     });
     test('plans: resolveEntitlements รับค่าจากเซิร์ฟเวอร์เฉพาะคีย์/ชนิดที่ถูกต้อง', () => {
       const e = resolveEntitlements('free', { maxBooks: 25, bestMode: true, batchMax: 'lots', epub: 1, unknownKey: 5, assistantPerDay: null, byokChaptersPerDay: -3 });
@@ -1020,6 +1020,7 @@
       const free = { tier: 'free', ...PLAN_DEFAULTS.free };
       return describePlanLimit('byok', guest).includes('20 ตอน') && describePlanLimit('byok', guest).includes('40 ตอนต่อวัน') && describePlanLimit('byok', guest).includes('เข้าสู่ระบบ') &&
         describePlanLimit('books', free).includes('10 เรื่อง') && describePlanLimit('books', free).includes('ไม่จำกัด') &&
+        describePlanLimit('batch', { tier: 'plus', ...PLAN_DEFAULTS.plus }).includes('Pro เพิ่มเป็น 100') &&
         describePlanLimit('epub', guest).includes('สมาชิกฟรี') && describePlanLimit('bestMode', free).includes('Plus') &&
         planDayKey(new Date(2026, 0, 5)) === 'plan_day_2026-01-05';
     });

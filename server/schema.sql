@@ -26,7 +26,9 @@ alter table public.dt_plans add column if not exists features jsonb not null def
 update public.dt_plans set features = '{"byokChaptersPerDay": 40, "maxBooks": 10, "batchMax": 10, "assistantPerDay": 30, "autoBible": true, "epub": true, "bgm": true, "bestMode": false}'::jsonb
   where id = 'free' and features = '{}'::jsonb;
 update public.dt_plans set features = '{"byokChaptersPerDay": null, "maxBooks": null, "batchMax": 50, "assistantPerDay": null, "autoBible": true, "epub": true, "bgm": true, "bestMode": true}'::jsonb
-  where id in ('plus', 'pro') and features = '{}'::jsonb;
+  where id = 'plus' and features = '{}'::jsonb;
+update public.dt_plans set features = '{"byokChaptersPerDay": null, "maxBooks": null, "batchMax": 100, "assistantPerDay": null, "autoBible": true, "epub": true, "bgm": true, "bestMode": true}'::jsonb
+  where id = 'pro' and features = '{}'::jsonb;
 
 -- ---------- ผู้ใช้ ----------
 create table if not exists public.dt_profiles (

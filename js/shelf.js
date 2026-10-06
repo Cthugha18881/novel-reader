@@ -158,7 +158,7 @@ async function chooseBatchCount(bookId) {
   const options = [3, 5, 10, 20].filter(n => n <= max);
   if (!options.includes(max)) options.push(max);
   const pick = await appChoose(
-    `แปลต่อจากตอนล่าสุดที่มีในเครื่อง${pending ? ` (มีตอนที่รอแปล ${pending} ตอน จะแปลก่อน)` : ''}\nใช้โควตา AI · จะบอกค่าใช้จ่ายโดยประมาณก่อนเริ่ม${max < 50 ? `\nแพ็กเกจของคุณแปลล่วงหน้าได้ครั้งละไม่เกิน ${max} ตอน` : ''}`,
+    `แปลต่อจากตอนล่าสุดที่มีในเครื่อง${pending ? ` (มีตอนที่รอแปล ${pending} ตอน จะแปลก่อน)` : ''}\nใช้โควตา AI · จะบอกค่าใช้จ่ายโดยประมาณก่อนเริ่ม${max < BATCH_HARD_MAX ? `\nแพ็กเกจของคุณแปลล่วงหน้าได้ครั้งละไม่เกิน ${max} ตอน` : ''}`,
     [
       ...options.map(n => ({ label: `${n} ตอน`, value: n, variant: n === Math.min(5, max) ? 'primary' : undefined })),
       ...(max > 20 ? [{ label: 'กำหนดเอง…', value: 'custom' }] : [])
@@ -174,15 +174,18 @@ async function chooseBatchCount(bookId) {
   await startBatchTranslateForBook(bookId, count);
 }
 
-/** จำนวนตอนสูงสุดต่อครั้งของการแปลล่วงหน้า (ตามแพ็กเกจ ไม่เกิน 50) */
+// เพดานของเครื่องเอง (แพ็กเกจ Pro) แต่ละแพ็กเกจกำหนดต่ำกว่านี้ได้
+const BATCH_HARD_MAX = 100;
+
+/** จำนวนตอนสูงสุดต่อครั้งของการแปลล่วงหน้า (ตามแพ็กเกจ ไม่เกิน BATCH_HARD_MAX) */
 function getBatchMax() {
   const planMax = typeof getEntitlements === 'function' ? getEntitlements().batchMax : null;
-  return Math.min(50, planMax ?? 50);
+  return Math.min(BATCH_HARD_MAX, planMax ?? BATCH_HARD_MAX);
 }
 
 async function startBatchTranslateForBook(bookId, count) {
   const max = getBatchMax();
-  if (Number.isInteger(count) && count > max && max < 50 && typeof showPlanLimit === 'function') return showPlanLimit('batch');
+  if (Number.isInteger(count) && count > max && max < BATCH_HARD_MAX && typeof showPlanLimit === 'function') return showPlanLimit('batch');
   if (!Number.isInteger(count) || count < 1 || count > max) return appAlert(`กรุณาระบุจำนวนตอนระหว่าง 1 ถึง ${max}`);
   if (batchCurrent?.bookId === bookId || batchQueue.some(j => j.bookId === bookId)) return appAlert('เรื่องนี้กำลังแปลล่วงหน้าหรืออยู่ในคิวแล้ว');
   if (!hasActiveApiKey()) return appAlert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");

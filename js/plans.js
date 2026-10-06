@@ -9,8 +9,8 @@ const PLAN_DEFAULTS = {
   guest: { name: 'ผู้เยี่ยมชม', byokChaptersPerDay: 20, maxBooks: 3, batchMax: 5, assistantPerDay: 10, autoBible: false, epub: false, bgm: false, bestMode: false },
   free: { name: 'สมาชิกฟรี', byokChaptersPerDay: 40, maxBooks: 10, batchMax: 10, assistantPerDay: 30, autoBible: true, epub: true, bgm: true, bestMode: false },
   plus: { name: 'Plus', byokChaptersPerDay: null, maxBooks: null, batchMax: 50, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true },
-  pro: { name: 'Pro', byokChaptersPerDay: null, maxBooks: null, batchMax: 50, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true },
-  unlimited: { name: 'ไม่จำกัด', byokChaptersPerDay: null, maxBooks: null, batchMax: 50, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true }
+  pro: { name: 'Pro', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true },
+  unlimited: { name: 'ไม่จำกัด', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true }
 };
 const PLAN_ORDER = ['guest', 'free', 'plus', 'pro'];
 const PLAN_CACHE_KEY = 'nov_plan_cache';
@@ -119,11 +119,14 @@ function isByokProvider() {
 
 /** ข้อความเมื่อถึงขีดจำกัด + สิ่งที่ได้ถ้าเข้าสู่ระบบ/อัปเกรด */
 function describePlanLimit(kind, ent = getEntitlements()) {
-  const next = PLAN_DEFAULTS[ent.tier === 'guest' ? 'free' : 'plus'];
+  // ระดับถัดไปที่ได้มากกว่า (Plus ที่ชนเพดานแปลล่วงหน้า → Pro)
+  const idx = PLAN_ORDER.indexOf(ent.tier);
+  const nextTier = PLAN_ORDER[Math.min(PLAN_ORDER.length - 1, (idx < 0 ? 0 : idx) + 1)];
+  const next = PLAN_DEFAULTS[nextTier];
   const fmt = (n, unit) => n === null ? 'ไม่จำกัด' : `${n} ${unit}`;
   const upsell = ent.tier === 'guest'
     ? `เข้าสู่ระบบฟรีด้วยอีเมลเพื่อเพิ่มเป็น`
-    : `แพ็กเกจ Plus เพิ่มเป็น`;
+    : `แพ็กเกจ ${next.name} เพิ่มเป็น`;
   switch (kind) {
     case 'byok': return `วันนี้แปลด้วย API Key ของคุณครบ ${ent.byokChaptersPerDay} ตอนแล้ว (${ent.name}) ${upsell} ${fmt(next.byokChaptersPerDay, 'ตอนต่อวัน')}${ent.tier !== 'guest' ? ' หรือแปลต่อด้วยโควตา AI ของ Dusktale' : ''} · เริ่มนับใหม่พรุ่งนี้`;
     case 'assistant': return `วันนี้ถามผู้ช่วย AI ครบ ${ent.assistantPerDay} คำถามแล้ว (${ent.name}) ${upsell} ${fmt(next.assistantPerDay, 'คำถามต่อวัน')} · เริ่มนับใหม่พรุ่งนี้`;
