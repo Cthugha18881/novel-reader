@@ -19,6 +19,15 @@ insert into public.dt_plans (id, name, monthly_tokens, max_output_tokens, max_co
   ('pro',  'Pro',  12000000, 16384, 6, 2)
 on conflict (id) do nothing;
 
+-- สิทธิ์ของแอพตามแพ็กเกจ (ส่งให้แอพทาง /api/me) null = ไม่จำกัด
+-- คีย์: byokChaptersPerDay, maxBooks, batchMax, assistantPerDay, autoBible, epub, bgm, bestMode
+-- ตั้งค่าเริ่มต้นเฉพาะแถวที่ยังว่าง แก้ตัวเลขเองภายหลังได้ (รันไฟล์นี้ซ้ำไม่ทับค่าที่แก้ไว้)
+alter table public.dt_plans add column if not exists features jsonb not null default '{}'::jsonb;
+update public.dt_plans set features = '{"byokChaptersPerDay": 40, "maxBooks": 10, "batchMax": 10, "assistantPerDay": 30, "autoBible": true, "epub": true, "bgm": true, "bestMode": false}'::jsonb
+  where id = 'free' and features = '{}'::jsonb;
+update public.dt_plans set features = '{"byokChaptersPerDay": null, "maxBooks": null, "batchMax": 50, "assistantPerDay": null, "autoBible": true, "epub": true, "bgm": true, "bestMode": true}'::jsonb
+  where id in ('plus', 'pro') and features = '{}'::jsonb;
+
 -- ---------- ผู้ใช้ ----------
 create table if not exists public.dt_profiles (
   user_id uuid primary key references auth.users (id) on delete cascade,
@@ -138,6 +147,7 @@ begin
   select jsonb_build_object(
     'plan', pl.id,
     'planName', pl.name,
+    'features', pl.features,
     'limit', pl.monthly_tokens + pr.bonus_tokens,
     'used', public.dt_used_this_month(p_user),
     'periodStart', date_trunc('month', now()),

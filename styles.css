@@ -1143,3 +1143,22 @@ input.chap-chk, input.gloss-item-chk { width: 24px; height: 24px; }
 .hosted-who { font-size: 13px; }
 .hosted-quota .bp-bar { height: 8px; margin: 2px 0 4px; }
 .byok-only[hidden], .hosted-account[hidden] { display: none; }
+/* ---------- แพ็กเกจ (ตั้งค่า → AI, หน้าต่างแพ็กเกจ) ---------- */
+.plan-box[hidden] { display: none; }
+.plan-card { border: 1px solid var(--border); background: var(--surface-2); border-radius: var(--radius-lg); padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+.plan-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
+.plan-card .hint { margin-top: 0; }
+.plans-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin-bottom: 10px; }
+.plans-table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 520px; }
+.plans-table th, .plans-table td { border-bottom: 1px solid var(--border); padding: 8px 6px; text-align: center; vertical-align: middle; }
+.plans-table tbody th { text-align: left; font-weight: 500; color: var(--text); }
+.plans-table thead th { font-size: 14px; }
+.plans-table .plan-current { background: var(--accent-soft); }
+.plans-table thead .plan-current small { color: var(--accent-text); font-weight: 500; }
+.plans-table tbody th, .plans-table thead th:first-child { position: sticky; left: 0; z-index: 1; background: var(--surface); }
+@media (max-width: 560px) {
+  .plans-table { font-size: 12px; min-width: 480px; }
+  .plans-table th, .plans-table td { padding: 7px 4px; }
+  .plans-table tbody th { width: 118px; min-width: 118px; box-shadow: 1px 0 0 var(--border); }
+  .plans-table thead th { font-size: 13px; }
+}

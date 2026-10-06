@@ -810,6 +810,8 @@ async function sendAssistantMessage(preset) {
     renderAssistantMessages();
     return;
   }
+  // จำนวนคำถามต่อวันตามแพ็กเกจ (ข้อความที่พิมพ์ไว้ยังอยู่ในช่อง)
+  if (typeof canAskAssistant === 'function' && !(await canAskAssistant())) return;
   input.value = '';
   const bookId = assistantActiveBookId();
   if (bookId !== assistantBookId) {
@@ -831,6 +833,7 @@ async function sendAssistantMessage(preset) {
       onStatus: (s) => setAssistantBusy(true, s)
     });
     assistantMessages.push({ role: 'bot', text: answer, at: Date.now(), meta: { ...meta, validNumbers: undefined } });
+    if (typeof recordAssistantQuestion === 'function') recordAssistantQuestion();
   } catch (err) {
     if (isAbortError(err)) assistantMessages.push({ role: 'bot', error: true, text: 'หยุดแล้ว' });
     else assistantMessages.push({ role: 'bot', error: true, text: `ตอบไม่สำเร็จ: ${err.message}` });

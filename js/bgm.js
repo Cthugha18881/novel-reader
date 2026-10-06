@@ -14,6 +14,7 @@ const BGM_MIN_SEGMENT_PARAS = 3;   // ช่วงอารมณ์ที่ส
 
 // ---------- ตั้งค่า ----------
 function isBgmEnabled() {
+  if (typeof planAllows === 'function' && !planAllows('bgm')) return false;
   return localStorage.getItem('nov_bgm_enabled') !== 'false';
 }
 
@@ -377,6 +378,10 @@ function bgmControlsHtml() {
 }
 
 function toggleBgm(on) {
+  if (on && typeof requireFeature === 'function' && !requireFeature('bgm')) {
+    document.querySelectorAll('input[onchange*="toggleBgm("]').forEach(el => { el.checked = false; });
+    return;
+  }
   localStorage.setItem('nov_bgm_enabled', on ? 'true' : 'false');
   if (!on) {
     bgmStop();

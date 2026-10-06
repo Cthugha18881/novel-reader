@@ -59,6 +59,8 @@ function normalizeStoryMoods(raw, paragraphCount = Infinity) {
 }
 
 function isStoryLogEnabled() {
+  // ทำบันทึกอัตโนมัติตามแพ็กเกจ (บันทึกที่มีอยู่แล้วยังใช้กับผู้ช่วยได้ทุกระดับ)
+  if (typeof planAllows === 'function' && !planAllows('autoBible')) return false;
   return localStorage.getItem('nov_story_log') !== 'false';
 }
 
@@ -390,7 +392,7 @@ async function renderStoryLogTab() {
       ${missing.length ? `<button class="btn btn-secondary btn-sm" onclick="runStoryLogBackfill()">📜 สร้างบันทึกที่ขาด ${missing.length} ตอน (~${formatTokenCount(est.input)} + ${formatTokenCount(est.output)} token)</button>` : ''}
       <button class="btn btn-sm" id="story-log-stop-btn" style="display: none;" onclick="abortTask('storylog')">หยุด</button>
       <label style="font-size: 11px; display: flex; gap: 4px; align-items: center; margin-left: auto; cursor: pointer;">
-        <input type="checkbox" ${isStoryLogEnabled() ? 'checked' : ''} onchange="localStorage.setItem('nov_story_log', this.checked ? 'true' : 'false')"> ทำบันทึกอัตโนมัติตอนแปล (ใช้โมเดลงานรอง ~1 คำขอต่อตอน)
+        <input type="checkbox" ${isStoryLogEnabled() ? 'checked' : ''}${typeof planAllows === 'function' && !planAllows('autoBible') ? ` disabled title="${escapeHtml(describePlanLimit('autoBible'))}"` : ''} onchange="localStorage.setItem('nov_story_log', this.checked ? 'true' : 'false')"> ทำบันทึกอัตโนมัติตอนแปล (ใช้โมเดลงานรอง ~1 คำขอต่อตอน)
       </label>
     </div>
     <div id="story-log-progress" style="font-size: 11px; margin-bottom: 6px;"></div>
@@ -534,6 +536,7 @@ async function regenerateStoryLog(chapId) {
 }
 
 async function runStoryLogBackfill() {
+  if (typeof requireFeature === 'function' && !requireFeature('autoBible')) return;
   const bookId = bibleEditingBookId;
   const all = await dbGetChaptersByBook(bookId);
   const missing = chaptersNeedingStoryLog(all);

@@ -34,6 +34,8 @@ async function saveBibleDraft() {
   await dbSaveBookData({ ...fresh, bible: bibleDraft.bible, replaceRules: bibleDraft.replaceRules, styleExamples: bibleDraft.styleExamples });
 }
 function isBibleAutoEnabled() {
+  // อัปเดตอัตโนมัติตามแพ็กเกจ (คู่มือที่มีอยู่แล้วยังเปิดดู/แก้เองได้ทุกระดับ)
+  if (typeof planAllows === 'function' && !planAllows('autoBible')) return false;
   return localStorage.getItem('nov_enable_bible_auto') !== 'false';
 }
 
@@ -218,7 +220,10 @@ async function openBibleModal() {
   bibleEditingBookId = currentBookId;
   bibleDraft = await getBookExtras(currentBookId);
   document.getElementById('bible-book-title').innerText = currentBookTitle;
-  document.getElementById('bible-auto-chk').checked = isBibleAutoEnabled();
+  const autoChk = document.getElementById('bible-auto-chk');
+  autoChk.checked = isBibleAutoEnabled();
+  autoChk.disabled = typeof planAllows === 'function' && !planAllows('autoBible');
+  autoChk.title = autoChk.disabled ? describePlanLimit('autoBible') : '';
   await switchBibleTab(bibleActiveTab);
   openModal('bible-modal');
 }
@@ -373,7 +378,10 @@ async function saveBibleModal() {
   if (!bibleDraft) return;
   bibleDraft.bible.styleNotes = (bibleDraft.bible.styleNotes || '').trim();
   bibleDraft.replaceRules = bibleDraft.replaceRules.filter(r => r.from);
-  localStorage.setItem('nov_enable_bible_auto', document.getElementById('bible-auto-chk').checked ? 'true' : 'false');
+  // แพ็กเกจที่ยังไม่เปิดให้: ช่องนี้ถูกปิดไว้ ไม่บันทึกทับค่าที่ผู้ใช้เคยตั้ง
+  if (typeof planAllows !== 'function' || planAllows('autoBible')) {
+    localStorage.setItem('nov_enable_bible_auto', document.getElementById('bible-auto-chk').checked ? 'true' : 'false');
+  }
   await saveBibleDraft();
   closeModal('bible-modal');
 }

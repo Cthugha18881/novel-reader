@@ -97,6 +97,7 @@ function openSettingsModal(tab) {
   const startSel = document.getElementById('start-page-select');
   if (startSel) startSel.value = getStartPage();
   openModal('settings-modal');
+  if (typeof renderPlanBox === 'function') renderPlanBox();
   renderSafetySettings();
   renderBookshelfBackupNote();
 }
@@ -225,7 +226,10 @@ async function saveSettings() {
 
   localStorage.setItem('nov_retry_limit', document.getElementById('retry-limit').value || "10");
   localStorage.setItem('nov_enable_deep_ner', document.getElementById('enable-deep-ner-scan').checked ? 'true' : 'false');
-  localStorage.setItem('nov_quality_mode', document.getElementById('quality-mode-select').value);
+  const qualityValue = document.getElementById('quality-mode-select').value;
+  // โหมด "ดีที่สุด" ตามแพ็กเกจ: ยังไม่เปิดให้ก็ไม่บันทึกทับค่าเดิม แล้วบอกในข้อความด้านล่าง
+  const bestBlocked = qualityValue === 'best' && typeof planAllows === 'function' && !planAllows('bestMode');
+  if (!bestBlocked) localStorage.setItem('nov_quality_mode', qualityValue);
   localStorage.setItem('nov_llm_fallback_provider', document.getElementById('llm-fallback-provider').value);
   localStorage.setItem('nov_enable_infinite', document.getElementById('enable-infinite-scroll').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_prefetch', document.getElementById('enable-live-prefetch').checked ? 'true' : 'false');
@@ -242,12 +246,13 @@ async function saveSettings() {
   renderSafetyBanner();
   const cfg = getActiveLlmConfig();
   const mismatch = suggestBaseUrlForKey(getProviderKeys('openai')[0], getProviderBaseUrl('openai'));
-  const warning = (cfg.model ? '' : '\n⚠️ ยังไม่ได้เลือกโมเดล กรุณากด "ตรวจเช็กโมเดล" แล้วเลือกโมเดลก่อนใช้งาน') +
+  const warning = (bestBlocked ? `\n⚠️ ${describePlanLimit('bestMode')} ตอนนี้จึงแปลด้วยโหมด "สมดุล"` : '') +
+    (cfg.model ? '' : '\n⚠️ ยังไม่ได้เลือกโมเดล กรุณากด "ตรวจเช็กโมเดล" แล้วเลือกโมเดลก่อนใช้งาน') +
     (mismatch ? `\n⚠️ คีย์ OpenAI-compatible เป็นของ ${mismatch.name} แต่ Base URL ไม่ใช่ ${mismatch.url} คีย์จะถูกส่งผิดที่ กรุณาแก้ Base URL` : '');
   const openaiBase = getProviderBaseUrl('openai');
   const needsReload = openaiBase && !isConnectAllowedByCsp(openaiBase);
   if (cfg.provider === 'dusktale') {
-    appAlert(`บันทึกการตั้งค่าเรียบร้อยแล้ว\nใช้งาน ${LLM_PROVIDERS.dusktale.label}${cfg.keys.length ? '' : '\n⚠️ ยังไม่ได้เข้าสู่ระบบ กรุณาเข้าสู่ระบบด้วยอีเมลที่ ตั้งค่า → 🤖 AI ก่อนแปล'}`);
+    appAlert(`บันทึกการตั้งค่าเรียบร้อยแล้ว\nใช้งาน ${LLM_PROVIDERS.dusktale.label}${bestBlocked ? `\n⚠️ ${describePlanLimit('bestMode')} ตอนนี้จึงแปลด้วยโหมด "สมดุล"` : ''}${cfg.keys.length ? '' : '\n⚠️ ยังไม่ได้เข้าสู่ระบบ กรุณาเข้าสู่ระบบด้วยอีเมลที่ ตั้งค่า → 🤖 AI ก่อนแปล'}`);
     return;
   }
   appAlert(`บันทึกการตั้งค่าเรียบร้อยแล้ว\nใช้งาน ${LLM_PROVIDERS[cfg.provider].label} (${cfg.model || 'ยังไม่เลือกโมเดล'}) — คลัง API Key ${cfg.keys.length} ตัว${warning}`);

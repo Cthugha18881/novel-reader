@@ -100,6 +100,8 @@ ${paras}
 }
 
 async function exportBookEpub(bookId) {
+  // EPUB ตามแพ็กเกจ (TXT และไฟล์สำรองใช้ได้ทุกระดับ)
+  if (typeof requireFeature === 'function' && !requireFeature('epub')) return;
   showGlobalToast('กำลังสร้างไฟล์ EPUB...');
   try {
     const [{ book, chaps }, JSZip] = await Promise.all([loadBookForExport(bookId), loadJSZip()]);

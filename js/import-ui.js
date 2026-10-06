@@ -138,6 +138,7 @@ async function importTextChapters() {
   const books = await dbGetAllBooks();
   const choice = document.getElementById('import-target-book')?.value || 'auto';
   const existingBook = (choice !== 'auto' && choice !== 'new') ? books.find(b => b.bookId === choice) : null;
+  if (!existingBook && typeof canAddBook === 'function' && !(await canAddBook())) return;
   const userTitle = document.getElementById('import-text-title').value.trim();
   const bookId = existingBook?.bookId || 'book_' + hashString(`${userTitle}|text|${Date.now()}`);
   const chosenLang = document.getElementById('import-source-lang')?.value || 'auto';
@@ -231,6 +232,11 @@ async function startTranslateFirst() {
     const books = await dbGetAllBooks();
     const choice = document.getElementById('import-target-book')?.value || 'auto';
     const { bookId: targetBookId, existingBook } = resolveImportTarget(url, choice, books);
+    // เรื่องใหม่: จำนวนเรื่องบนชั้นตามแพ็กเกจ (เพิ่มตอนให้เรื่องเดิมได้เสมอ)
+    if (!books.some(b => b.bookId === targetBookId) && typeof canAddBook === 'function' && !(await canAddBook())) {
+      status.style.display = 'none';
+      return;
+    }
     const existingChaps = await dbGetChaptersByBook(targetBookId);
 
     // ตอนนี้เคยแปลไว้แล้ว: เปิดอ่านเลยโดยไม่ต้องเรียก AI

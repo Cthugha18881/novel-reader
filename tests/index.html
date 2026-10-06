@@ -26,6 +26,7 @@
   <script src="../js/dialogs.js"></script>
   <script src="../js/llm.js"></script>
   <script src="../js/hosted.js"></script>
+  <script src="../js/plans.js"></script>
   <script src="../js/usage.js"></script>
   <script src="../js/lang.js"></script>
   <script src="../js/api.js"></script>
@@ -997,6 +998,34 @@
       const q = describeHostedQuota({ used: 110000, limit: 400000 }, 11000);
       const over = describeHostedQuota({ used: 999999, limit: 400000 }, 11000);
       return q.left === 290000 && q.chaptersLeft === 26 && q.chaptersTotal === 36 && q.pct === 28 && over.left === 0 && over.pct === 100 && describeHostedQuota({}).limit === 0;
+    });
+    test('plans: ค่าตั้งต้นของแต่ละระดับตามที่ตกลง', () => {
+      const g = PLAN_DEFAULTS.guest, f = PLAN_DEFAULTS.free, p = PLAN_DEFAULTS.plus;
+      return g.byokChaptersPerDay === 20 && g.maxBooks === 3 && g.batchMax === 5 && g.assistantPerDay === 10 && !g.autoBible && !g.epub && !g.bgm && !g.bestMode &&
+        f.byokChaptersPerDay === 40 && f.maxBooks === 10 && f.batchMax === 10 && f.assistantPerDay === 30 && f.autoBible && f.epub && f.bgm && !f.bestMode &&
+        p.byokChaptersPerDay === null && p.maxBooks === null && p.batchMax === 50 && p.bestMode && PLAN_DEFAULTS.pro.batchMax === 50;
+    });
+    test('plans: resolveEntitlements รับค่าจากเซิร์ฟเวอร์เฉพาะคีย์/ชนิดที่ถูกต้อง', () => {
+      const e = resolveEntitlements('free', { maxBooks: 25, bestMode: true, batchMax: 'lots', epub: 1, unknownKey: 5, assistantPerDay: null, byokChaptersPerDay: -3 });
+      const fallback = resolveEntitlements('weird', null);
+      return e.maxBooks === 25 && e.bestMode === true && e.batchMax === 10 && e.epub === true && !('unknownKey' in e) && e.assistantPerDay === null && e.byokChaptersPerDay === 40 &&
+        fallback.maxBooks === PLAN_DEFAULTS.free.maxBooks;
+    });
+    test('plans: ไม่ได้ตั้งบริการ Dusktale = ไม่จำกัด', () => {
+      const ent = getEntitlements();
+      return getPlanTier() === 'unlimited' && ent.byokChaptersPerDay === null && ent.maxBooks === null && planAllows('bestMode') && planAllows('epub');
+    });
+    test('plans: ข้อความขีดจำกัดบอกจำนวนของระดับถัดไป', () => {
+      const guest = { tier: 'guest', ...PLAN_DEFAULTS.guest };
+      const free = { tier: 'free', ...PLAN_DEFAULTS.free };
+      return describePlanLimit('byok', guest).includes('20 ตอน') && describePlanLimit('byok', guest).includes('40 ตอนต่อวัน') && describePlanLimit('byok', guest).includes('เข้าสู่ระบบ') &&
+        describePlanLimit('books', free).includes('10 เรื่อง') && describePlanLimit('books', free).includes('ไม่จำกัด') &&
+        describePlanLimit('epub', guest).includes('สมาชิกฟรี') && describePlanLimit('bestMode', free).includes('Plus') &&
+        planDayKey(new Date(2026, 0, 5)) === 'plan_day_2026-01-05';
+    });
+    test('plans: ตารางแพ็กเกจมีทุกระดับและไฮไลต์ระดับปัจจุบัน', () => {
+      const html = buildPlansTableHtml('free');
+      return PLAN_ORDER.every(t => html.includes(PLAN_DEFAULTS[t].name)) && (html.match(/plan-current/g) || []).length > 5 && html.includes('ระดับของคุณ');
     });
     test('errorFromStatus: dusktale ใช้ข้อความของเซิร์ฟเวอร์ ไม่พูดถึง API Key/เติมเครดิต', () => {
       const q = errorFromStatus(402, 'โควตาแปลของเดือนนี้หมดแล้ว', 'dusktale');

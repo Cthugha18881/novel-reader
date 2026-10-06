@@ -154,25 +154,36 @@ async function chooseBatchCount(bookId) {
   if (status && ['running', 'queued'].includes(status.kind)) return appAlert(status.kind === 'running' ? 'เรื่องนี้กำลังแปลล่วงหน้าอยู่' : 'เรื่องนี้อยู่ในคิวแปลแล้ว');
   const book = (await dbGetAllBooks()).find(b => b.bookId === bookId);
   const pending = (await dbGetChaptersByBook(bookId)).filter(isPendingChapter).length;
+  const max = getBatchMax();
+  const options = [3, 5, 10, 20].filter(n => n <= max);
+  if (!options.includes(max)) options.push(max);
   const pick = await appChoose(
-    `แปลต่อจากตอนล่าสุดที่มีในเครื่อง${pending ? ` (มีตอนที่รอแปล ${pending} ตอน จะแปลก่อน)` : ''}\nใช้โควตา AI · จะบอกค่าใช้จ่ายโดยประมาณก่อนเริ่ม`,
+    `แปลต่อจากตอนล่าสุดที่มีในเครื่อง${pending ? ` (มีตอนที่รอแปล ${pending} ตอน จะแปลก่อน)` : ''}\nใช้โควตา AI · จะบอกค่าใช้จ่ายโดยประมาณก่อนเริ่ม${max < 50 ? `\nแพ็กเกจของคุณแปลล่วงหน้าได้ครั้งละไม่เกิน ${max} ตอน` : ''}`,
     [
-      { label: '3 ตอน', value: 3 }, { label: '5 ตอน', value: 5, variant: 'primary' }, { label: '10 ตอน', value: 10 },
-      { label: '20 ตอน', value: 20 }, { label: 'กำหนดเอง…', value: 'custom' }
+      ...options.map(n => ({ label: `${n} ตอน`, value: n, variant: n === Math.min(5, max) ? 'primary' : undefined })),
+      ...(max > 20 ? [{ label: 'กำหนดเอง…', value: 'custom' }] : [])
     ],
     { title: `แปลล่วงหน้า: ${book?.title || 'นิยาย'}` });
   if (pick === null) return;
   let count = pick;
   if (pick === 'custom') {
-    const raw = await appPrompt('จำนวนตอน (1-50)', '5', { title: 'แปลล่วงหน้ากี่ตอน', confirmLabel: 'ต่อไป' });
+    const raw = await appPrompt(`จำนวนตอน (1-${max})`, '5', { title: 'แปลล่วงหน้ากี่ตอน', confirmLabel: 'ต่อไป' });
     if (raw === null) return;
     count = parseInt(raw, 10);
   }
   await startBatchTranslateForBook(bookId, count);
 }
 
+/** จำนวนตอนสูงสุดต่อครั้งของการแปลล่วงหน้า (ตามแพ็กเกจ ไม่เกิน 50) */
+function getBatchMax() {
+  const planMax = typeof getEntitlements === 'function' ? getEntitlements().batchMax : null;
+  return Math.min(50, planMax ?? 50);
+}
+
 async function startBatchTranslateForBook(bookId, count) {
-  if (!Number.isInteger(count) || count < 1 || count > 50) return appAlert("กรุณาระบุจำนวนตอนระหว่าง 1 ถึง 50");
+  const max = getBatchMax();
+  if (Number.isInteger(count) && count > max && max < 50 && typeof showPlanLimit === 'function') return showPlanLimit('batch');
+  if (!Number.isInteger(count) || count < 1 || count > max) return appAlert(`กรุณาระบุจำนวนตอนระหว่าง 1 ถึง ${max}`);
   if (batchCurrent?.bookId === bookId || batchQueue.some(j => j.bookId === bookId)) return appAlert('เรื่องนี้กำลังแปลล่วงหน้าหรืออยู่ในคิวแล้ว');
   if (!hasActiveApiKey()) return appAlert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
 

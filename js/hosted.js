@@ -138,6 +138,7 @@ async function hostedSignOut() {
   if (session?.access_token) await hostedAuthFetch('/logout', null, { token: session.access_token }).catch(() => {});
   saveHostedSession(null);
   hostedMe = null;
+  try { localStorage.removeItem('nov_plan_cache'); } catch (e) {}
 }
 
 /** แพ็กเกจและโควตาของเดือนนี้ (จากเซิร์ฟเวอร์) */
@@ -147,6 +148,8 @@ async function fetchHostedMe() {
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new LLMError(data.error?.message || `HTTP ${res.status}`, res.status === 401 ? 'auth' : 'server', res.status);
   hostedMe = data;
+  // จำแพ็กเกจและสิทธิ์ไว้ใช้ตอนออฟไลน์ (plans.js)
+  if (typeof savePlanCache === 'function') savePlanCache(data);
   return data;
 }
 
@@ -290,6 +293,7 @@ async function hostedSignOutFromUi() {
   if (!(await appConfirm('ออกจากระบบ Dusktale ในเครื่องนี้ นิยายและคลังศัพท์ยังอยู่ครบ', { title: 'ออกจากระบบ', confirmLabel: 'ออกจากระบบ' }))) return;
   await hostedSignOut();
   renderHostedAccountBox();
+  if (typeof renderPlanBox === 'function') renderPlanBox();
 }
 
 /** ปุ่มบนหน้าต้อนรับ: เปิดหน้าตั้งค่าที่กล่องเข้าสู่ระบบ */

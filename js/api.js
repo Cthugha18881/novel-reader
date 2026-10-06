@@ -221,6 +221,8 @@ const QUALITY_MODES = ['fast', 'balanced', 'thorough', 'best'];
 
 function getQualityMode() {
   const mode = localStorage.getItem('nov_quality_mode');
+  // โหมด "ดีที่สุด" เฉพาะแพ็กเกจที่เปิดให้ (ค่าที่ตั้งไว้ยังเก็บไว้ อัปเกรดแล้วกลับมาใช้ได้เลย)
+  if (mode === 'best' && typeof planAllows === 'function' && !planAllows('bestMode')) return 'balanced';
   if (QUALITY_MODES.includes(mode)) return mode;
   // ค่าจากรุ่นก่อน (nov_verify_mode / nov_enable_bilingual_verify)
   const legacy = localStorage.getItem('nov_verify_mode');
@@ -1623,6 +1625,8 @@ async function translateChapter(rawText, ctx, { onStatus = null, signal = null, 
     if (onStatus) onStatus(chapterRule.reason === 'locked' ? 'ตรวจพบตอนที่ต้องซื้อ/ล็อกอินก่อนอ่าน ข้ามการแปลไว้ก่อน' : 'ตรวจพบตอนกันก๊อป (เนื้อหาหลอก) ข้ามการแปลไว้ก่อน');
     return buildPlaceholderResult(sourceParas, rawChapTitle, rawBookTitle, chapterRule.reason);
   }
+  // จำนวนตอนต่อวันตามแพ็กเกจ (แปลด้วย API Key ของผู้ใช้) ตอนข้าม/ตอนล็อกด้านบนไม่นับ
+  if (!benchmark && typeof assertCanTranslateChapter === 'function') await assertCanTranslateChapter({ background: true });
   const ruleKinds = labelParagraphsByRules(sourceParas);
   const noteMode = chapterRule.type === 'author_note' && chapterRule.confidence === 'high';
 
@@ -1655,5 +1659,6 @@ async function translateChapter(rawText, ctx, { onStatus = null, signal = null, 
     }
   }
   if (!noteMode) await recordChapterAverage(signal, getQualityMode());
+  if (typeof recordChapterTranslated === 'function') await recordChapterTranslated();
   return result;
 }
