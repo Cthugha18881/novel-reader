@@ -1,6 +1,6 @@
 // ==================== MODEL BENCHMARK (เทียบโมเดลด้วยตอนเดียวกัน) ====================
-// แปลตอนที่เปิดอยู่ด้วยหลายโมเดล (ผู้ให้บริการที่ใส่คีย์ไว้แล้ว) แล้วเทียบคำแปลทีละย่อหน้า เวลา token จริง และราคาต่อตอน
-// ใช้ข้อมูลนี้เลือกโมเดลหลัก/โมเดลงานรอง และตั้งราคาแผนในอนาคต
+// แปลตอนที่เปิดอยู่ด้วยหลายโมเดล (ผู้ให้บริการที่ใส่คีย์ไว้แล้ว) แล้วเทียบคำแปลทีละย่อหน้า เวลา และ token จริง
+// ใช้ข้อมูลนี้เลือกโมเดลหลัก/โมเดลงานรอง
 // การเทียบไม่แตะเรื่องจริง: ไม่เขียนคลังศัพท์ ไม่ทำบันทึกเหตุการณ์ ไม่เปลี่ยนการตั้งค่า (เลือก "ใช้ผลนี้" เองถึงจะเปลี่ยนตอน)
 
 const BENCHMARK_MAX_MODELS = 4;
@@ -36,7 +36,6 @@ async function openBenchmarkModal() {
 
 function benchmarkRowHtml(row = {}, i = 0) {
   const providers = benchmarkProviders();
-  const prices = getModelPrices()[row.model] || {};
   const models = getCachedModels(row.provider || providers[0] || 'gemini');
   return `<div class="bench-row" data-row="${i}">
     <select class="form-input" data-bench="provider" onchange="this.closest('.bench-row').querySelector('[data-bench=model]').setAttribute('list', 'bench-models-' + this.value)">
@@ -47,8 +46,6 @@ function benchmarkRowHtml(row = {}, i = 0) {
       <option value="">คิด: ตามตั้งค่า</option>
       ${REASONING_LEVELS.map(l => `<option value="${l}" ${row.reasoning === l ? 'selected' : ''}>คิด: ${({ none: 'ปิด', low: 'น้อย', medium: 'กลาง', high: 'มาก', default: 'ค่าของโมเดล' })[l]}</option>`).join('')}
     </select>
-    <input class="form-input" data-bench="in" type="number" min="0" step="0.001" value="${Number.isFinite(prices.in) ? prices.in : ''}" placeholder="$ ขาเข้า/1M" title="ราคา token ขาเข้า (ดอลลาร์ต่อ 1 ล้าน token)">
-    <input class="form-input" data-bench="out" type="number" min="0" step="0.001" value="${Number.isFinite(prices.out) ? prices.out : ''}" placeholder="$ ขาออก/1M" title="ราคา token ขาออก (ดอลลาร์ต่อ 1 ล้าน token)">
     <button class="btn btn-danger" style="padding: 2px 8px;" onclick="this.closest('.bench-row').remove()" title="เอาออก">✕</button>
   </div>`;
 }
@@ -64,9 +61,9 @@ function renderBenchmarkSetup(rows) {
   }
   const datalists = providers.map(p => `<datalist id="bench-models-${p}">${getCachedModels(p).map(m => `<option value="${escapeHtml(typeof m === 'string' ? m : m.id || '')}">`).join('')}</datalist>`).join('');
   box.innerHTML = `
-    <div class="quality-hint" style="margin-bottom: 6px;">แปลตอนที่เปิดอยู่ด้วยแต่ละโมเดล แล้วเทียบคำแปล เวลา token จริง และราคา ใช้โควตาของแต่ละผู้ให้บริการ (ประมาณเท่าแปล 1 ตอนต่อโมเดล) ไม่แตะคลังศัพท์และตอนจริง</div>
+    <div class="quality-hint" style="margin-bottom: 6px;">แปลตอนที่เปิดอยู่ด้วยแต่ละโมเดล แล้วเทียบคำแปล เวลา และ token จริง ใช้โควตาของแต่ละผู้ให้บริการ (ประมาณเท่าแปล 1 ตอนต่อโมเดล) ไม่แตะคลังศัพท์และตอนจริง</div>
     <div style="font-size: 12px; margin-bottom: 6px;">ตอน: <b>${usable ? escapeHtml(chap.title) : 'ยังไม่ได้เปิดตอนที่มีต้นฉบับ'}</b>${usable ? ` · ${(chap.paragraphs || []).filter(p => p.src).length} ย่อหน้า` : ''}</div>
-    <div class="bench-row bench-row-head"><span>ผู้ให้บริการ</span><span>โมเดล</span><span>การคิด</span><span>$ ขาเข้า/1M</span><span>$ ขาออก/1M</span><span></span></div>
+    <div class="bench-row bench-row-head"><span>ผู้ให้บริการ</span><span>โมเดล</span><span>การคิด</span><span></span></div>
     <div id="bench-rows">${(rows.length ? rows : [{}]).map(benchmarkRowHtml).join('')}</div>
     ${datalists}
     <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 6px;">
@@ -92,16 +89,8 @@ function addBenchmarkRow() {
 function readBenchmarkRows() {
   return [...document.querySelectorAll('#bench-rows .bench-row')].map(row => {
     const v = (k) => row.querySelector(`[data-bench="${k}"]`)?.value?.trim() || '';
-    const num = (k) => (v(k) === '' ? null : Number(v(k)));
-    return { provider: v('provider'), model: v('model'), reasoning: v('reasoning'), priceIn: num('in'), priceOut: num('out') };
+    return { provider: v('provider'), model: v('model'), reasoning: v('reasoning') };
   }).filter(r => r.provider && r.model);
-}
-
-/** ราคาต่อตอนจาก token ที่วัดได้ (ดอลลาร์) null = ไม่ได้ใส่ราคา */
-function benchmarkCost(r) {
-  if (!Number.isFinite(r.priceIn) || !Number.isFinite(r.priceOut)) return null;
-  return estimateCost({ provider: r.provider, model: r.model, input: r.input, output: r.output, cacheRead: r.cacheRead || 0, cacheWrite: r.cacheWrite || 0 },
-    { [r.model]: { in: r.priceIn, out: r.priceOut } });
 }
 
 async function runBenchmark() {
@@ -111,13 +100,10 @@ async function runBenchmark() {
   const rawText = (chap?.paragraphs || []).map(p => p.src || '').filter(Boolean).join('\n\n');
   if (!rawText) return appAlert('ตอนนี้ไม่มีต้นฉบับ');
   const qualityMode = document.getElementById('bench-quality').value;
-  if (!(await appConfirm(`แปลตอน "${chap.title}" ด้วย ${rows.length} โมเดล (โหมด ${qualityMode})\nใช้โควตา/ค่าใช้จ่ายประมาณเท่าแปล ${rows.length} ตอน`, { title: 'เทียบโมเดล', confirmLabel: `เริ่มเทียบ ${rows.length} โมเดล` }))) return;
+  if (!(await appConfirm(`แปลตอน "${chap.title}" ด้วย ${rows.length} โมเดล (โหมด ${qualityMode})\nใช้โควตา AI (token) ประมาณเท่าแปล ${rows.length} ตอน`, { title: 'เทียบโมเดล', confirmLabel: `เริ่มเทียบ ${rows.length} โมเดล` }))) return;
 
-  // จำโมเดลที่เลือกไว้ และราคาที่ใส่ (หน้าการใช้งาน AI ใช้ราคาเดียวกันคำนวณค่าใช้จ่าย)
+  // จำโมเดลที่เลือกไว้
   localStorage.setItem('nov_benchmark_models', JSON.stringify(rows.map(r => ({ provider: r.provider, model: r.model, reasoning: r.reasoning }))));
-  const prices = getModelPrices();
-  rows.forEach(r => { if (Number.isFinite(r.priceIn) && Number.isFinite(r.priceOut)) prices[r.model] = { ...(prices[r.model] || {}), in: r.priceIn, out: r.priceOut }; });
-  saveModelPrices(prices);
 
   const books = await dbGetAllBooks();
   const ctx = makeBookContext(books.find(b => b.bookId === currentBookId) || getCurrentBookContext());
@@ -179,11 +165,6 @@ async function runBenchmark() {
   }
 }
 
-function formatUsd(v) {
-  if (v === null || v === undefined || !Number.isFinite(v)) return '—';
-  return v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(3)}`;
-}
-
 function renderBenchmarkResults() {
   const box = document.getElementById('benchmark-results');
   if (!box) return;
@@ -195,13 +176,11 @@ function renderBenchmarkResults() {
   const ok = s.results.filter(r => r.ok);
   const sameChapter = s.chapId === chapters[currentChapterIndex]?.id;
   const summaryRows = s.results.map((r, i) => {
-    if (!r.ok) return `<tr><td>${escapeHtml(r.label)}</td><td colspan="6" style="color: var(--danger);">ไม่สำเร็จ: ${escapeHtml(r.error || '')}</td></tr>`;
-    const cost = benchmarkCost(r);
+    if (!r.ok) return `<tr><td>${escapeHtml(r.label)}</td><td colspan="5" style="color: var(--danger);">ไม่สำเร็จ: ${escapeHtml(r.error || '')}</td></tr>`;
     return `<tr>
       <td>${escapeHtml(r.label)}</td>
       <td>${r.seconds.toFixed(0)} วิ</td>
       <td>${formatTokenCount(r.input)} / ${formatTokenCount(r.output)}${r.reasoningTokens ? `<br><small title="token ที่โมเดลใช้คิดก่อนตอบ รวมอยู่ในขาออกแล้ว คิดเงินเป็นขาออก">ใช้คิด ${formatTokenCount(r.reasoningTokens)} (${Math.round(r.reasoningTokens / Math.max(1, r.output) * 100)}%)</small>` : ''}${r.cacheRead ? `<br><small>cache ${formatTokenCount(r.cacheRead)}</small>` : ''}</td>
-      <td>${formatUsd(cost)}<br><small>${cost !== null ? `1,000 ตอน ≈ $${(cost * 1000).toFixed(2)}` : 'ใส่ราคาเพื่อคำนวณ'}</small></td>
       <td>${r.suspicious}${r.missing ? ` · ขาด ${r.missing}` : ''}</td>
       <td>${sameChapter ? `<button class="btn" style="padding: 2px 8px; font-size: 11px;" onclick="applyBenchmarkResult(${i})" title="ใช้คำแปลของโมเดลนี้กับตอนนี้ (ฉบับเดิมเก็บไว้ในประวัติ)">ใช้ผลนี้</button>` : ''}</td>
     </tr>`;
@@ -218,10 +197,10 @@ function renderBenchmarkResults() {
   box.innerHTML = `
     <div style="font-size: 12px; margin: 10px 0 6px;"><b>ผลเทียบ:</b> ${escapeHtml(s.chapTitle || '')} · โหมด ${escapeHtml(s.qualityMode)} · ${new Date(s.at).toLocaleString('th-TH')}${sameChapter ? '' : ' <span class="quality-hint">(คนละตอนกับที่เปิดอยู่)</span>'}</div>
     <div class="bench-table-wrap"><table class="bench-summary">
-      <thead><tr><th>โมเดล</th><th>เวลา</th><th>token เข้า / ออก</th><th>ราคาต่อตอน</th><th>ย่อหน้าน่าสงสัย</th><th></th></tr></thead>
+      <thead><tr><th>โมเดล</th><th>เวลา</th><th>token เข้า / ออก</th><th>ย่อหน้าน่าสงสัย</th><th></th></tr></thead>
       <tbody>${summaryRows}</tbody>
     </table></div>
-    <div class="quality-hint">token เป็นยอดที่ผู้ให้บริการส่งกลับมา (รวมตรวจทาน/เกลาตามโหมด) ราคาเป็นค่าประมาณ ยอดจริงดูที่หน้าเว็บผู้ให้บริการ</div>
+    <div class="quality-hint">token เป็นยอดที่ผู้ให้บริการส่งกลับมา (รวมตรวจทาน/เกลาตามโหมด) ยอดจริงดูที่หน้าเว็บผู้ให้บริการ</div>
     ${ok.length ? `<div class="bench-table-wrap" style="margin-top: 8px;"><table class="bench-paras">
       <thead><tr><th>ต้นฉบับ</th>${ok.map(r => `<th>${escapeHtml(r.label)}</th>`).join('')}</tr></thead>
       <tbody>${paraRows}</tbody>

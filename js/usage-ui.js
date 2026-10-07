@@ -1,4 +1,4 @@
-// ==================== หน้าการใช้งาน AI และเพดานค่าใช้จ่าย (แยกจาก app.js; ตัวนับอยู่ใน usage.js) ====================
+// ==================== หน้าการใช้งาน AI และเพดาน token (แยกจาก app.js; ตัวนับอยู่ใน usage.js) ====================
 // โหลดหลัง app.js (ดู index.html) ทุกอย่างในไฟล์นี้ถูกเรียกหลังหน้าโหลดเสร็จ จึงใช้ตัวแปรของ app.js ได้ตามปกติ
 
 // ==================== AI USAGE DASHBOARD ====================
@@ -14,7 +14,7 @@ function notifyProfileFailing(host) {
 
 /** hook จาก usage.js: เกินเพดานแล้วแต่ผู้ใช้กดแปลเอง */
 function askBudgetOverride(message) {
-  return appConfirm(message, { title: 'เกินเพดานค่าใช้จ่าย', confirmLabel: 'แปลต่อครั้งนี้', cancelLabel: 'ไม่แปล' });
+  return appConfirm(message, { title: 'เกินเพดานการใช้งาน', confirmLabel: 'แปลต่อครั้งนี้', cancelLabel: 'ไม่แปล' });
 }
 
 /** hook จาก usage.js: ใช้ไปแล้ว 80% ของเพดาน */
@@ -28,15 +28,14 @@ function dismissBudgetBanner() {
   renderSafetyBanner();
 }
 
-function usageCardHtml(label, t, unitPrices) {
+function usageCardHtml(label, t) {
   const cachePct = t.input ? Math.round(t.cacheRead / t.input * 100) : 0;
-  const costText = t.cost > 0 || !t.unpricedTokens ? `~$${t.cost.toFixed(t.cost < 1 ? 3 : 2)}` : '—';
   return `<div class="usage-card">
     <div class="usage-card-label">${label}</div>
     <div class="usage-card-main">~${formatTokenCount(t.tokens)} <span>token (ประมาณ)</span></div>
     <div class="usage-card-sub">ส่ง ${formatTokenCount(t.input)} · รับ ${formatTokenCount(t.output)} · ${t.calls.toLocaleString()} ครั้ง</div>
     ${t.estimatedInput ? `<div class="usage-card-sub" title="คำขอที่ส่งไปแล้วแต่ถูกยกเลิก/การเชื่อมต่อหลุด ผู้ให้บริการอาจคิดค่าขาเข้า">ยอดส่งรวมค่าประมาณ ${formatTokenCount(t.estimatedInput)} จากคำขอที่ไม่ได้ยอดกลับมา</div>` : ''}
-    <div class="usage-card-sub">อ่านจาก cache ${cachePct}% · ค่าใช้จ่าย ${costText}${t.unpricedTokens && unitPrices ? ' (บางโมเดลยังไม่กรอกราคา)' : ''}</div>
+    <div class="usage-card-sub">อ่านจาก cache ${cachePct}%</div>
   </div>`;
 }
 
@@ -59,10 +58,9 @@ async function renderUsageDashboard() {
   const totals = await getUsageTotals();
   const budget = getBudgetSettings();
   const state = evaluateBudget(totals, budget);
-  const prices = getModelPrices();
 
   document.getElementById('usage-summary').innerHTML =
-    usageCardHtml('วันนี้', totals.day, true) + usageCardHtml('เดือนนี้', totals.month, true);
+    usageCardHtml('วันนี้', totals.day) + usageCardHtml('เดือนนี้', totals.month);
 
   const statusEl = document.getElementById('usage-budget-status');
   if (!budget.daily && !budget.monthly) {
@@ -72,17 +70,16 @@ async function renderUsageDashboard() {
     const color = state.level === 'over' ? '#dc2626' : (state.level === 'warn' ? '#b45309' : '#16a34a');
     statusEl.innerHTML = `<span style="color: ${color}; font-weight: 600;">${state.level === 'over' ? '⛔ เกินเพดานแล้ว' : (state.level === 'warn' ? '⚠️ ใกล้ถึงเพดาน' : '✓ ยังไม่ถึงเพดาน')}</span>
       — ${escapeHtml(w.period)}ใช้ไป ${escapeHtml(formatBudgetAmount(w.used, state.unit))} จาก ${escapeHtml(formatBudgetAmount(w.limit, state.unit))} (${Math.round(w.ratio * 100)}%)
-      ${state.unpricedWarning ? '<div style="color: var(--warning);">บางโมเดลยังไม่กรอกราคา ยอดเงินจึงต่ำกว่าความจริง (กรอกราคาด้านล่าง หรือเปลี่ยนหน่วยเพดานเป็น token)</div>' : ''}`;
+      ${state.unit === 'usd' ? '<div style="color: var(--warning);">เพดานนี้ตั้งไว้ด้วยหน่วยเดิม (เงิน) ยังใช้งานอยู่ กดบันทึกเพดานใหม่ด้านล่างเพื่อเปลี่ยนเป็นจำนวน token</div>' : ''}`;
   }
-  document.getElementById('budget-unit').value = budget.unit;
-  document.getElementById('budget-daily').value = budget.daily || '';
-  document.getElementById('budget-monthly').value = budget.monthly || '';
-  updateBudgetUnitHint();
+  // เพดานแบบเดิม (เงิน) ไม่เติมลงช่อง เพราะช่องเป็นหน่วย token แล้ว
+  document.getElementById('budget-daily').value = budget.unit === 'tokens' ? (budget.daily || '') : '';
+  document.getElementById('budget-monthly').value = budget.unit === 'tokens' ? (budget.monthly || '') : '';
 
   const tableRows = (groups, labelFn) => groups.length
-    ? groups.map(g => `<tr><td>${labelFn(g.key)}</td><td>${formatTokenCount(g.total.input)}</td><td>${formatTokenCount(g.total.output)}</td><td>${g.total.input ? Math.round(g.total.cacheRead / g.total.input * 100) : 0}%</td><td>${g.total.unpricedTokens ? '—' : '$' + g.total.cost.toFixed(g.total.cost < 1 ? 3 : 2)}</td></tr>`).join('')
-    : '<tr><td colspan="5" style="opacity: 0.6; text-align: center;">ยังไม่มีการใช้งานในเดือนนี้</td></tr>';
-  const head = '<thead><tr><th></th><th>ส่ง</th><th>รับ</th><th>cache</th><th>เงิน</th></tr></thead>';
+    ? groups.map(g => `<tr><td>${labelFn(g.key)}</td><td>${formatTokenCount(g.total.input)}</td><td>${formatTokenCount(g.total.output)}</td><td>${g.total.input ? Math.round(g.total.cacheRead / g.total.input * 100) : 0}%</td></tr>`).join('')
+    : '<tr><td colspan="4" style="opacity: 0.6; text-align: center;">ยังไม่มีการใช้งานในเดือนนี้</td></tr>';
+  const head = '<thead><tr><th></th><th>ส่ง</th><th>รับ</th><th>cache</th></tr></thead>';
 
   const byModel = groupUsage(totals.records, r => `${r.provider}|${r.model}`);
   document.getElementById('usage-by-model').innerHTML = `<table class="backup-compare-table">${head}<tbody>${tableRows(byModel, k => {
@@ -107,24 +104,6 @@ async function renderUsageDashboard() {
       <div class="usage-day-label">${Number(d.slice(8))}</div>
     </div>`).join('');
 
-  // ราคาของโมเดลที่ใช้เดือนนี้ + โมเดลที่ตั้งไว้ตอนนี้
-  const models = new Map();
-  byModel.forEach(g => { const [provider, model] = g.key.split('|'); models.set(model, provider); });
-  Object.keys(LLM_PROVIDERS).forEach(p => {
-    [getProviderModel(p), getProviderAuxModel(p)].filter(Boolean).forEach(m => { if (!models.has(m) && getProviderKeys(p).length) models.set(m, p); });
-  });
-  Object.keys(prices).forEach(m => { if (!models.has(m)) models.set(m, ''); });
-  const priceVal = v => Number.isFinite(v) ? v : '';
-  document.getElementById('usage-prices').innerHTML = [...models.entries()].map(([model, provider]) => {
-    const p = prices[model] || {};
-    return `<div class="usage-price-row" data-model="${escapeHtml(model)}">
-      <div class="usage-price-model">${escapeHtml(model)}${provider ? ` <span style="opacity: 0.55;">(${escapeHtml(LLM_PROVIDERS[provider]?.label || provider)})</span>` : ''}</div>
-      <input type="number" min="0" step="0.01" class="form-input" data-field="in" placeholder="input" value="${priceVal(p.in)}">
-      <input type="number" min="0" step="0.01" class="form-input" data-field="out" placeholder="output" value="${priceVal(p.out)}">
-      <input type="number" min="0" step="0.001" class="form-input" data-field="cached" placeholder="cache" value="${priceVal(p.cached)}">
-    </div>`;
-  }).join('') || '<div style="opacity: 0.6;">ยังไม่มีโมเดลที่ใช้งาน</div>';
-
   // คำขอที่ผู้ให้บริการอาจคิดเงินแต่แอพไม่ได้ยอดกลับมา (ถูกยกเลิกกลางทาง / เชื่อมต่อหลุด)
   const reqs = await getRequestLog();
   const noUsage = reqs.filter(r => !r.usage);
@@ -143,43 +122,18 @@ async function renderUsageDashboard() {
   ).join('') || '<div style="opacity: 0.6;">ยังไม่มีข้อผิดพลาด</div>';
 }
 
-function updateBudgetUnitHint() {
-  const unit = document.getElementById('budget-unit').value;
-  document.getElementById('budget-unit-hint').innerText = unit === 'usd'
-    ? 'หน่วยเป็นดอลลาร์สหรัฐ (คิดจากราคาที่กรอกด้านล่าง) เช่น 1 = $1'
-    : 'หน่วยเป็นจำนวน token (ส่ง + รับ) เช่น 2000000 = 2M token';
-}
-
 async function saveBudgetSettings() {
   const read = id => {
     const n = parseFloat(document.getElementById(id).value);
     return Number.isFinite(n) && n > 0 ? String(n) : '';
   };
-  localStorage.setItem('nov_budget_unit', document.getElementById('budget-unit').value);
+  localStorage.setItem('nov_budget_unit', 'tokens');
   localStorage.setItem('nov_budget_daily', read('budget-daily'));
   localStorage.setItem('nov_budget_monthly', read('budget-monthly'));
   budgetBannerText = '';
   renderSafetyBanner();
   await renderUsageDashboard();
   showGlobalToast('✓ บันทึกเพดานแล้ว');
-  setTimeout(hideGlobalToast, 1500);
-}
-
-async function saveModelPricesFromForm() {
-  const prices = getModelPrices();
-  document.querySelectorAll('#usage-prices .usage-price-row').forEach(row => {
-    const model = row.dataset.model;
-    const entry = {};
-    row.querySelectorAll('input').forEach(inp => {
-      const n = parseFloat(inp.value);
-      if (Number.isFinite(n) && n >= 0) entry[inp.dataset.field] = n;
-    });
-    if (Number.isFinite(entry.in) && Number.isFinite(entry.out)) prices[model] = entry;
-    else delete prices[model];
-  });
-  saveModelPrices(prices);
-  await renderUsageDashboard();
-  showGlobalToast('✓ บันทึกราคาแล้ว');
   setTimeout(hideGlobalToast, 1500);
 }
 

@@ -3,7 +3,7 @@
 let isBatchRunning = false;
 let bookSortModes = {};
 
-// คิวแปลล่วงหน้า: แปลทีละเรื่อง เรื่องที่กดทีหลังรอคิว (ยืนยันค่าใช้จ่ายตอนกดแล้ว จึงเริ่มต่อได้เลย)
+// คิวแปลล่วงหน้า: แปลทีละเรื่อง เรื่องที่กดทีหลังรอคิว (ยืนยันจำนวน token ตอนกดแล้ว จึงเริ่มต่อได้เลย)
 let batchQueue = [];          // [{ bookId, count, title }]
 let batchCurrent = null;      // { bookId, count, done, desc, title }
 const batchResults = {};      // bookId -> { kind: 'done' | 'stopped' | 'error' | 'locked', desc, count, done }

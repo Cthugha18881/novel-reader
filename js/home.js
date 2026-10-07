@@ -367,7 +367,7 @@ function openHomeBookMenu(anchor, bookId) {
     { icon: '📚', label: 'รายละเอียดและตอนทั้งหมด', hidden: homeBookId === bookId, onSelect: () => openHome({ bookId }) },
     running
       ? { icon: '⏹', label: status.kind === 'running' ? 'หยุดแปลล่วงหน้า' : 'ยกเลิกคิวแปล', onSelect: () => cancelBatchTranslate(bookId) }
-      : { icon: '⚡', label: 'แปลล่วงหน้า…', hint: 'ใช้โควตา AI · บอกค่าใช้จ่ายก่อนเริ่ม', onSelect: () => chooseBatchCount(bookId) },
+      : { icon: '⚡', label: 'แปลล่วงหน้า…', hint: 'ใช้โควตา AI · บอกจำนวน token ก่อนเริ่ม', onSelect: () => chooseBatchCount(bookId) },
     { icon: '🔎', label: 'เช็กตอนใหม่', hint: 'ไม่ใช้โควตา AI', onSelect: () => checkNewChaptersForBook(bookId) },
     isBookFollowed(entry?.b)
       ? { icon: '🔕', label: 'เลิกติดตามตอนใหม่', onSelect: () => setBookFollow(bookId, false) }
@@ -390,7 +390,7 @@ function openHomeMenu(anchor) {
     { icon: '🔔', label: 'เช็กตอนใหม่ทุกเรื่อง', hint: 'ไม่ใช้โควตา AI', onSelect: checkNewChaptersForAllBooks },
     { icon: '⬇️', label: 'สำรองข้อมูลทั้งหมด', hint: 'ไฟล์ .json ไม่รวม API Key', onSelect: exportBackup },
     { icon: '⬆️', label: 'นำเข้าไฟล์สำรอง', onSelect: triggerBackupImport },
-    { icon: '📊', label: 'การใช้งาน AI', hint: 'token ที่ใช้ เพดานค่าใช้จ่าย', onSelect: openUsageModal }
+    { icon: '📊', label: 'การใช้งาน AI', hint: 'token ที่ใช้ เพดาน token', onSelect: openUsageModal }
   ], { title: 'ชั้นหนังสือ' });
 }
 

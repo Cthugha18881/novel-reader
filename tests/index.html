@@ -1191,10 +1191,6 @@
       const s = describeBatchSkipped(['ก', 'ข', 'ค', 'ง'], err);
       return describeBatchSkipped([], null) === '' && s.includes('ข้าม 4 ตอน') && s.includes('"ก"') && s.includes('อีก 1 ตอน') && s.includes(err.message);
     });
-    test('benchmarkCost: คิดจาก token จริง + ราคาที่ใส่ / ไม่ใส่ราคา = null', () => {
-      const c = benchmarkCost({ provider: 'openai', model: 'm', input: 1e6, output: 1e6, priceIn: 0.14, priceOut: 0.28 });
-      return Math.abs(c - 0.42) < 1e-9 && benchmarkCost({ model: 'm', input: 1, output: 1, priceIn: null, priceOut: 1 }) === null;
-    });
     test('getBackupSettingNames: มีตั้งค่าการอ่าน/เสียงอ่าน แต่ไม่มีเสียงที่เลือก (ขึ้นกับเครื่อง)', () => {
       const names = getBackupSettingNames();
       return names.includes('nov_reading_prefs') && names.includes('nov_tts_rate') && !names.includes('nov_tts_voice');

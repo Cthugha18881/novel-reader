@@ -6,7 +6,7 @@
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/hosted-config.js"></script>
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.19.1</title>
+  <title>Dusktale v3.19.2</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -203,23 +203,17 @@
       </div>
       <div class="modal-scrollable-body" style="max-height: 68vh; font-size: 12px;">
         <div class="usage-estimate-note">
-          ⚠️ <b>ตัวเลขในหน้านี้เป็นค่าโดยประมาณ</b> นับจาก token ที่ผู้ให้บริการแจ้งกลับมาในแต่ละคำขอ ยอดที่ถูกเรียกเก็บจริงอาจ<b>สูงกว่านี้</b>
-          (เช่น ผู้ให้บริการบางเจ้าคิดส่วนที่ไม่ได้แจ้งกลับมา หรือมีคำขอที่ถูกยกเลิกกลางทาง)
-          ยอดจริงให้ดูที่หน้าเว็บของผู้ให้บริการ และควรตั้งเพดานต่ำกว่างบที่มีจริงเผื่อไว้
+          ⚠️ <b>ตัวเลขในหน้านี้เป็นค่าโดยประมาณ</b> นับจาก token ที่ผู้ให้บริการแจ้งกลับมาในแต่ละคำขอ ยอดที่ใช้จริงอาจ<b>สูงกว่านี้</b>
+          (เช่น ผู้ให้บริการบางเจ้านับส่วนที่ไม่ได้แจ้งกลับมา หรือมีคำขอที่ถูกยกเลิกกลางทาง)
+          ยอดจริงให้ดูที่หน้าเว็บของผู้ให้บริการ และควรตั้งเพดานต่ำกว่าที่ต้องการเผื่อไว้
         </div>
         <div id="usage-summary" class="usage-cards"></div>
         <div class="form-label" style="margin-top: 12px;">14 วันล่าสุด</div>
         <div id="usage-days" class="usage-days"></div>
 
-        <div class="form-label" style="margin-top: 14px;">เพดานค่าใช้จ่าย</div>
+        <div class="form-label" style="margin-top: 14px;">เพดานการใช้งาน (token)</div>
         <div id="usage-budget-status" style="margin-bottom: 8px; line-height: 1.6;"></div>
         <div style="display: flex; gap: 6px; flex-wrap: wrap; align-items: flex-end;">
-          <label style="flex: 1; min-width: 110px;">หน่วย
-            <select id="budget-unit" class="form-input" onchange="updateBudgetUnitHint()">
-              <option value="tokens">จำนวน token</option>
-              <option value="usd">เงิน (USD)</option>
-            </select>
-          </label>
           <label style="flex: 1; min-width: 100px;">ต่อวัน
             <input type="number" min="0" id="budget-daily" class="form-input" placeholder="ไม่จำกัด">
           </label>
@@ -228,19 +222,13 @@
           </label>
           <button class="btn btn-primary" onclick="saveBudgetSettings()">บันทึกเพดาน</button>
         </div>
-        <div class="hint" id="budget-unit-hint"></div>
+        <div class="hint" id="budget-unit-hint">หน่วยเป็นจำนวน token (ส่ง + รับ) เช่น 2000000 = 2M token</div>
         <div class="hint" style="margin-top: 2px;">ใกล้ถึงเพดาน (80%) จะเตือน · ถึงเพดานแล้ว การแปลล่วงหน้า/แปลตอนถัดไปเบื้องหลังจะหยุด ส่วนการกดแปลเองจะถามก่อน</div>
 
         <div class="form-label" style="margin-top: 14px;">แยกตามโมเดล (เดือนนี้)</div>
         <div id="usage-by-model"></div>
         <div class="form-label" style="margin-top: 12px;">แยกตามเรื่อง (เดือนนี้ 10 อันดับ)</div>
         <div id="usage-by-book"></div>
-
-        <div class="form-label" style="margin-top: 14px;">ราคาต่อ 1 ล้าน token (USD) ใช้คำนวณเงินโดยประมาณ</div>
-        <div style="font-size: 11px; opacity: 0.65; margin-bottom: 6px;">ดูราคาล่าสุดจากหน้าเว็บผู้ให้บริการ ช่อง cache เว้นว่างได้ (Claude คิด ~10% ของราคา input, เจ้าอื่นคิด ~25%)</div>
-        <div class="usage-price-row usage-price-head"><div class="usage-price-model">โมเดล</div><div>input</div><div>output</div><div>cache</div></div>
-        <div id="usage-prices"></div>
-        <button class="btn btn-secondary btn-sm" style="margin-top: 6px;" onclick="saveModelPricesFromForm()">บันทึกราคา</button>
 
         <details style="margin-top: 14px;">
           <summary style="cursor: pointer; font-weight: 600;">🧾 บันทึกข้อผิดพลาด (<span id="diag-log-count">0</span> รายการ)</summary>
@@ -1130,7 +1118,7 @@
         </div>
 
         <div class="settings-panel" role="tabpanel" data-settings-panel="tools">
-        <button class="settings-tool" onclick="openUsageModal()"><span>📊</span><span><b>การใช้งาน AI</b><small>token ที่ใช้ เพดานค่าใช้จ่าย บันทึกข้อผิดพลาด</small></span></button>
+        <button class="settings-tool" onclick="openUsageModal()"><span>📊</span><span><b>การใช้งาน AI</b><small>token ที่ใช้ เพดาน token บันทึกข้อผิดพลาด</small></span></button>
         <button class="settings-tool" onclick="openBenchmarkModal()"><span>🧪</span><span><b>เทียบโมเดล</b><small>แปลตอนเดียวกันหลายโมเดล เทียบคำแปล เวลา และราคา</small></span></button>
         <button class="settings-tool" onclick="openSiteProfilesModal()"><span>🌐</span><span><b>ตั้งค่าเว็บต้นฉบับ</b><small>โปรไฟล์เว็บ Jina Key proxy สำรอง AI ช่วยแยกเนื้อหา</small></span></button>
         </div>
