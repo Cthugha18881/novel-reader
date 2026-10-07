@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import {
   readBillingEnv, formEncode, parseStripeSignature, verifyStripeSignature, validateCheckoutRequest,
-  buildCheckoutParams, planForPrice, subscriptionPatch, passFromSession, isSubscriptionCanceling
+  buildCheckoutParams, planForPrice, subscriptionPatch, passFromSession, isSubscriptionCanceling, checkoutConflict
 } from '../lib/billing.js';
 
 const BILLING_ENV = {
@@ -320,4 +320,35 @@ test('sync: ดึงการสมัครที่ใช้งานอย�
   assert.equal(args.p_user, 'u1');
   assert.equal(args.p_cancel, true);
   assert.equal(args.p_plan, 'max');
+});
+test('checkoutConflict: กันซื้อซ้อนกับการสมัครรายเดือน / สิทธิ์ PromptPay ระดับสูงกว่า', () => {
+  const now = Date.parse('2026-10-07T00:00:00Z');
+  const pass = { passPlan: 'pro', passExpiresAt: '2026-11-06T00:00:00Z' };
+  assert.equal(checkoutConflict({ plan: 'plus', method: 'promptpay', billingState: {}, now }), null);
+  assert.match(checkoutConflict({ plan: 'max', method: 'promptpay', billingState: { subStatus: 'active' }, now }), /รายเดือนอยู่แล้ว/);
+  assert.equal(checkoutConflict({ plan: 'pro', method: 'promptpay', billingState: pass, now }), null);
+  assert.equal(checkoutConflict({ plan: 'max', method: 'promptpay', billingState: pass, now }), null);
+  assert.match(checkoutConflict({ plan: 'plus', method: 'promptpay', billingState: pass, now }), /ต่ำกว่า/);
+  assert.match(checkoutConflict({ plan: 'max', method: 'card', billingState: pass, now }), /PromptPay อยู่/);
+  // สิทธิ์หมดแล้ว ซื้ออะไรก็ได้
+  assert.equal(checkoutConflict({ plan: 'plus', method: 'card', billingState: { passPlan: 'max', passExpiresAt: '2026-10-01T00:00:00Z' }, now }), null);
+});
+
+test('checkout: มีสิทธิ์ Max (PromptPay) อยู่ ซื้อ Plus -> 409 ไม่สร้างหน้าชำระเงิน', async () => {
+  setupEnv();
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    calls.push({ url: u, init });
+    const reply = (data) => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (u.endsWith('/auth/v1/user')) return reply({ id: 'u1', email: 'a@b.c' });
+    if (u.endsWith('/rpc/dt_billing_profile')) return reply({ customerId: 'cus_1', subStatus: null });
+    if (u.endsWith('/rpc/dt_usage_summary')) return reply({ plan: 'max', billing: { passPlan: 'max', passExpiresAt: new Date(Date.now() + 20 * 86400000).toISOString() } });
+    return reply({ id: 'cs_x', url: 'https://checkout.stripe.com/c/pay/cs_x' });
+  };
+  const { POST } = await import('../api/billing/checkout.js');
+  const res = await POST(appRequest('/api/billing/checkout', { plan: 'plus', method: 'promptpay' }));
+  assert.equal(res.status, 409);
+  assert.ok(!calls.some(c => c.url.endsWith('/checkout/sessions')));
+  assert.equal((await POST(appRequest('/api/billing/checkout', { plan: 'max', method: 'promptpay' }))).status, 200);
 });

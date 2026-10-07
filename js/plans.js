@@ -352,6 +352,25 @@ function buildPurchaseHtml(ent) {
       <div id="billing-msg" class="hint" aria-live="polite"></div>
     </div>`;
   }
+  // มีสิทธิ์ PromptPay อยู่: ต่ออายุระดับเดิม หรืออัปเกรด (ระดับต่ำกว่าและบัตรซ่อนไว้ กันซื้อซ้อน)
+  const passExp = Date.parse(b.passExpiresAt || '');
+  if (PAID_PLAN_IDS.includes(b.passPlan) && passExp > Date.now()) {
+    const cur = b.passPlan;
+    const daysLeft = Math.max(1, Math.ceil((passExp - Date.now()) / 86400000));
+    const higher = PAID_PLAN_IDS.slice(PAID_PLAN_IDS.indexOf(cur) + 1);
+    const upgradeDays = (plan) => Math.floor(daysLeft * PLAN_HOSTED_TOKENS[cur] / PLAN_HOSTED_TOKENS[plan]);
+    return `<div class="plan-buy">
+      <div class="plan-buy-head"><b>สิทธิ์ของคุณ</b>${testBadge}</div>
+      <div class="plan-sub-status">${escapeHtml(status)} · เหลือ ${daysLeft} วัน</div>
+      <div class="plan-sub-actions">
+        <button class="btn btn-primary btn-sm" onclick="startCheckout('${cur}', 'promptpay')">ต่ออายุ ${escapeHtml(PLAN_DEFAULTS[cur].name)} อีก 30 วัน · PromptPay ${planPrice(cur, 'passThb')} บาท</button>
+        ${higher.map(p => `<button class="btn btn-sm" onclick="startCheckout('${p}', 'promptpay')">อัปเกรดเป็น ${escapeHtml(PLAN_DEFAULTS[p].name)} · PromptPay ${planPrice(p, 'passThb')} บาท</button>`).join('')}
+        ${b.hasCustomer ? '<button class="btn btn-sm" onclick="openBillingPortal()">ใบเสร็จ</button>' : ''}
+      </div>
+      <p class="hint">ต่ออายุ: วันใหม่ต่อจากวันหมดอายุเดิม ไม่เสียวัน${higher.length ? ` · อัปเกรด: วันที่เหลือ ${daysLeft} วันของ ${escapeHtml(PLAN_DEFAULTS[cur].name)} แปลงเป็นวันของระดับใหม่ตามสัดส่วนโควตา (เช่นเป็น ${escapeHtml(PLAN_DEFAULTS[higher[0]].name)} ≈ ${upgradeDays(higher[0])} วัน) แล้วบวก 30 วัน` : ''} · สมัครรายเดือนด้วยบัตรได้เมื่อสิทธิ์นี้หมด</p>
+      <div id="billing-msg" class="hint" aria-live="polite"></div>
+    </div>`;
+  }
   const card = (plan) => {
     const name = PLAN_DEFAULTS[plan].name;
     const monthly = planPrice(plan);

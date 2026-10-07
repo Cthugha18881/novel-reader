@@ -70,6 +70,25 @@ export function validateCheckoutRequest(body, billing) {
   return { ok: true, plan, method };
 }
 
+/**
+ * ซื้อซ้อนกับสิทธิ์ที่มีอยู่ไม่ได้ (คืนข้อความ หรือ null ถ้าซื้อได้)
+ * - สมัครรายเดือนอยู่: เปลี่ยน/ยกเลิกผ่านหน้าจัดการการสมัคร
+ * - มีสิทธิ์ PromptPay อยู่: ต่ออายุระดับเดิมหรืออัปเกรดได้ ซื้อระดับต่ำกว่าหรือสมัครบัตรซ้อนไม่ได้
+ */
+export function checkoutConflict({ plan, method, billingState, now = Date.now() }) {
+  const b = billingState || {};
+  if (['active', 'trialing', 'past_due'].includes(b.subStatus)) {
+    return 'คุณสมัครรายเดือนอยู่แล้ว ใช้ปุ่ม "เปลี่ยนแพ็กเกจ" หรือ "ยกเลิกการสมัคร" แทน';
+  }
+  const passActive = PAID_PLANS.includes(b.passPlan) && Date.parse(b.passExpiresAt || '') > now;
+  if (!passActive) return null;
+  if (method === 'card') return 'คุณมีสิทธิ์ PromptPay อยู่ สมัครรายเดือนด้วยบัตรได้เมื่อสิทธิ์เดิมหมด หรือต่ออายุด้วย PromptPay แทน';
+  if (PAID_PLANS.indexOf(plan) < PAID_PLANS.indexOf(b.passPlan)) {
+    return `คุณมีสิทธิ์ ${PLAN_LABELS[b.passPlan]} อยู่ ซื้อระดับที่ต่ำกว่าไม่ได้ ต่ออายุ ${PLAN_LABELS[b.passPlan]} หรือรอให้สิทธิ์เดิมหมดก่อน`;
+  }
+  return null;
+}
+
 /** พารามิเตอร์สร้าง Checkout Session */
 export function buildCheckoutParams({ plan, method, userId, email, customerId, billing, siteUrl }) {
   const base = String(siteUrl || '').replace(/[?#].*$/, '');

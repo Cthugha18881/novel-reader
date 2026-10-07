@@ -1,12 +1,10 @@
-// POST /api/billing/checkout {plan: 'plus'|'pro', method: 'card'|'promptpay'} -> { url } หน้าชำระเงินของ Stripe
+// POST /api/billing/checkout {plan: 'plus'|'pro'|'max', method: 'card'|'promptpay'} -> { url } หน้าชำระเงินของ Stripe
 import { json, apiError, prepare, preflight, getUser, rpc, stripeRequest } from '../../lib/http.js';
-import { readBillingEnv, validateCheckoutRequest, buildCheckoutParams } from '../../lib/billing.js';
+import { readBillingEnv, validateCheckoutRequest, buildCheckoutParams, checkoutConflict } from '../../lib/billing.js';
 
 export function OPTIONS(request) {
   return preflight(request);
 }
-
-const ACTIVE_SUB = ['active', 'trialing', 'past_due'];
 
 export async function POST(request) {
   const { env, cors } = prepare(request);
@@ -21,11 +19,13 @@ export async function POST(request) {
   if (!req.ok) return apiError(400, req.error, 'invalid_request', cors.headers);
 
   try {
-    const profile = await rpc(env, 'dt_billing_profile', { p_user: user.id });
-    // สมัครรายเดือนซ้ำไม่ได้: เปลี่ยนแพ็กเกจ/ยกเลิกผ่านหน้าจัดการการสมัคร
-    if (req.method === 'card' && ACTIVE_SUB.includes(profile?.subStatus)) {
-      return apiError(409, 'คุณสมัครรายเดือนอยู่แล้ว ใช้ปุ่ม "จัดการการสมัคร" เพื่อเปลี่ยนแพ็กเกจหรือยกเลิก', 'conflict', cors.headers);
-    }
+    const [profile, summary] = await Promise.all([
+      rpc(env, 'dt_billing_profile', { p_user: user.id }),
+      rpc(env, 'dt_usage_summary', { p_user: user.id })
+    ]);
+    // กันซื้อซ้อน: สมัครรายเดือนอยู่ / มีสิทธิ์ PromptPay ระดับสูงกว่าอยู่
+    const conflict = checkoutConflict({ plan: req.plan, method: req.method, billingState: { ...(summary?.billing || {}), subStatus: profile?.subStatus } });
+    if (conflict) return apiError(409, conflict, 'conflict', cors.headers);
     const params = buildCheckoutParams({
       plan: req.plan, method: req.method, userId: user.id, email: user.email,
       customerId: profile?.customerId || null, billing, siteUrl: env.siteUrl

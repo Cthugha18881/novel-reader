@@ -269,10 +269,14 @@ begin
   return jsonb_build_object('ok', true);
 end $$;
 
--- ให้สิทธิ์ซื้อ 30 วัน: ต่อจากวันหมดอายุเดิม (ซื้อล่วงหน้าได้ไม่เสียวัน) ซื้อระดับสูงกว่าใช้ระดับที่สูงกว่า
+-- ให้สิทธิ์ซื้อ 30 วัน
+-- ระดับเดิม: ต่อจากวันหมดอายุเดิม (ซื้อล่วงหน้าได้ไม่เสียวัน)
+-- อัปเกรดระหว่างทาง: วันที่เหลือของระดับเดิมแปลงเป็นวันของระดับใหม่ตามสัดส่วนโควตา (เช่น Pro เหลือ 10 วัน -> Max 5 วัน) แล้วบวก 30 วัน
+-- ระดับต่ำกว่า (เซิร์ฟเวอร์ไม่ให้ซื้อ แต่กันไว้): คงระดับสูงไว้ แล้วต่อวันตามสัดส่วนโควตา ไม่ได้วันระดับสูงเต็ม 30 วัน
 create or replace function public.dt_billing_grant_pass(p_user uuid, p_plan text, p_days integer, p_ref text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_rows integer; v_cur_plan text; v_cur_exp timestamptz; v_new_plan text;
+  v_cur_sort integer; v_new_sort integer; v_cur_tokens numeric; v_new_tokens numeric; v_exp timestamptz;
 begin
   if p_plan not in (select id from public.dt_plans) or p_days is null or p_days <= 0 then
     return jsonb_build_object('ok', false, 'reason', 'invalid');
@@ -283,14 +287,24 @@ begin
   insert into public.dt_profiles (user_id) values (p_user) on conflict do nothing;
   select pass_plan, pass_expires_at into v_cur_plan, v_cur_exp from public.dt_profiles where user_id = p_user for update;
   v_new_plan := p_plan;
+  v_exp := now() + make_interval(days => p_days);
   if v_cur_plan is not null and v_cur_exp > now() then
-    select id into v_new_plan from public.dt_plans where id in (v_cur_plan, p_plan) order by sort desc limit 1;
+    if v_cur_plan = p_plan then
+      v_exp := v_cur_exp + make_interval(days => p_days);
+    else
+      select sort, monthly_tokens into v_cur_sort, v_cur_tokens from public.dt_plans where id = v_cur_plan;
+      select sort, monthly_tokens into v_new_sort, v_new_tokens from public.dt_plans where id = p_plan;
+      if coalesce(v_new_sort, 0) > coalesce(v_cur_sort, 0) then
+        v_exp := now() + (v_cur_exp - now()) * (v_cur_tokens / nullif(v_new_tokens, 0))::float8 + make_interval(days => p_days);
+      else
+        v_new_plan := v_cur_plan;
+        v_exp := v_cur_exp + make_interval(days => p_days) * (v_new_tokens / nullif(v_cur_tokens, 0))::float8;
+      end if;
+    end if;
   end if;
-  update public.dt_profiles set
-    pass_plan = v_new_plan,
-    pass_expires_at = greatest(coalesce(v_cur_exp, now()), now()) + make_interval(days => p_days)
+  update public.dt_profiles set pass_plan = v_new_plan, pass_expires_at = coalesce(v_exp, now() + make_interval(days => p_days))
   where user_id = p_user;
-  return jsonb_build_object('ok', true);
+  return jsonb_build_object('ok', true, 'plan', v_new_plan, 'expiresAt', v_exp);
 end $$;
 
 -- ฟังก์ชันจัดการโควตาเรียกได้เฉพาะเซิร์ฟเวอร์ (service role) ผู้ใช้เรียกตรงไม่ได้
