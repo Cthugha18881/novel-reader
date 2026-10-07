@@ -32,7 +32,17 @@ const server = createServer(async (req, res) => {
 await new Promise(r => server.listen(0, '127.0.0.1', r));
 const base = `http://127.0.0.1:${server.address().port}`;
 
-const browser = await chromium.launch();
+// CI: ใช้ Google Chrome ที่ติดตั้งมากับเครื่อง GitHub (PW_CHROME_CHANNEL=chrome) ไม่ต้องดาวน์โหลด Chromium ทุกรอบ
+// ถ้าเปิดไม่ได้ ใช้ Chromium ของ Playwright แทน
+const channel = process.env.PW_CHROME_CHANNEL || '';
+let browser;
+try {
+  browser = await chromium.launch(channel ? { channel } : {});
+} catch (err) {
+  if (!channel) throw err;
+  console.log(`เปิด ${channel} ไม่ได้ (${err.message.split('\n')[0]}) ใช้ Chromium ของ Playwright แทน`);
+  browser = await chromium.launch();
+}
 let failed = false;
 
 async function openPage(url) {

@@ -36,10 +36,17 @@ jobs:
       - name: Server tests (เซิร์ฟเวอร์แปลของ Dusktale, จำลอง Supabase/OpenRouter)
         working-directory: server
         run: node --test
-      - name: Install Playwright (Chromium)
+      # ใช้ Google Chrome ที่มีอยู่แล้วบนเครื่อง GitHub (ดาวน์โหลด Chromium ใหม่ทุกรอบช้าได้ถึง 5-10 นาที)
+      # ไม่มี Chrome ค่อยติดตั้ง Chromium ของ Playwright แบบเดิม
+      - name: Install Playwright
         run: |
           npm install --no-save --no-package-lock --no-audit --no-fund playwright@1
-          npx playwright install --with-deps chromium
+          if command -v google-chrome >/dev/null 2>&1; then
+            echo "PW_CHROME_CHANNEL=chrome" >> "$GITHUB_ENV"
+            google-chrome --version
+          else
+            npx playwright install --with-deps chromium
+          fi
       - name: Unit tests + app smoke test
         run: node tests/run-ci.mjs
 
