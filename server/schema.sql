@@ -20,6 +20,11 @@ insert into public.dt_plans (id, name, monthly_tokens, max_output_tokens, max_co
   ('max',  'Max',  12000000, 16384, 8, 3)
 on conflict (id) do nothing;
 
+-- ราคา 30 วัน (บาท) ใช้คิดเครดิตเงินที่เหลือตอนอัปเกรด PromptPay กลางทาง (ราคาที่เก็บจริงอยู่ที่ Stripe/DT_PASS_*_THB ให้ตรงกัน)
+alter table public.dt_plans add column if not exists pass_thb numeric;
+update public.dt_plans set pass_thb = case id when 'free' then 0 when 'plus' then 59 when 'pro' then 179 when 'max' then 299 end
+  where pass_thb is null and id in ('free', 'plus', 'pro', 'max');
+
 -- สิทธิ์ของแอพตามแพ็กเกจ (ส่งให้แอพทาง /api/me) null = ไม่จำกัด
 -- คีย์: byokChaptersPerDay, maxBooks, batchMax, assistantPerDay, autoBible, epub, bgm, bestMode
 -- ตั้งค่าเริ่มต้นเฉพาะแถวที่ยังว่าง แก้ตัวเลขเองภายหลังได้ (รันไฟล์นี้ซ้ำไม่ทับค่าที่แก้ไว้)
@@ -271,12 +276,13 @@ end $$;
 
 -- ให้สิทธิ์ซื้อ 30 วัน
 -- ระดับเดิม: ต่อจากวันหมดอายุเดิม (ซื้อล่วงหน้าได้ไม่เสียวัน)
--- อัปเกรดระหว่างทาง: วันที่เหลือของระดับเดิมแปลงเป็นวันของระดับใหม่ตามสัดส่วนโควตา (เช่น Pro เหลือ 10 วัน -> Max 5 วัน) แล้วบวก 30 วัน
--- ระดับต่ำกว่า (เซิร์ฟเวอร์ไม่ให้ซื้อ แต่กันไว้): คงระดับสูงไว้ แล้วต่อวันตามสัดส่วนโควตา ไม่ได้วันระดับสูงเต็ม 30 วัน
+-- อัปเกรดระหว่างทาง: เครดิตเงินที่เหลือ (ราคา 30 วันของระดับเดิม x วันที่เหลือ / 30) แปลงเป็นวันของระดับใหม่ แล้วบวก 30 วัน
+--   เช่น Pro เหลือ 20 วัน = เครดิต 119 บาท = Max ~12 วัน -> ได้ Max ~42 วัน (ไม่มีราคาใน dt_plans.pass_thb ใช้สัดส่วนโควตาแทน)
+-- ระดับต่ำกว่า (เซิร์ฟเวอร์ไม่ให้ซื้อ แต่กันไว้): คงระดับสูงไว้ แล้วต่อวันตามมูลค่าเงินที่จ่าย ไม่ได้วันระดับสูงเต็ม 30 วัน
 create or replace function public.dt_billing_grant_pass(p_user uuid, p_plan text, p_days integer, p_ref text)
 returns jsonb language plpgsql security definer set search_path = public as $$
 declare v_rows integer; v_cur_plan text; v_cur_exp timestamptz; v_new_plan text;
-  v_cur_sort integer; v_new_sort integer; v_cur_tokens numeric; v_new_tokens numeric; v_exp timestamptz;
+  v_cur_sort integer; v_new_sort integer; v_cur_value numeric; v_new_value numeric; v_exp timestamptz;
 begin
   if p_plan not in (select id from public.dt_plans) or p_days is null or p_days <= 0 then
     return jsonb_build_object('ok', false, 'reason', 'invalid');
@@ -292,13 +298,19 @@ begin
     if v_cur_plan = p_plan then
       v_exp := v_cur_exp + make_interval(days => p_days);
     else
-      select sort, monthly_tokens into v_cur_sort, v_cur_tokens from public.dt_plans where id = v_cur_plan;
-      select sort, monthly_tokens into v_new_sort, v_new_tokens from public.dt_plans where id = p_plan;
+      -- มูลค่าต่อ 30 วัน: ราคา (บาท) ถ้ามี ไม่มีใช้โควตาแทน
+      select sort, coalesce(nullif(pass_thb, 0), monthly_tokens) into v_cur_sort, v_cur_value from public.dt_plans where id = v_cur_plan;
+      select sort, coalesce(nullif(pass_thb, 0), monthly_tokens) into v_new_sort, v_new_value from public.dt_plans where id = p_plan;
+      -- ราคามีแค่บางแถว: เทียบด้วยโควตาทั้งคู่ (หน่วยเดียวกัน)
+      if (select count(*) from public.dt_plans where id in (v_cur_plan, p_plan) and coalesce(pass_thb, 0) > 0) = 1 then
+        select monthly_tokens into v_cur_value from public.dt_plans where id = v_cur_plan;
+        select monthly_tokens into v_new_value from public.dt_plans where id = p_plan;
+      end if;
       if coalesce(v_new_sort, 0) > coalesce(v_cur_sort, 0) then
-        v_exp := now() + (v_cur_exp - now()) * (v_cur_tokens / nullif(v_new_tokens, 0))::float8 + make_interval(days => p_days);
+        v_exp := now() + (v_cur_exp - now()) * (v_cur_value / nullif(v_new_value, 0))::float8 + make_interval(days => p_days);
       else
         v_new_plan := v_cur_plan;
-        v_exp := v_cur_exp + make_interval(days => p_days) * (v_new_tokens / nullif(v_cur_tokens, 0))::float8;
+        v_exp := v_cur_exp + make_interval(days => p_days) * (v_new_value / nullif(v_cur_value, 0))::float8;
       end if;
     end if;
   end if;

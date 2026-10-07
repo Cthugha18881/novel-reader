@@ -358,7 +358,9 @@ function buildPurchaseHtml(ent) {
     const cur = b.passPlan;
     const daysLeft = Math.max(1, Math.ceil((passExp - Date.now()) / 86400000));
     const higher = PAID_PLAN_IDS.slice(PAID_PLAN_IDS.indexOf(cur) + 1);
-    const upgradeDays = (plan) => Math.floor(daysLeft * PLAN_HOSTED_TOKENS[cur] / PLAN_HOSTED_TOKENS[plan]);
+    // เครดิตเงินที่เหลือ = ราคา 30 วันของระดับเดิม x วันที่เหลือ / 30 แปลงเป็นวันของระดับใหม่ (ตรงกับ dt_billing_grant_pass)
+    const credit = Math.round(planPrice(cur, 'passThb') * daysLeft / 30);
+    const upgradeDays = (plan) => Math.floor(daysLeft * planPrice(cur, 'passThb') / planPrice(plan, 'passThb'));
     return `<div class="plan-buy">
       <div class="plan-buy-head"><b>สิทธิ์ของคุณ</b>${testBadge}</div>
       <div class="plan-sub-status">${escapeHtml(status)} · เหลือ ${daysLeft} วัน</div>
@@ -367,7 +369,7 @@ function buildPurchaseHtml(ent) {
         ${higher.map(p => `<button class="btn btn-sm" onclick="startCheckout('${p}', 'promptpay')">อัปเกรดเป็น ${escapeHtml(PLAN_DEFAULTS[p].name)} · PromptPay ${planPrice(p, 'passThb')} บาท</button>`).join('')}
         ${b.hasCustomer ? '<button class="btn btn-sm" onclick="openBillingPortal()">ใบเสร็จ</button>' : ''}
       </div>
-      <p class="hint">ต่ออายุ: วันใหม่ต่อจากวันหมดอายุเดิม ไม่เสียวัน${higher.length ? ` · อัปเกรด: วันที่เหลือ ${daysLeft} วันของ ${escapeHtml(PLAN_DEFAULTS[cur].name)} แปลงเป็นวันของระดับใหม่ตามสัดส่วนโควตา (เช่นเป็น ${escapeHtml(PLAN_DEFAULTS[higher[0]].name)} ≈ ${upgradeDays(higher[0])} วัน) แล้วบวก 30 วัน` : ''} · สมัครรายเดือนด้วยบัตรได้เมื่อสิทธิ์นี้หมด</p>
+      <p class="hint">ต่ออายุ: วันใหม่ต่อจากวันหมดอายุเดิม ไม่เสียวัน${higher.length ? ` · อัปเกรด: เงินที่เหลือของ ${escapeHtml(PLAN_DEFAULTS[cur].name)} ${daysLeft} วัน (≈${credit} บาท) ไม่หาย แปลงเป็นวันของระดับใหม่ ${higher.map(p => `${escapeHtml(PLAN_DEFAULTS[p].name)} ≈ ${upgradeDays(p) + 30} วัน`).join(' / ')} รวม 30 วันที่ซื้อใหม่` : ''} · สมัครรายเดือนด้วยบัตรได้เมื่อสิทธิ์นี้หมด</p>
       <div id="billing-msg" class="hint" aria-live="polite"></div>
     </div>`;
   }
