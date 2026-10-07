@@ -56,6 +56,22 @@
    - **Secret key** (`sb_secret_...` หรือ `service_role` แบบเก่า) → **ค่าลับ** ใส่ที่ Vercel เท่านั้น
 7. **Project Settings → Data API** คัดลอก **Project URL** (`https://xxxx.supabase.co`)
 
+### 2.1 เข้าสู่ระบบด้วย Google (ไม่ต้องมีโดเมน/SMTP เหมาะกับทดสอบแบบปิด)
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → สร้างโปรเจกต์ใหม่ (เช่น `Dusktale`)
+2. **Google Auth Platform / OAuth consent screen** → Get started
+   - App name `Dusktale` · User support email = อีเมลของคุณ · Audience **External** · Contact email = อีเมลของคุณ
+   - **Audience → Test users → Add users** ใส่ Gmail ของผู้ทดสอบ (สูงสุด 100 คน) คนที่ไม่อยู่ในรายชื่อเข้าไม่ได้ (ปล่อยสถานะเป็น **Testing** ไม่ต้องกด Publish)
+3. **Clients → Create client** → Application type **Web application**
+   - Authorized JavaScript origins: `https://cthugha18881.github.io`
+   - Authorized redirect URIs: `https://czgskzumevpzpuznouub.supabase.co/auth/v1/callback`
+   - สร้างแล้วคัดลอก **Client ID** และ **Client secret** (secret เป็นความลับ ใส่ที่ Supabase เท่านั้น)
+4. Supabase → **Authentication → Sign In / Providers → Google** → เปิด → วาง Client ID และ Client secret → Save
+5. Supabase → **Authentication → URL Configuration** → Redirect URLs ต้องมี `https://cthugha18881.github.io/novel-reader/` (มีอยู่แล้วจากขั้นที่ 2)
+6. แก้ `js/hosted-config.js` เป็น `googleLogin: true` แล้ว push
+
+บัญชีที่เข้าด้วย Google กับอีเมลเดียวกันใช้บัญชีเดียวกัน (Supabase รวมให้อัตโนมัติเมื่ออีเมลยืนยันแล้ว)
+
 ### ก่อนเปิดให้คนอื่นใช้: ตั้ง SMTP ของตัวเอง
 
 ตัวส่งอีเมลของ Supabase ส่งได้เฉพาะสมาชิกในองค์กรและไม่กี่ฉบับต่อชั่วโมง ก่อนชวนผู้ทดสอบคนอื่นต้องตั้งตัวส่งอีเมลของเราเอง

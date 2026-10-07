@@ -1001,6 +1001,12 @@
       return ok.access_token === 'AT' && ok.refresh_token === 'RT' && ok.expires_at === 2000000000 && ok.type === 'magiclink' &&
         err.error === 'Email link is invalid or has expired' && parseAuthHash('') === null && parseAuthHash('#shelf') === null && parseAuthHash('#access_token=only') === null;
     });
+    test('hosted: ลิงก์เข้าสู่ระบบด้วย Google กลับมาที่หน้าเดิม (ตัด ? และ # ออก)', () => {
+      const url = buildGoogleSignInUrl('https://cthugha18881.github.io/novel-reader/?billing=success#x');
+      const parsed = new URL(url, 'https://example.invalid');
+      return parsed.pathname.endsWith('/auth/v1/authorize') && parsed.searchParams.get('provider') === 'google' &&
+        parsed.searchParams.get('redirect_to') === 'https://cthugha18881.github.io/novel-reader/';
+    });
     test('hosted: session หมดอายุ / ต่ออายุ', () => {
       const s = sessionFromAuthResponse({ access_token: 'a', refresh_token: 'r', expires_in: 3600, user: { email: 'x@y.z' } }, 1000);
       return s.expires_at === 4600 && s.email === 'x@y.z' && sessionFromAuthResponse({ access_token: 'a' }) === null &&

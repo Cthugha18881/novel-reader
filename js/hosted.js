@@ -13,6 +13,8 @@ const HOSTED = (() => {
     supabaseUrl: clean(c.supabaseUrl).replace(/\/(rest|auth)\/v1$/i, ''),
     anonKey: String(c.supabaseAnonKey || '').trim(),
     emailHasCode: c.emailHasCode === true,
+    // เข้าสู่ระบบด้วย Google (เปิดเมื่อตั้ง Google provider ใน Supabase แล้ว ดู docs/backend-setup.md)
+    googleLogin: c.googleLogin === true,
     freeTokens: Number(c.freeMonthlyTokens) || 400000,
     tokensPerChapter: Number(c.tokensPerChapter) || 20000,
     // ระบบชำระเงิน (Stripe): ปิดไว้จนกว่าจะตั้งค่าบนเซิร์ฟเวอร์ครบ ราคาใช้แสดงผลเท่านั้น (ราคาจริงอยู่ที่ Stripe)
@@ -168,6 +170,17 @@ function consumeHostedAuthRedirect() {
   window.__hostedJustSignedIn = true;
 }
 
+/** URL ไปหน้าเข้าสู่ระบบด้วย Google ของ Supabase แล้วกลับมาที่หน้านี้พร้อม token ใน # (อ่านด้วย consumeHostedAuthRedirect) */
+function buildGoogleSignInUrl(returnUrl) {
+  const back = String(returnUrl || '').replace(/[?#].*$/, '');
+  return `${HOSTED.supabaseUrl}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(back)}`;
+}
+
+function hostedGoogleSignIn() {
+  if (!isHostedConfigured() || !HOSTED.googleLogin) return;
+  location.href = buildGoogleSignInUrl(location.origin + location.pathname);
+}
+
 // ---------- ผู้ให้บริการ "dusktale" ใน llm.js ----------
 async function callHostedOnce(cfg, key, prompt, opts, signal, jsonMode = null) {
   const token = await getHostedAccessToken();
@@ -209,6 +222,8 @@ async function renderHostedAccountBox(refresh = false) {
   const session = readHostedSession();
   if (!session) {
     box.innerHTML = `<div class="hosted-card">${hostedBoxHead()}
+      ${HOSTED.googleLogin ? `<button class="btn btn-google" onclick="hostedGoogleSignIn()"><span class="google-g" aria-hidden="true">G</span> เข้าสู่ระบบด้วย Google</button>
+      <div class="hosted-or" aria-hidden="true"><span>หรือใช้อีเมล</span></div>` : ''}
       <label class="form-label" for="hosted-email">อีเมล (ใช้เข้าสู่ระบบ ไม่ต้องตั้งรหัสผ่าน)</label>
       <div class="hosted-row">
         <input type="email" id="hosted-email" class="form-input" placeholder="you@example.com" autocomplete="email" value="${escapeHtml(hostedPendingEmail)}" onkeydown="if (event.key === 'Enter') hostedSendFromUi()">
@@ -323,6 +338,6 @@ if (isHostedConfigured() && typeof document !== 'undefined') {
   });
   document.addEventListener('DOMContentLoaded', () => {
     if (window.__hostedJustSignedIn) setTimeout(() => { window.__hostedJustSignedIn = false; onHostedSignedIn(); }, 1200);
-    if (window.__hostedAuthError) setTimeout(() => appAlert(`เข้าสู่ระบบไม่สำเร็จ: ${window.__hostedAuthError}\nลิงก์อาจหมดอายุหรือถูกใช้ไปแล้ว ส่งลิงก์ใหม่ได้ที่ ตั้งค่า → 🤖 AI`), 1200);
+    if (window.__hostedAuthError) setTimeout(() => appAlert(`เข้าสู่ระบบไม่สำเร็จ: ${window.__hostedAuthError}\nลองใหม่ได้ที่ ตั้งค่า → 🤖 AI (ลิงก์ในอีเมลอาจหมดอายุหรือถูกใช้ไปแล้ว / บัญชี Google อาจยังไม่ได้รับเชิญให้ทดสอบ)`), 1200);
   });
 }

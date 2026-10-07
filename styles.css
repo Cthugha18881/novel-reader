@@ -1142,6 +1142,11 @@ input.chap-chk, input.gloss-item-chk { width: 24px; height: 24px; }
 .hosted-row .btn { min-height: 38px; }
 .hosted-row[hidden] { display: none; }
 .hosted-who { font-size: 13px; }
+.btn-google { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 42px; font-weight: 600; background: #fff; color: #1f1f1f; border: 1px solid #dadce0; }
+.btn-google:hover { background: #f8f9fa; color: #1f1f1f; }
+.google-g { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; font-weight: 700; font-size: 13px; color: #fff; background: conic-gradient(#ea4335 0 25%, #fbbc05 0 50%, #34a853 0 75%, #4285f4 0); }
+.hosted-or { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-muted); }
+.hosted-or::before, .hosted-or::after { content: ''; flex: 1; border-top: 1px solid var(--border); }
 .hosted-quota .bp-bar { height: 8px; margin: 2px 0 4px; }
 .byok-only[hidden], .hosted-account[hidden] { display: none; }
 /* ---------- แพ็กเกจ (ตั้งค่า → AI, หน้าต่างแพ็กเกจ) ---------- */
