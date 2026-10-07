@@ -306,6 +306,42 @@ function isSchemaRejection(err) {
 }
 
 // ---------- Providers ----------
+// นิยายมีฉากต่อสู้/ความรุนแรงเป็นปกติ: ลดตัวกรองหมวดที่ปรับได้ให้ต่ำสุด (ค่าเริ่มต้นของ Google บล็อกเกินจำเป็น)
+// หมวด PROHIBITED_CONTENT / BLOCKLIST / SPII ของ Google ปรับไม่ได้ ยังบล็อกได้อยู่
+const GEMINI_SAFETY_SETTINGS = ['HARM_CATEGORY_HARASSMENT', 'HARM_CATEGORY_HATE_SPEECH', 'HARM_CATEGORY_SEXUALLY_EXPLICIT', 'HARM_CATEGORY_DANGEROUS_CONTENT']
+  .map(category => ({ category, threshold: 'BLOCK_NONE' }));
+
+// คำอธิบายรหัสการบล็อกที่ผู้ให้บริการส่งกลับมา
+const BLOCK_CODE_LABELS = {
+  PROHIBITED_CONTENT: 'ระบบกรองเนื้อหาต้องห้ามของ Google (ปิดไม่ได้)',
+  SAFETY: 'ตัวกรองความปลอดภัย',
+  BLOCKLIST: 'รายการคำต้องห้ามของ Google',
+  SPII: 'ตรวจพบข้อมูลส่วนบุคคล',
+  RECITATION: 'เนื้อหาตรงกับงานที่มีลิขสิทธิ์',
+  OTHER: 'เหตุผลอื่นของผู้ให้บริการ',
+  refusal: 'โมเดลปฏิเสธเนื้อหา',
+  content_filter: 'ตัวกรองเนื้อหาของผู้ให้บริการ'
+};
+
+/** ข้อความอธิบายเมื่อผู้ให้บริการ API บล็อกเนื้อหา: บอกให้ชัดว่าไม่ใช่ปัญหาของแอพ และมีทางแก้อะไร */
+function describeProviderBlock(provider, code) {
+  const label = LLM_PROVIDERS[provider]?.label || 'ผู้ให้บริการ AI';
+  const why = BLOCK_CODE_LABELS[code] ? `${BLOCK_CODE_LABELS[code]}${code ? ` · ${code}` : ''}` : (code || 'ไม่ระบุเหตุผล');
+  const fallback = getFallbackProvider();
+  const tip = fallback && fallback !== provider
+    ? 'ลองใช้โมเดลหรือผู้ให้บริการอื่นแปลตอนนี้'
+    : 'ตั้ง "ผู้ให้บริการสำรองเมื่อ AI ปฏิเสธเนื้อหา" ใน ตั้งค่า → 🤖 AI เพื่อส่งต่ออัตโนมัติ หรือแปลตอนนี้ด้วยโมเดล/ผู้ให้บริการอื่น';
+  return `${label} ไม่ยอมรับเนื้อหาของตอนนี้ (${why})\n` +
+    `เกิดจากระบบกรองเนื้อหาของผู้ให้บริการ API ไม่ใช่ข้อผิดพลาดของแอพ ข้อมูลในเครื่องไม่เสียหาย\n` +
+    `ทางแก้: ${tip}`;
+}
+
+function blockedError(code) {
+  const err = new LLMError(`ถูกบล็อกโดยผู้ให้บริการ (${code || 'ไม่ระบุ'})`, 'blocked');
+  err.blockCode = code || '';
+  return err;
+}
+
 async function callGeminiOnce(cfg, key, prompt, opts, signal) {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent`;
   const generationConfig = {};
@@ -318,13 +354,18 @@ async function callGeminiOnce(cfg, key, prompt, opts, signal) {
     body: JSON.stringify({
       ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}),
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig
+      generationConfig,
+      ...(opts.noSafetySettings ? {} : { safetySettings: GEMINI_SAFETY_SETTINGS })
     })
   });
   const data = await readJsonSafe(res);
   if (!res.ok) {
     const err = classifyModelError(errorFromStatus(res.status, data.error?.message || data._raw?.slice(0, 200)), cfg.model);
     if (opts.schema && isSchemaRejection(err)) return callGeminiOnce(cfg, key, prompt, { ...opts, schema: null }, signal);
+    // โมเดลบางรุ่นไม่รับค่าตัวกรองบางหมวด: ส่งใหม่โดยใช้ค่าเริ่มต้นของ Google
+    if (!opts.noSafetySettings && err.kind === 'bad_request' && /safety|harm/i.test(err.message || '')) {
+      return callGeminiOnce(cfg, key, prompt, { ...opts, noSafetySettings: true }, signal);
+    }
     throw err;
   }
 
@@ -333,14 +374,14 @@ async function callGeminiOnce(cfg, key, prompt, opts, signal) {
   if (um && opts.onUsage) opts.onUsage({ input: um.promptTokenCount || 0, output: (um.candidatesTokenCount || 0) + (um.thoughtsTokenCount || 0), cacheRead: um.cachedContentTokenCount || 0, raw: um });
 
   const blockReason = data.promptFeedback?.blockReason;
-  if (blockReason) throw new LLMError(`คำขอถูกบล็อกโดยระบบความปลอดภัย (${blockReason})`, 'blocked');
+  if (blockReason) throw blockedError(blockReason);
 
   const candidate = data.candidates?.[0];
   const text = (candidate?.content?.parts || []).filter(p => typeof p.text === 'string' && !p.thought).map(p => p.text).join('');
   const reason = candidate?.finishReason || '';
   if (reason === 'MAX_TOKENS') throw new LLMError('ผลลัพธ์ยาวเกินขีดจำกัดของโมเดลและถูกตัดกลางคัน', 'truncated');
   if (['SAFETY', 'RECITATION', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII'].includes(reason)) {
-    throw new LLMError(`โมเดลปฏิเสธการตอบ (${reason})`, 'blocked');
+    throw blockedError(reason);
   }
   if (!text) throw new LLMError(reason ? `โมเดลไม่ส่งข้อความกลับมา (${reason})` : 'โมเดลไม่ส่งข้อความกลับมา', 'empty');
   return text;
@@ -446,7 +487,7 @@ async function callAnthropicOnce(cfg, key, prompt, opts, signal, useFallbacks = 
     if (opts.onUsage && (usage.input || usage.output)) opts.onUsage(usage);
   }
 
-  if (stopReason === 'refusal') throw new LLMError('Claude ปฏิเสธคำขอนี้ (refusal)', 'blocked');
+  if (stopReason === 'refusal') throw blockedError('refusal');
   if (stopReason === 'max_tokens') throw new LLMError('ผลลัพธ์ยาวเกินขีดจำกัดของโมเดลและถูกตัดกลางคัน', 'truncated');
   if (!text) throw new LLMError('โมเดลไม่ส่งข้อความกลับมา', 'empty');
   return text;
@@ -511,7 +552,7 @@ async function callOpenAIOnce(cfg, key, prompt, opts, signal, jsonMode = null) {
   const text = choice?.message?.content || '';
   const reason = choice?.finish_reason || '';
   if (reason === 'length') throw new LLMError('ผลลัพธ์ยาวเกินขีดจำกัดของโมเดลและถูกตัดกลางคัน', 'truncated');
-  if (reason === 'content_filter') throw new LLMError('โมเดลปฏิเสธการตอบ (content_filter)', 'blocked');
+  if (reason === 'content_filter') throw blockedError('content_filter');
   // คิดจน token หมดเพดาน ไม่เหลือเขียนคำตอบ (OpenRouter บางเจ้าตอบ finish_reason "stop" แต่เนื้อหาว่าง)
   const thought = data.usage?.completion_tokens_details?.reasoning_tokens || 0;
   if (!text && thought > 0 && thought >= (body.max_tokens || body.max_completion_tokens || Infinity) * 0.9) {
@@ -602,6 +643,12 @@ async function callLLMWithProvider(prompt, { json = true, schema = null, system 
             task: (typeof getTaskInfo === 'function' && getTaskInfo(signal).task) || '',
             message: `${err.message}${attempt > 1 ? ` (หลังลอง ${attempt} รอบ)` : ''}`
           });
+        }
+        // ผู้ให้บริการบล็อกเนื้อหา: อธิบายให้ผู้ใช้รู้ว่าไม่ใช่ปัญหาของแอพ (ข้อความนี้ขึ้นทุกที่ที่แสดง error)
+        if (err.kind === 'blocked' && !err.provider) {
+          err.provider = cfg.provider;
+          err.model = cfg.model;
+          err.message = describeProviderBlock(cfg.provider, err.blockCode || (err.message.match(/\(([A-Za-z_]+)\)/) || [])[1] || '');
         }
         throw err;
       }

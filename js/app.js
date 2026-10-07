@@ -1021,6 +1021,7 @@ async function applyTranslationToChapter(chapter, result, { updateTitle = false,
   if (result.lockInfo) chapter.lockInfo = result.lockInfo;
   else delete chapter.lockInfo;
   delete chapter.pendingLockInfo;
+  delete chapter.blockInfo;
   // บันทึกเหตุการณ์: ได้ใหม่ใช้ใหม่ / ตอนที่ไม่มีเนื้อเรื่องแล้วลบ / ไม่ได้ใหม่ (ทำพลาด) คงของเดิม ระบบรู้เองว่าเก่าจากต้นฉบับที่เปลี่ยน
   if (result.storyLog) chapter.storyLog = result.storyLog;
   else if (chapter.chapterType === 'placeholder') delete chapter.storyLog;
@@ -1107,8 +1108,66 @@ async function translatePendingChapterNow(chapId) {
   try {
     await translatePendingChapterCore(chapter, ctx, { signal: controller.signal, onStatus: showGlobalToast });
   } catch (err) {
+    if (err?.kind === 'blocked') await markChapterBlockedAndRefresh(chapter, err);
     if (err instanceof LockBusyError) appAlert(err.message);
-    else if (!isAbortError(err)) appAlert(`แปลไม่สำเร็จ: ${describeScrapeError(err)}`);
+    else if (!isAbortError(err)) appAlert(`แปลไม่สำเร็จ: ${describeScrapeError(err)}`, err?.kind === 'blocked' ? { title: 'ถูกบล็อกโดยผู้ให้บริการ AI' } : undefined);
+  } finally {
+    endTask('retranslate', controller);
+    hideGlobalToast();
+  }
+}
+
+async function markChapterBlockedAndRefresh(chapter, err) {
+  try {
+    await markPendingChapterBlocked(chapter, err);
+    chapter.blockInfo = chapterBlockInfo(err);
+    refreshShelfViewOnly(chapter.bookId);
+    if (currentBookId === chapter.bookId) await renderVirtualWindow(currentChapterIndex);
+  } catch (e) {
+    console.warn('Mark blocked failed:', e);
+  }
+}
+
+/** ผู้ให้บริการอื่นที่ตั้งคีย์และโมเดลไว้แล้ว (ใช้แปลตอนที่ผู้ให้บริการหลักบล็อก) */
+function listAlternateProviders(exclude) {
+  return Object.keys(LLM_PROVIDERS).filter(p => {
+    if (p === exclude) return false;
+    try {
+      const cfg = getActiveLlmConfig('main', p);
+      return cfg.keys.length > 0 && !!cfg.mainModel;
+    } catch (e) {
+      return false;
+    }
+  });
+}
+
+/** แปลตอนที่ถูกบล็อกด้วยผู้ให้บริการอื่นเฉพาะครั้งนี้ ไม่เปลี่ยนการตั้งค่าหลัก */
+async function translateChapterWithOtherProvider(chapId) {
+  const chapter = await findChapterAnywhere(chapId);
+  if (!chapter) return appAlert('ไม่พบตอนนี้');
+  if (isTaskRunning('retranslate')) return appAlert('กำลังแปลบทอื่นอยู่ กรุณารอให้เสร็จก่อน');
+  const blockedBy = chapter.blockInfo?.provider || getActiveProvider();
+  const options = listAlternateProviders(blockedBy);
+  if (!options.length) {
+    return appAlert(`ยังไม่มีผู้ให้บริการอื่นที่ตั้งค่าไว้\nใส่ API Key ของผู้ให้บริการอื่น (เช่น OpenRouter หรือ Claude) ใน ตั้งค่า → 🤖 AI แล้วกลับมากดปุ่มนี้อีกครั้ง`, { title: 'แปลด้วยผู้ให้บริการอื่น' });
+  }
+  const provider = options.length === 1 ? options[0] : await appChoose('เลือกผู้ให้บริการที่จะใช้แปลตอนนี้ (เฉพาะครั้งนี้ ไม่เปลี่ยนการตั้งค่าหลัก)',
+    options.map((p, k) => ({ label: `${LLM_PROVIDERS[p].label} · ${getActiveLlmConfig('main', p).mainModel}`, value: p, variant: k === 0 ? 'primary' : undefined })),
+    { title: 'แปลด้วยผู้ให้บริการอื่น' });
+  if (!provider) return;
+  const model = getActiveLlmConfig('main', provider).mainModel;
+  const books = await dbGetAllBooks();
+  const ctx = makeBookContext(books.find(b => b.bookId === chapter.bookId) || getCurrentBookContext());
+  const controller = beginTask('retranslate');
+  setModelOverride(controller.signal, { provider, model });
+  showGlobalToast(`กำลังแปล "${chapter.title}" ด้วย ${LLM_PROVIDERS[provider].label}...`);
+  try {
+    await translatePendingChapterCore(chapter, ctx, { signal: controller.signal, onStatus: showGlobalToast });
+    refreshShelfViewOnly(chapter.bookId);
+  } catch (err) {
+    if (err?.kind === 'blocked') await markChapterBlockedAndRefresh(chapter, err);
+    if (err instanceof LockBusyError) appAlert(err.message);
+    else if (!isAbortError(err)) appAlert(`แปลไม่สำเร็จ: ${describeScrapeError(err)}`, err?.kind === 'blocked' ? { title: 'ถูกบล็อกโดยผู้ให้บริการ AI' } : undefined);
   } finally {
     endTask('retranslate', controller);
     hideGlobalToast();
@@ -1118,6 +1177,16 @@ async function translatePendingChapterNow(chapId) {
 function buildPendingNoticeHtml(chap) {
   const srcCount = chap.paragraphs.filter(p => p.src).length;
   const preview = chap.paragraphs.slice(0, 30).map(p => `<p>${escapeHtml(p.src || '')}</p>`).join('');
+  if (chap.blockInfo) {
+    return `
+    <div class="placeholder-notice">
+      <div style="font-weight: 600; margin-bottom: 4px;">🚫 ผู้ให้บริการ AI ไม่ยอมแปลตอนนี้</div>
+      <div style="font-size: 12px; opacity: 0.85; margin-bottom: 10px; white-space: pre-line;">${escapeHtml(describeProviderBlock(chap.blockInfo.provider, chap.blockInfo.code))}</div>
+      <button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="translateChapterWithOtherProvider(${jsArg(chap.id)})">🔀 แปลด้วยผู้ให้บริการอื่น</button>
+      <button class="btn" style="padding: 5px 12px; font-size: 12px;" onclick="translatePendingChapterNow(${jsArg(chap.id)})">🔄 ลองอีกครั้ง</button>
+      ${srcCount ? `<details style="margin-top: 10px; font-size: 12px;"><summary style="cursor: pointer; opacity: 0.7;">ดูต้นฉบับ</summary><div class="para-src" style="display: block;">${preview}</div></details>` : ''}
+    </div>`;
+  }
   return `
     <div class="placeholder-notice">
       <div style="font-weight: 600; margin-bottom: 4px;">⏳ ตอนนี้ยังไม่ได้แปล</div>

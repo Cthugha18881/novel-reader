@@ -80,7 +80,7 @@ function batchProgressHtml(bookId, { compact = false } = {}) {
       <div class="bp-top"><b>⏳ รอคิวแปล ${s.count} ตอน${s.position > 1 ? ` (คิวที่ ${s.position})` : ''}</b><button class="btn bp-btn" onclick="event.stopPropagation(); cancelBatchTranslate(${id})">ยกเลิก</button></div>
       <div class="bp-bar"><span style="width: 0;"></span></div></div>`;
   }
-  const head = { done: `✓ แปลเสร็จ ${s.done} ตอน`, stopped: `หยุดแล้ว (แปลไป ${s.done} ตอน)`, locked: '🔒 หยุดที่ตอนที่ต้องซื้อ', error: `⚠️ หยุดกลางคัน (แปลไป ${s.done} ตอน)` }[s.kind] || '';
+  const head = { done: `✓ แปลเสร็จ ${s.done} ตอน`, partial: `⚠️ แปลเสร็จ ${s.done} ตอน · ข้าม ${s.skipped || 0} ตอนที่ถูกบล็อก`, stopped: `หยุดแล้ว (แปลไป ${s.done} ตอน)`, locked: '🔒 หยุดที่ตอนที่ต้องซื้อ', error: `⚠️ หยุดกลางคัน (แปลไป ${s.done} ตอน)` }[s.kind] || '';
   return `<div class="batch-progress ${s.kind}">
     <div class="bp-top"><b>${head}</b><button class="btn bp-btn" onclick="event.stopPropagation(); dismissBatchResult(${id})" aria-label="ปิดข้อความนี้">✕</button></div>
     ${desc}</div>`;
@@ -216,6 +216,60 @@ async function startBatchTranslateForBook(bookId, count) {
   runBatchQueue(job);
 }
 
+// ผู้ให้บริการ AI บล็อกเนื้อหาหลายตอนติดกัน: น่าจะบล็อกทั้งเรื่อง หยุดก่อน ไม่ดึงหน้าเว็บต่อเปล่าๆ
+const BATCH_MAX_CONSECUTIVE_BLOCKS = 3;
+
+function chapterBlockInfo(err) {
+  return { provider: err?.provider || '', code: err?.blockCode || '', at: Date.now() };
+}
+
+/** ตอนที่รอแปลถูกผู้ให้บริการบล็อก: ติดป้ายไว้ (ยังเป็นตอนที่รอแปล แปลใหม่ด้วยผู้ให้บริการอื่นได้) */
+async function markPendingChapterBlocked(chap, err) {
+  const fresh = (await dbGetChaptersByBook(chap.bookId)).find(c => c.id === chap.id);
+  if (!fresh || !isPendingChapter(fresh)) return;
+  fresh.blockInfo = chapterBlockInfo(err);
+  await dbSaveChapter(fresh);
+  const mem = chapters.find(c => c.id === chap.id);
+  if (mem) mem.blockInfo = fresh.blockInfo;
+}
+
+/** ตอนจาก URL ถูกบล็อก: เก็บต้นฉบับที่ดึงมาแล้วเป็นตอนที่รอแปล เพื่อไล่ตอนถัดไปต่อได้ */
+async function saveBlockedChapterAsPending(bookId, url, page, err) {
+  const all = await dbGetChaptersByBook(bookId);
+  const existing = all.find(c => sameSourceUrl(c.sourceUrl, url));
+  if (existing) return existing;
+  const order = all.reduce((max, c) => Math.max(max, c.order || 0), 0) + 1;
+  const record = {
+    id: typeof newChapterIdFor === 'function' ? newChapterIdFor(bookId, url) : `${bookId}_chap_${Date.now()}_b`,
+    bookId,
+    order,
+    title: page.rawChapTitle || `ตอนที่ ${order}`,
+    chapterType: 'story',
+    status: 'pending',
+    paragraphs: splitSourceParagraphs(page.text).map(src => ({ th: '', src })),
+    summary: '',
+    sourceUrl: url,
+    nextUrl: page.nextUrl || null,
+    ...(page.lockInfo ? { pendingLockInfo: page.lockInfo } : {}),
+    blockInfo: chapterBlockInfo(err)
+  };
+  await dbSaveChapter(record);
+  const book = (await dbGetAllBooks()).find(b => b.bookId === bookId);
+  if (book) await dbSaveBook({ ...book, totalChapters: order, lastUrl: url, updatedAt: Date.now() });
+  if (currentBookId === bookId && !chapters.some(c => c.id === record.id)) {
+    chapters.push(record);
+    nextUrlCalculated = record.nextUrl;
+    checkAndRefreshBottomStatus();
+  }
+  return record;
+}
+
+function describeBatchSkipped(skipped, lastBlockErr) {
+  if (!skipped.length) return '';
+  const names = skipped.slice(0, 3).map(t => `"${t}"`).join(', ') + (skipped.length > 3 ? ` และอีก ${skipped.length - 3} ตอน` : '');
+  return `ข้าม ${skipped.length} ตอนที่ถูกบล็อก: ${names} (ยังอยู่ในรายการเป็น "ถูกบล็อก")\n${lastBlockErr?.message || ''}`;
+}
+
 /** แปลงานแรก แล้วทำงานในคิวต่อจนหมด */
 async function runBatchQueue(firstJob) {
   let job = firstJob;
@@ -266,7 +320,22 @@ async function runBatchJob({ bookId, count }) {
   let finishedAll = false;
   let stoppedByLock = false;
   let stopDesc = '';
+  const skipped = [];
+  let lastBlockErr = null;
+  let consecutiveBlocks = 0;
   const progress = (desc) => setBatchProgress({ desc, done: successCount });
+  // ถูกบล็อก: จดไว้แล้วไปตอนถัดไป เว้นแต่บล็อกติดกันหลายตอน (true = ต้องหยุด)
+  const noteBlocked = (title, err) => {
+    skipped.push(title);
+    lastBlockErr = err;
+    consecutiveBlocks++;
+    if (consecutiveBlocks >= BATCH_MAX_CONSECUTIVE_BLOCKS) {
+      stopDesc = `หยุดแล้ว: ผู้ให้บริการ AI บล็อกเนื้อหา ${consecutiveBlocks} ตอนติดกัน`;
+      return true;
+    }
+    progress(`"${title}" ถูกผู้ให้บริการบล็อก ข้ามไปตอนถัดไป...`);
+    return false;
+  };
 
   try {
     for (let i = 1; i <= count; i++) {
@@ -281,12 +350,20 @@ async function runBatchJob({ bookId, count }) {
             onStatus: (msg) => progress(`[${i}/${count}] ${msg.substring(0, 60)}`)
           });
           successCount++;
+          consecutiveBlocks = 0;
           if (i === count) finishedAll = true;
           if (i < count) await sleepAbortable(1500, signal);
         } catch (err) {
           if (isAbortError(err)) break;
           // อีกแท็บกำลังแปลตอนนี้อยู่: ข้ามไปตอนถัดไป
           if (err instanceof LockBusyError) continue;
+          if (err?.kind === 'blocked') {
+            await markPendingChapterBlocked(pendingChap, err).catch(e => console.warn('Mark blocked failed:', e));
+            refreshShelfViewOnly(bookId);
+            if (noteBlocked(pendingChap.title, err)) break;
+            if (i === count) finishedAll = true;
+            continue;
+          }
           stopDesc = `หยุดที่ "${pendingChap.title}": ${err.message}`;
           break;
         }
@@ -320,8 +397,10 @@ async function runBatchJob({ bookId, count }) {
         const urlSegment = targetUrl.substring(targetUrl.lastIndexOf('/'));
         progress(`กำลังดึงและแปลตอนที่ ${i}/${count}... (${urlSegment})`);
 
+        let page = null;
         try {
-          const { text, nextUrl, rawChapTitle, rawBookTitle, author, lockInfo } = await scrapePage(targetUrl, signal, { bookId });
+          page = await scrapePage(targetUrl, signal, { bookId });
+          const { text, nextUrl, rawChapTitle, rawBookTitle, author, lockInfo } = page;
           if (author) ctx.author = author;
 
           const result = await translateChapter(text, ctx, {
@@ -358,6 +437,7 @@ async function runBatchJob({ bookId, count }) {
 
           await dbSaveChapter(newChap);
           successCount++;
+          consecutiveBlocks = 0;
           lastChap = newChap;
 
           // อ่านเรคคอร์ดล่าสุดแล้วแก้เฉพาะฟิลด์ของ batch ตำแหน่งอ่านของผู้ใช้จะไม่ถูกแตะ
@@ -400,6 +480,23 @@ async function runBatchJob({ bookId, count }) {
           }
         } catch (err) {
           if (isAbortError(err)) break;
+          // ผู้ให้บริการบล็อกเนื้อหา: เก็บต้นฉบับเป็นตอนที่รอแปล (ติดป้าย "ถูกบล็อก") แล้วไปตอนถัดไป
+          if (err?.kind === 'blocked' && page?.text) {
+            let saved = null;
+            try {
+              saved = await saveBlockedChapterAsPending(bookId, targetUrl, page, err);
+            } catch (saveErr) {
+              console.warn('Save blocked chapter failed:', saveErr);
+            }
+            if (saved) {
+              lastChap = saved;
+              targetUrl = saved.nextUrl;
+              refreshShelfViewOnly(bookId);
+              if (noteBlocked(saved.title, err)) break;
+              if (i === count) finishedAll = true;
+              continue;
+            }
+          }
           // ปัญหาจาก AI/เพดาน/การตั้งค่า ไม่เกี่ยวกับ URL จึงไม่ต้องแนะนำให้แก้ลิงก์
           const urlProblem = isMissingPageError(err) || !(err instanceof LLMError);
           stopDesc = `หยุดที่ตอนที่ ${i}: ${isMissingPageError(err) ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}` +
@@ -417,10 +514,14 @@ async function runBatchJob({ bookId, count }) {
     batchCurrent = null;
   }
 
-  if (stoppedByLock) finish('locked', stopDesc, successCount);
-  else if (signal.aborted) finish('stopped', `หยุดตามคำสั่งแล้ว (บันทึกไว้ ${successCount} ตอน)`, successCount);
+  const skippedNote = describeBatchSkipped(skipped, lastBlockErr);
+  const withSkipped = (desc) => skippedNote ? `${desc}\n${skippedNote}` : desc;
+  if (stoppedByLock) finish('locked', withSkipped(stopDesc), successCount);
+  else if (signal.aborted) finish('stopped', withSkipped(`หยุดตามคำสั่งแล้ว (บันทึกไว้ ${successCount} ตอน)`), successCount);
+  else if (finishedAll && skipped.length) finish('partial', withSkipped(`บันทึก ${successCount} ตอน`), successCount);
   else if (finishedAll) finish('done', `บันทึกครบ ${successCount} ตอน อ่านแบบออฟไลน์ได้`, successCount);
-  else finish('error', stopDesc || 'หยุดก่อนครบจำนวนที่ตั้งไว้', successCount);
+  else finish('error', withSkipped(stopDesc || 'หยุดก่อนครบจำนวนที่ตั้งไว้'), successCount);
+  if (batchResults[bookId]) batchResults[bookId].skipped = skipped.length;
   renderBatchProgress(bookId);
   refreshShelfViewOnly(bookId);
 }
@@ -441,7 +542,9 @@ function renderChaptersHtml(bookId, bookChaps, readingChapId) {
     const typeLabel = CHAPTER_TYPE_LABELS[chapterType] || CHAPTER_TYPE_LABELS.story;
     const typeIcon = chapterType !== 'story' ? `<span class="chap-type-icon" title="${escapeHtml(typeLabel)}">${escapeHtml(typeLabel.split(' ')[0])}</span>` : '';
     const label = numberOf.get(ch.id);
-    const status = isPendingChapter(ch) ? '<span class="chap-status pending">รอแปล</span>' : (isActive ? '<span class="chap-status reading">อ่านอยู่</span>' : '');
+    const status = isPendingChapter(ch) && ch.blockInfo
+      ? `<span class="chap-status blocked" title="${escapeHtml(describeProviderBlock(ch.blockInfo.provider, ch.blockInfo.code))}">ถูกบล็อก</span>`
+      : isPendingChapter(ch) ? '<span class="chap-status pending">รอแปล</span>' : (isActive ? '<span class="chap-status reading">อ่านอยู่</span>' : '');
     return `
       <div class="chap-subitem${isActive ? ' active' : ''}${chapterType !== 'story' ? ' chap-nonstory' : ''}">
         <input type="checkbox" class="chap-chk" data-book-id="${escapeHtml(bookId)}" value="${escapeHtml(ch.id)}" onchange="updateSelectedDeleteBtn(${jsArg(bookId)})" aria-label="เลือก ${escapeHtml(ch.title)}">

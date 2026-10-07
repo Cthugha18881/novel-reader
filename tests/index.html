@@ -1155,6 +1155,42 @@
       setModelOverride(b.signal, { provider: 'openai' });
       return getModelOverride(a.signal).model === 'xiaomi/mimo-v2.6-flash' && getModelOverride(b.signal) === null && getModelOverride(null) === null;
     });
+    test('describeProviderBlock: บอกผู้ให้บริการ รหัส และย้ำว่าไม่ใช่ปัญหาของแอพ', () => {
+      const msg = describeProviderBlock('gemini', 'PROHIBITED_CONTENT');
+      const unknown = describeProviderBlock('', '');
+      return msg.includes('Google Gemini') && msg.includes('PROHIBITED_CONTENT') && msg.includes('ไม่ใช่ข้อผิดพลาดของแอพ') && msg.includes('ทางแก้') &&
+        unknown.includes('ผู้ให้บริการ AI') && unknown.includes('ไม่ใช่ข้อผิดพลาดของแอพ');
+    });
+    // ทดสอบแบบ async ทำงานพร้อมกัน: จำลอง guardedFetch ครั้งเดียวในเทสต์เดียว (ไม่ให้เทสต์อื่นคืนค่าเดิมระหว่างทาง แล้วยิงออกเน็ตจริง)
+    test('callGeminiOnce: ส่งตัวกรอง BLOCK_NONE / PROHIBITED_CONTENT = blocked พร้อมรหัส / ไม่รับค่าตัวกรอง = ส่งใหม่แบบไม่มี', async () => {
+      const orig = window.guardedFetch;
+      const bodies = [];
+      let mode = 'block';
+      window.guardedFetch = async (url, init) => {
+        const body = JSON.parse(init.body);
+        bodies.push(body);
+        if (mode === 'block') return new Response(JSON.stringify({ promptFeedback: { blockReason: 'PROHIBITED_CONTENT' } }), { status: 200 });
+        if (body.safetySettings) return new Response(JSON.stringify({ error: { message: 'Invalid value at safety_settings[0].category' } }), { status: 400 });
+        return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'ok' }] }, finishReason: 'STOP' }] }), { status: 200 });
+      };
+      try {
+        let blocked = null;
+        try { await callGeminiOnce({ model: 'gemini-test' }, 'k', 'p', {}, null); } catch (e) { blocked = e; }
+        const sent = bodies[0];
+        mode = 'reject-settings';
+        const text = await callGeminiOnce({ model: 'gemini-test' }, 'k', 'p', {}, null);
+        return blocked?.kind === 'blocked' && blocked.blockCode === 'PROHIBITED_CONTENT' &&
+          sent.safetySettings.length === 4 && sent.safetySettings.every(s => s.threshold === 'BLOCK_NONE') &&
+          text === 'ok' && bodies.length === 3 && !!bodies[1].safetySettings && !bodies[2].safetySettings;
+      } finally {
+        window.guardedFetch = orig;
+      }
+    });
+    test('describeBatchSkipped: สรุปตอนที่ข้ามและเหตุผล / ไม่มีตอนข้าม = ว่าง', () => {
+      const err = { message: 'Google Gemini ไม่ยอมรับเนื้อหา' };
+      const s = describeBatchSkipped(['ก', 'ข', 'ค', 'ง'], err);
+      return describeBatchSkipped([], null) === '' && s.includes('ข้าม 4 ตอน') && s.includes('"ก"') && s.includes('อีก 1 ตอน') && s.includes(err.message);
+    });
     test('benchmarkCost: คิดจาก token จริง + ราคาที่ใส่ / ไม่ใส่ราคา = null', () => {
       const c = benchmarkCost({ provider: 'openai', model: 'm', input: 1e6, output: 1e6, priceIn: 0.14, priceOut: 0.28 });
       return Math.abs(c - 0.42) < 1e-9 && benchmarkCost({ model: 'm', input: 1, output: 1, priceIn: null, priceOut: 1 }) === null;

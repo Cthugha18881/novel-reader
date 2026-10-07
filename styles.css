@@ -1019,7 +1019,7 @@ body.home-open.no-book .dock-home-only { display: none; }
 .batch-progress { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px; background: var(--surface); font-size: 12px; margin: 4px 0; }
 .batch-progress.running, .batch-progress.queued { border-color: var(--accent); background: var(--accent-soft); }
 .batch-progress.done { border-color: #86efac; background: rgba(34,197,94,.1); }
-.batch-progress.error, .batch-progress.locked, .batch-progress.stopped { border-color: #fcd34d; background: rgba(234,179,8,.1); }
+.batch-progress.error, .batch-progress.locked, .batch-progress.stopped, .batch-progress.partial { border-color: #fcd34d; background: rgba(234,179,8,.1); }
 .bp-top { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .bp-top b { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bp-btn { min-height: 26px !important; padding: 2px 8px !important; font-size: 11px !important; flex-shrink: 0; background: var(--surface); }
@@ -1079,6 +1079,7 @@ body.home-open.no-book .dock-home-only { display: none; }
 .chap-type-icon { flex-shrink: 0; }
 .chap-status { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 999px; flex-shrink: 0; }
 .chap-status.pending { background: var(--warning-soft); color: var(--warning); }
+.chap-status.blocked { background: var(--danger-soft); color: var(--danger); cursor: help; }
 .chap-status.reading { background: var(--accent-grad); color: var(--on-accent); }
 .chap-subitem.active .chap-num { color: inherit; }
 .chap-more { min-width: 36px; min-height: 36px; padding: 2px 8px; font-size: 15px; flex-shrink: 0; border-color: transparent; }
