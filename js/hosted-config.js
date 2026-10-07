@@ -13,7 +13,7 @@ window.DUSKTALE_HOSTED = {
   // false = แสดงแค่ "กดลิงก์ในอีเมล" ไม่มีช่องใส่รหัส
   emailHasCode: false,
   // ปุ่ม "เข้าสู่ระบบด้วย Google" (ต้องเปิด Google provider ใน Supabase ก่อน ดู docs/backend-setup.md ขั้นที่ 2.1)
-  googleLogin: false,
+  googleLogin: true,
   // ใช้แสดงผลในแอพเท่านั้น (โควตาจริงอยู่ที่ตาราง dt_plans ในฐานข้อมูล)
   freeMonthlyTokens: 400000,
   tokensPerChapter: 20000,
