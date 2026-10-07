@@ -192,6 +192,12 @@ async function startBatchTranslateForBook(bookId, count) {
   if (bookChaps.length === 0) return appAlert("ไม่พบตอนตั้งต้นของนิยายเรื่องนี้");
 
   const lastChap = bookChaps[bookChaps.length - 1];
+  if (!lastChap.nextUrl && lastChap.sourceUrl && !bookChaps.some(isPendingChapter)) {
+    // ลองหาลิงก์ตอนถัดไปจากหน้าเว็บของตอนล่าสุดก่อน ไม่เจอค่อยให้ผู้ใช้วางเอง
+    showGlobalToast(`กำลังหาลิงก์ตอนถัดไปของ "${lastChap.title}"...`);
+    try { await recoverNextUrl(lastChap); } catch (e) { console.warn('Recover next URL failed:', e); }
+    hideGlobalToast();
+  }
   if (!lastChap.nextUrl && !bookChaps.some(isPendingChapter)) {
     const inputUrl = await appPrompt(`ไม่พบลิงก์ตอนถัดไปของ "${lastChap.title}" วางลิงก์ของตอนถัดไปเพื่อแปลต่อ`, '', { title: 'วาง URL ตอนถัดไป', confirmLabel: 'ใช้ลิงก์นี้', placeholder: 'https://...' });
     if (!inputUrl || !inputUrl.trim()) return;
@@ -368,6 +374,20 @@ async function runBatchJob({ bookId, count }) {
         continue;
       }
 
+      if (!targetUrl && lastChap?.sourceUrl) {
+        // ครั้งก่อนหาตอนถัดไปไม่เจอ (เช่นเว็บบล็อกชั่วคราว): ลองหาจากหน้าของตอนล่าสุดอีกครั้ง
+        progress(`กำลังหาลิงก์ตอนถัดไปของ "${lastChap.title}"...`);
+        try {
+          const found = await recoverNextUrl(lastChap, signal);
+          targetUrl = found.url;
+          if (!targetUrl && found.blocked) {
+            stopDesc = `แปลครบ ${successCount} ตอนแล้ว แต่หาลิงก์ตอนถัดไปไม่ได้: ${BOT_CHALLENGE_MESSAGE}\n(กดแปลล่วงหน้าอีกครั้งภายหลัง แอพจะหาลิงก์ให้เอง หรือกด "แก้ URL ถัดไป")`;
+            break;
+          }
+        } catch (err) {
+          if (isAbortError(err)) break;
+        }
+      }
       if (!targetUrl) {
         stopDesc = `แปลครบ ${successCount} ตอนแล้ว แต่ยังไม่มี URL ของตอนถัดไป กรุณากด "แก้ URL ถัดไป"`;
         break;
@@ -499,7 +519,7 @@ async function runBatchJob({ bookId, count }) {
             }
           }
           // ปัญหาจาก AI/เพดาน/การตั้งค่า ไม่เกี่ยวกับ URL จึงไม่ต้องแนะนำให้แก้ลิงก์
-          const urlProblem = isMissingPageError(err) || !(err instanceof LLMError || err instanceof SourceContentError);
+          const urlProblem = isMissingPageError(err) || !(err instanceof LLMError || err instanceof SourceContentError || isBotChallengeError(err));
           stopDesc = `หยุดที่ตอนที่ ${i}: ${isMissingPageError(err) ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}` +
             (urlProblem ? `\n(กดปุ่ม "แก้ URL ถัดไป" เพื่อใส่ลิงก์ใหม่)` : '');
           break;

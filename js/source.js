@@ -210,6 +210,19 @@ class SourceFetchError extends Error {
   }
 }
 
+// หน้าตรวจบอทของ Cloudflare ("Just a moment...") ไม่ใช่หน้านิยาย: แจ้งว่าเว็บบล็อกชั่วคราว ไม่ใช่ "ไม่มีหน้านี้"
+const BOT_CHALLENGE_PATTERN = /Just a moment\.\.\.|Attention Required! \| Cloudflare|cf-chl-|challenge-platform/i;
+const BOT_CHALLENGE_MESSAGE = 'เว็บต้นทางขอตรวจว่าเป็นคนหรือบอท (ระบบของ Cloudflare) จึงบล็อกการดึงหน้าเว็บชั่วคราว ลองใหม่อีกครั้งในอีกสักครู่';
+
+function isBotChallengePage(body) {
+  const head = (body || '').slice(0, 3000);
+  return BOT_CHALLENGE_PATTERN.test(head) && body.length < 20000;
+}
+
+function isBotChallengeError(err) {
+  return !!err?.challenge;
+}
+
 function asAbort(e) {
   return e?.name === 'AbortError' ? new LLMError('ผู้ใช้สั่งหยุดการทำงาน', 'abort') : e;
 }
@@ -230,7 +243,13 @@ async function fetchViaJina(url, format, signal, profile) {
     throw asAbort(e);
   }
   if (!res.ok) throw new SourceFetchError(res.status === 404 ? '404' : `ดึงหน้าเว็บผ่าน r.jina.ai ไม่สำเร็จ (HTTP ${res.status})`, res.status);
-  return res.text();
+  const body = await res.text();
+  if (isBotChallengePage(body)) {
+    const err = new SourceFetchError(BOT_CHALLENGE_MESSAGE, 403);
+    err.challenge = true;
+    throw err;
+  }
+  return body;
 }
 
 async function fetchViaProxy(proxy, url, signal) {

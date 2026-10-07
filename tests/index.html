@@ -1207,7 +1207,13 @@
         findNextIdInHtml(`nextChapterId:'99163779840917757'`, u) === null &&
         findNextIdInHtml(`nextChapterId:'123'`, 'https://x.com/book/intro') === null;
     });
-    test('scrambledTextRatio: ข้อความสลับตัวอักษร (ROT13) = สูง / ภาษาอังกฤษปกติและภาษาอื่น = 0', () => {
+    test('isBotChallengePage: หน้าตรวจบอทของ Cloudflare = จริง / หน้านิยายปกติ = ไม่', () => {
+      return isBotChallengePage('<html><head><title>Just a moment...</title></head><body>Checking your browser</body></html>') &&
+        isBotChallengePage('Title: Just a moment...\n\nURL Source: https://x.com') &&
+        !isBotChallengePage('<html><head><title>Chapter 3 - Book</title></head><body>' + 'story text '.repeat(50) + '</body></html>') &&
+        !isBotChallengePage('<title>Book</title>' + 'x'.repeat(30000) + 'Just a moment...');
+    });
+    test('scrambledTextRatio:ข้อความสลับตัวอักษร (ROT13) = สูง / ภาษาอังกฤษปกติและภาษาอื่น = 0', () => {
       const plain = Array(6).fill('The old man walked to the edge of the cliff and looked at the sea. He was tired, but his eyes were full of light and he smiled at the boy who stood with him.').join('\n');
       const mixed = plain.split('\n').map((p, i) => i < 2 ? p : rot13(p)).join('\n');
       return scrambledTextRatio(rot13(plain)) > 0.9 && scrambledTextRatio(mixed) > 0.5 && scrambledTextRatio(plain) === 0 && scrambledTextRatio('他走到悬崖边上看着大海。'.repeat(40)) === 0;

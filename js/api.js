@@ -382,7 +382,7 @@ function parseJinaMarkdown(md, pageUrl) {
 /** ดึงหน้าเว็บเป็น markdown (r.jina.ai หรือ proxy สำรอง ดู fetchSourcePage ใน source.js) */
 async function fetchJinaMarkdown(url, signal, profile = null) {
   const { body: md } = await fetchSourcePage(url, { format: 'markdown', signal, profile });
-  if (md.includes('404 Not Found') || md.includes('页面不存在') || (md.includes('Just a moment...') && md.length < 1500)) {
+  if (md.includes('404 Not Found') || md.includes('页面不存在')) {
     throw new Error('404');
   }
   return md;
@@ -397,7 +397,20 @@ async function findNextViaHtml(url, signal, profile) {
   const host = hostOf(url);
   if ((htmlNavMisses.get(host) || 0) >= HTML_NAV_MAX_MISSES) return { url: null, html: null };
   try {
-    const html = await fetchJinaHtml(url, signal, profile);
+    let html;
+    try {
+      html = await fetchJinaHtml(url, signal, profile);
+    } catch (e) {
+      // เว็บขอตรวจบอทชั่วคราว: รอสักพักแล้วลองอีกครั้งเดียว (ไม่นับว่าเว็บนี้ไม่มีลิงก์ตอนถัดไป)
+      if (!isBotChallengeError(e)) throw e;
+      await sleepAbortable(5000, signal);
+      try {
+        html = await fetchJinaHtml(url, signal, profile);
+      } catch (e2) {
+        if (isBotChallengeError(e2)) return { url: null, html: null, blocked: true };
+        throw e2;
+      }
+    }
     const nav = findNextInHtml(new DOMParser().parseFromString(html, 'text/html'), url, profile);
     const found = (nav && (nav.kind === 'chapter' || !isContinuationPage(url, nav.url)) ? nav.url : null) || findNextIdInHtml(html, url);
     htmlNavMisses.set(host, found ? 0 : (htmlNavMisses.get(host) || 0) + 1);
@@ -488,6 +501,28 @@ async function scrapeGeneric(url, signal, profile = null, { allowAi = true } = {
 }
 
 const AI_EXTRACT_THRESHOLD = 300;
+
+/**
+ * ตอนที่มีลิงก์ต้นฉบับแต่ยังไม่รู้ตอนถัดไป (เช่นตอนดึงครั้งก่อนเว็บบล็อกชั่วคราว): ลองหาจาก HTML ของหน้านั้นอีกครั้ง
+ * พบแล้วบันทึกลงตอนนั้นเลย คืน { url, blocked }
+ */
+async function recoverNextUrl(chapter, signal = null) {
+  if (!chapter?.sourceUrl || chapter.nextUrl) return { url: chapter?.nextUrl || null, blocked: false };
+  const profile = getSiteProfile(chapter.sourceUrl);
+  // ลองใหม่ตั้งใจ: ไม่ใช้ตัวนับ "เว็บนี้ไม่มีลิงก์" ของรอบก่อน
+  htmlNavMisses.delete(hostOf(chapter.sourceUrl));
+  const nav = await findNextViaHtml(chapter.sourceUrl, signal, profile);
+  let url = nav.url;
+  if (!url && !nav.blocked && profile?.nextMode !== 'link' && profile?.nextMode) url = computeNextNumericUrl(chapter.sourceUrl);
+  if (url) {
+    chapter.nextUrl = url;
+    await dbSaveChapter(chapter);
+    const mem = chapters.find(c => c.id === chapter.id);
+    if (mem && mem !== chapter) mem.nextUrl = url;
+    if (mem && currentBookId === chapter.bookId && chapters[chapters.length - 1] === mem) nextUrlCalculated = url;
+  }
+  return { url, blocked: !!nav.blocked };
+}
 
 /**
  * ดึงเนื้อหา 1 ตอน: โปรไฟล์เว็บ (ถ้ามี) -> ตัวดึงแบบกลาง -> AI ช่วยแยก
@@ -680,6 +715,8 @@ async function scrapePageAttempt(url, signal, { bookId = null, allowAi = true } 
       page.nextUrl = htmlNav.url;
       page.nextUrlSource = 'html';
     }
+    // เว็บบล็อกตอนหาลิงก์ตอนถัดไป: บอกผู้เรียกว่าไม่ใช่ "ไม่มีตอนถัดไป" (แปลล่วงหน้าจะลองหาใหม่ภายหลัง)
+    if (htmlNav.blocked) page.nextBlocked = true;
   }
 
   // ตอนที่ต้องซื้อ/อ่านต่อในแอพ (ตาม lockPattern ของโปรไฟล์): ตรวจจาก HTML เต็มหน้า
