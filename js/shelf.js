@@ -132,13 +132,11 @@ function formatBatchEstimate(est, count) {
   const basis = est.fromHistory
     ? `คิดจากที่ใช้จริงเฉลี่ย ${est.fromHistory} ตอนล่าสุดของเรื่องนี้`
     : `ตอนละประมาณ ${est.avgChars.toLocaleString()} ตัวอักษรต้นฉบับ`;
-  const cfg = getActiveLlmConfig();
-  const cost = estimateCost({ provider: cfg.provider, model: cfg.mainModel, input: est.input * count, output: est.output * count });
+  // บอกแค่จำนวน token: ราคาจริงขึ้นกับผู้ให้บริการ/โควตาฟรี/แพ็กเกจ ตัวเลขเงินโดยประมาณทำให้เข้าใจผิดได้
   return `จะแปล ${count} ตอน (โหมด "${labels[getQualityMode()]}", ${basis})\n\n` +
     `ใช้ประมาณ ${formatTokenCount(est.input * count)} input token + ${formatTokenCount(est.output * count)} output token\n` +
-    `(ตอนละ ~${formatTokenCount(est.input)} + ${formatTokenCount(est.output)})` +
-    (cost !== null ? `\nค่าใช้จ่ายโดยประมาณ ~$${cost.toFixed(2)} (ตามราคาที่กรอกไว้ของ ${cfg.mainModel})` : '') + '\n\n' +
-    `* เป็นค่าประมาณ ยอดที่ผู้ให้บริการเรียกเก็บจริงอาจสูงกว่านี้ ต้องการเริ่มแปลหรือไม่?`;
+    `(ตอนละ ~${formatTokenCount(est.input)} + ${formatTokenCount(est.output)})\n\n` +
+    `* เป็นค่าประมาณ ยอดที่ใช้จริงอาจสูงกว่านี้ ต้องการเริ่มแปลหรือไม่?`;
 }
 
 /** ใช้ค่าเฉลี่ย token ที่ใช้จริงของเรื่องนี้ (ถ้ามีอย่างน้อย 2 ตอน) แทนการประมาณจากความยาว */
@@ -158,7 +156,7 @@ async function chooseBatchCount(bookId) {
   const options = [3, 5, 10, 20].filter(n => n <= max);
   if (!options.includes(max)) options.push(max);
   const pick = await appChoose(
-    `แปลต่อจากตอนล่าสุดที่มีในเครื่อง${pending ? ` (มีตอนที่รอแปล ${pending} ตอน จะแปลก่อน)` : ''}\nใช้โควตา AI · จะบอกค่าใช้จ่ายโดยประมาณก่อนเริ่ม${max < BATCH_HARD_MAX ? `\nแพ็กเกจของคุณแปลล่วงหน้าได้ครั้งละไม่เกิน ${max} ตอน` : ''}`,
+    `แปลต่อจากตอนล่าสุดที่มีในเครื่อง${pending ? ` (มีตอนที่รอแปล ${pending} ตอน จะแปลก่อน)` : ''}\nใช้โควตา AI · จะบอกจำนวน token โดยประมาณก่อนเริ่ม${max < BATCH_HARD_MAX ? `\nแพ็กเกจของคุณแปลล่วงหน้าได้ครั้งละไม่เกิน ${max} ตอน` : ''}`,
     [
       ...options.map(n => ({ label: `${n} ตอน`, value: n, variant: n === Math.min(5, max) ? 'primary' : undefined })),
       ...(max > 20 ? [{ label: 'กำหนดเอง…', value: 'custom' }] : [])
