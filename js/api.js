@@ -313,6 +313,35 @@ function extractNavLinks(markdown, pageUrl) {
   return links;
 }
 
+// หัวตอนที่อยู่ตรงไหนของข้อความก็ได้ (ใช้แยกชื่อหน้าเว็บ) เช่น 第8章 / Chapter 8 / 8화 / 第8話
+const CHAPTER_MARK_REGEX = /(第\s*[0-9零〇一二三四五六七八九十百千万两]+\s*[章节回話话]|\bchapter\s*\d+|\bepisode\s*\d+|\d+\s*[화話])/i;
+
+/**
+ * แยกชื่อหน้าเว็บเป็นชื่อเรื่องกับชื่อตอน รองรับหลายรูปแบบ:
+ * "《เรื่อง》 第8章 ชื่อตอน - ชื่อเว็บ", "เรื่อง Chapter 3 - Chapter 3: ชื่อตอน - ชื่อเว็บ", "เรื่อง-ตอน" (แบบเดิม)
+ * ส่วนที่มีหัวตอนเป็นชื่อตอน (ส่วนที่ขึ้นต้นด้วยหัวตอนมาก่อน) ส่วนที่เหลือที่ไม่ใช่ชื่อเว็บท้ายสุดเป็นชื่อเรื่อง
+ */
+function splitPageTitle(fullTitle) {
+  const title = (fullTitle || '').replace(/-?69书吧/g, '').trim();
+  // ตัวคั่นที่มีช่องว่างรอบ (ไม่ตัดคำที่มีขีดอยู่ในตัว) ไม่มีเลยค่อยใช้แบบเดิม
+  let parts = title.split(/\s+[-–—|_]\s+|\s*[|｜]\s*/).map(s => s.trim()).filter(Boolean);
+  if (parts.length < 2) parts = title.split(/[-_]/).map(s => s.trim()).filter(Boolean);
+  const bracket = title.match(/《([^》]+)》/);
+  const withMark = parts.map((p, i) => ({ p, i, at: p.search(CHAPTER_MARK_REGEX) })).filter(x => x.at >= 0);
+  if (withMark.length) {
+    const pick = withMark.find(x => x.at === 0) || withMark[0];
+    // ชื่อตอนเริ่มที่หัวตอน (ตัดชื่อเรื่องที่อยู่หน้าในส่วนเดียวกันออก เช่น "《夜無疆》 第8章 ...")
+    const chapter = pick.p.slice(pick.at).trim();
+    const lead = pick.p.slice(0, pick.at).replace(/[《》]/g, '').trim();
+    const others = parts.filter((p, i) => i !== pick.i);
+    const book = bracket ? bracket[1].trim()
+      : lead || (others.length ? others[0].replace(CHAPTER_MARK_REGEX, '').replace(/[\s:：-]+$/, '').trim() : '');
+    return { book, chapter };
+  }
+  if (parts.length >= 2) return { book: parts[0], chapter: parts[1] };
+  return { book: '', chapter: title };
+}
+
 function parseJinaMarkdown(md, pageUrl) {
   let rawChapTitle = "";
   let rawBookTitle = "";
@@ -320,16 +349,7 @@ function parseJinaMarkdown(md, pageUrl) {
 
   const lines = md.split('\n').map(l => l.trim());
   const titleLine = lines.find(l => l.startsWith('Title:'));
-  if (titleLine) {
-    const fullTitle = titleLine.replace('Title:', '').trim();
-    const parts = fullTitle.split(/[-_]/);
-    if (parts.length >= 2) {
-      rawBookTitle = parts[0].trim();
-      rawChapTitle = parts[1].replace('-69书吧', '').trim();
-    } else {
-      rawChapTitle = fullTitle.replace('-69书吧', '').trim();
-    }
-  }
+  if (titleLine) ({ book: rawBookTitle, chapter: rawChapTitle } = splitPageTitle(titleLine.replace('Title:', '').trim()));
 
   const authorLine = lines.find(l => l.includes('作者：') || l.includes('作者:'));
   if (authorLine) {
@@ -379,7 +399,7 @@ async function findNextViaHtml(url, signal, profile) {
   try {
     const html = await fetchJinaHtml(url, signal, profile);
     const nav = findNextInHtml(new DOMParser().parseFromString(html, 'text/html'), url, profile);
-    const found = nav && (nav.kind === 'chapter' || !isContinuationPage(url, nav.url)) ? nav.url : null;
+    const found = (nav && (nav.kind === 'chapter' || !isContinuationPage(url, nav.url)) ? nav.url : null) || findNextIdInHtml(html, url);
     htmlNavMisses.set(host, found ? 0 : (htmlNavMisses.get(host) || 0) + 1);
     return { url: found, html };
   } catch (e) {
@@ -488,12 +508,135 @@ async function scrapePage(url, signal = null, options = {}) {
   }
 }
 
-async function scrapePageInner(url, signal = null, { bookId = null, allowAi = true } = {}) {
+// ---------- ตรวจเนื้อหาที่ดึงมาก่อนส่งไปแปล (ไม่เสีย token กับหน้าที่ผิด) ----------
+/** ปัญหาของเนื้อหาจากเว็บ (ไม่ใช่ของ AI): kind 'scrambled' | 'mismatch' | 'duplicate' */
+class SourceContentError extends Error {
+  constructor(message, kind) {
+    super(message);
+    this.name = 'SourceContentError';
+    this.kind = kind;
+  }
+}
+
+const COMMON_EN_WORDS = new Set(['the', 'and', 'of', 'to', 'a', 'in', 'was', 'he', 'his', 'that', 'it', 'with', 'her', 'she', 'you', 'for', 'on', 'is', 'had', 'at', 'as', 'not', 'but', 'be', 'they', 'this', 'him', 'from', 'were', 'have', 'said', 'what', 'all', 'an', 'there', 'so', 'by', 'me', 'my']);
+
+function rot13(s) {
+  return s.replace(/[a-z]/gi, c => {
+    const base = c <= 'Z' ? 65 : 97;
+    return String.fromCharCode((c.charCodeAt(0) - base + 13) % 26 + base);
+  });
+}
+
+function englishWordHits(text) {
+  const words = (text || '').toLowerCase().match(/[a-z]+/g) || [];
+  return { words: words.length, hits: words.filter(w => COMMON_EN_WORDS.has(w)).length };
+}
+
+/**
+ * สัดส่วนข้อความภาษาอังกฤษที่ถูกสลับตัวอักษรกันการดึง (0-1)
+ * ย่อหน้าปกติมีคำพื้นฐาน (the/of/and) เยอะ ย่อหน้าที่ถูกสลับจะเจอคำพวกนี้ก็ต่อเมื่อเลื่อนตัวอักษรกลับ (ใช้ตรวจเท่านั้น ไม่ได้ถอดเนื้อหา)
+ */
+function scrambledTextRatio(text) {
+  let total = 0;
+  let scrambled = 0;
+  for (const para of (text || '').split(/\n+/)) {
+    const plain = englishWordHits(para);
+    if (plain.words < 15) continue;
+    total += plain.words;
+    const shifted = englishWordHits(rot13(para));
+    if (shifted.hits >= 3 && shifted.hits > plain.hits * 3) scrambled += plain.words;
+  }
+  return total >= 60 ? scrambled / total : 0;
+}
+
+/** เลขตอนจาก URL ที่บอกชัดว่าเป็นตอน (chapter-12, /chapter/12, ep-3) ไม่เดาจากตัวเลขอื่นใน URL */
+function chapterNumberFromUrl(url) {
+  try {
+    const m = new URL(url).pathname.match(/(?:chapter|chap|ch|episode|ep)[-_/]?(\d+)\/?$/i);
+    return m ? parseInt(m[1], 10) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/** เลขตอนจากหัวตอนในบรรทัดแรกๆ ของเนื้อหา ถ้าไม่มีใช้ชื่อตอนจากหน้าเว็บ */
+function chapterNumberFromContent(text, title = '') {
+  const lines = (text || '').split('\n').map(l => l.trim()).filter(Boolean).slice(0, 5);
+  for (const line of [...lines, title]) {
+    if (!line || line.length > 120) continue;
+    const m = line.match(/(?:chapter|episode)\s*(\d+)|^#\s*(\d+)\b|第\s*([0-9]+)\s*[章节回話话]|(\d+)\s*[화話]/i);
+    if (m) return parseInt(m[1] || m[2] || m[3] || m[4], 10);
+  }
+  return null;
+}
+
+/** ความยาวต้นฉบับปกติของตอนในเรื่องนี้ (มัธยฐานของ 5 ตอนล่าสุด) 0 = ยังไม่มีข้อมูลพอ */
+async function typicalChapterLength(bookId) {
+  if (!bookId) return 0;
+  const lens = (await dbGetChaptersByBook(bookId))
+    .filter(c => isStoryChapter(c))
+    .sort((a, b) => (a.order || 0) - (b.order || 0))
+    .slice(-5)
+    .map(c => (c.paragraphs || []).reduce((n, p) => n + (p.src || '').length, 0))
+    .filter(n => n > 0)
+    .sort((a, b) => a - b);
+  return lens.length >= 2 ? lens[Math.floor(lens.length / 2)] : 0;
+}
+
+/** ตัวอย่างต้นแบบของต้นฉบับ (ตัดช่องว่าง/เครื่องหมาย) ใช้เทียบว่าเป็นตอนเดียวกันไหม */
+function sourceFingerprint(text) {
+  return (text || '').replace(/[\s\p{P}\p{S}]+/gu, '').slice(0, 300);
+}
+
+/** ตอนในเรื่องที่ต้นฉบับขึ้นต้นเหมือนกับข้อความนี้ (เว็บส่งตอนเดิมมาซ้ำ) */
+function findDuplicateSourceChapter(bookChaps, text) {
+  const fp = sourceFingerprint(text);
+  if (fp.length < 100) return null;
+  return (bookChaps || []).find(c => !isPendingChapter(c) && sourceFingerprint((c.paragraphs || []).map(p => p.src || '').join('\n')) === fp) || null;
+}
+
+function duplicateChapterError(dup) {
+  return new SourceContentError(`เว็บส่งเนื้อหาที่ซ้ำกับ "${dup.title}" ซึ่งมีอยู่แล้วมาให้ จึงไม่บันทึกซ้ำ (เว็บอาจส่งผิดหน้าชั่วคราว ลองใหม่อีกครั้งภายหลัง)`, 'duplicate');
+}
+
+/**
+ * ดึงเนื้อหา 1 ตอน แล้วตรวจก่อนใช้: เลขตอนในเนื้อหาไม่ตรงกับ URL หรือสั้นผิดปกติ = ดึงใหม่แบบไม่ใช้ cache (สูงสุด 2 ครั้ง)
+ * เว็บที่โหลดเนื้อหาด้วย JavaScript (เช่น wtr-lab) บางครั้ง r.jina.ai ส่งเนื้อหาของตอนอื่นหรือหน้าที่ยังโหลดไม่เสร็จมา
+ */
+async function scrapePageInner(url, signal = null, options = {}) {
+  const expected = chapterNumberFromUrl(url);
+  const typical = await typicalChapterLength(options.bookId).catch(() => 0);
+  const numberOf = p => chapterNumberFromContent(p.text, p.rawChapTitle);
+  const problemOf = (p) => {
+    const got = numberOf(p);
+    if (expected !== null && got !== null && got !== expected) return 'mismatch';
+    if (typical >= 1500 && p.text.length < typical * 0.25) return 'short';
+    return null;
+  };
+  let page = await scrapePageAttempt(url, signal, options, false);
+  const seenNumbers = [numberOf(page)];
+  for (let retry = 0; retry < 2 && problemOf(page); retry++) {
+    page = await scrapePageAttempt(url, signal, options, true);
+    seenNumbers.push(numberOf(page));
+  }
+  // ดึงกี่ครั้งก็ได้เลขตอนเดิม = เว็บนี้ตั้งเลขใน URL ต่างจากเลขตอนเอง (เช่นนับบทนำเป็นตอนที่ 1) ใช้ได้ตามปกติ
+  if (problemOf(page) === 'mismatch' && new Set(seenNumbers).size > 1) {
+    throw new SourceContentError(`ขอตอนที่ ${expected} แต่เว็บส่งเนื้อหาตอนที่ ${numberOf(page)} มา (ลองดึงใหม่แล้ว ${seenNumbers.length} ครั้ง) จึงไม่แปลตอนนี้ เพื่อไม่ให้ลำดับตอนผิด ลองใหม่อีกครั้งภายหลัง`, 'mismatch');
+  }
+  if (scrambledTextRatio(page.text) >= 0.2) {
+    throw new SourceContentError('เว็บนี้เข้ารหัสเนื้อหาไว้กันการดึง (ตัวอักษรถูกสลับ อ่านได้เฉพาะในเบราว์เซอร์ของเว็บ) แอพอ่านไม่ได้ จึงไม่ได้ส่งไปแปลและไม่ใช้ token ลองหาเรื่องเดียวกันจากเว็บอื่น', 'scrambled');
+  }
+  return page;
+}
+
+async function scrapePageAttempt(url, signal, { bookId = null, allowAi = true } = {}, fresh = false) {
   let parsedUrl;
   try { parsedUrl = new URL(url); } catch { throw new Error('กรุณาใส่ URL ที่ถูกต้อง'); }
   if (!['http:', 'https:'].includes(parsedUrl.protocol)) throw new Error('รองรับเฉพาะ URL ที่ขึ้นต้นด้วย http:// หรือ https://');
 
-  const profile = getSiteProfile(url);
+  const siteProfile = getSiteProfile(url);
+  // ดึงซ้ำ: ขอให้ r.jina.ai โหลดหน้าใหม่ ไม่ใช้ผลที่เก็บไว้ (ใช้เฉพาะตอนดึงหน้า ไม่นับเป็นโปรไฟล์ของเว็บ)
+  const profile = fresh ? { ...(siteProfile || {}), noCache: true } : siteProfile;
   const host = hostOf(url);
   let page = null;
   let profileFailed = false;
@@ -512,8 +655,8 @@ async function scrapePageInner(url, signal = null, { bookId = null, allowAi = tr
   if (!page) page = await scrapeGeneric(url, signal, profile, { allowAi });
   const found = !!page.text && page.text.length >= 40;
   // โปรไฟล์ล้มเหลวติดกันหลายครั้ง = เว็บอาจเปลี่ยนหน้าตา (แจ้งเตือนครั้งเดียวเมื่อถึงเกณฑ์)
-  if (profile) {
-    const profileOk = profile.contentSelector ? !profileFailed : found;
+  if (siteProfile) {
+    const profileOk = siteProfile.contentSelector ? !profileFailed : found;
     if (recordProfileResult(host, profileOk) && typeof notifyProfileFailing === 'function') notifyProfileFailing(host);
   }
   if (!found) throw new Error('ไม่พบเนื้อหานิยายในหน้าที่ดึงมาได้');

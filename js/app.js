@@ -1562,6 +1562,8 @@ async function triggerReadingPrefetchIfEnabled(isManualClick = false) {
     `, true);
 
     const { text, nextUrl, rawChapTitle, rawBookTitle, author, lockInfo } = await scrapePage(targetUrl, signal, { bookId: requestBookId });
+    const dup = findDuplicateSourceChapter(bookChaps, text);
+    if (dup) throw duplicateChapterError(dup);
     if (author) {
       ctx.author = author;
       if (currentBookId === requestBookId) currentAuthor = author;

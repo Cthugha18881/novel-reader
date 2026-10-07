@@ -379,6 +379,28 @@ function findNextInHtml(doc, pageUrl, profile = null) {
   return pageCandidate ? { url: pageCandidate, kind: 'page' } : null;
 }
 
+// เว็บที่ไม่มีลิงก์ตอนถัดไปในหน้า แต่ฝังรหัสตอนถัดไปไว้ในข้อมูลของหน้า (เช่น webnovel: nextChapterId:'991...')
+const NEXT_ID_PATTERN = /["']?(?:nextChapterId|nextChapterID|nextcId|next_chapter_id)["']?\s*[:=]\s*["']?(\d{3,})/;
+
+/** สร้าง URL ตอนถัดไปจากรหัสตอนที่ฝังใน HTML โดยแทนเลขท้าย path ของตอนนี้ (คืน null ถ้าไม่พบ หรือ URL ไม่ได้ลงท้ายด้วยรหัสตอน) */
+function findNextIdInHtml(html, pageUrl) {
+  const m = (html || '').match(NEXT_ID_PATTERN);
+  if (!m) return null;
+  let u;
+  try { u = new URL(pageUrl); } catch (e) { return null; }
+  const parts = u.pathname.split('/');
+  const lastIdx = parts.length - 1 - [...parts].reverse().findIndex(p => p !== '');
+  const last = parts[lastIdx] || '';
+  const tail = last.match(/^(.*?)(\d{3,})$/);
+  if (!tail || tail[2] === m[1]) return null;
+  // webnovel แบบมีชื่อตอนนำหน้า (chapter-name_99163...) ใช้รหัสอย่างเดียว เว็บพาไปหน้าที่ถูกเอง
+  parts[lastIdx] = tail[1].endsWith('_') ? m[1] : `${tail[1]}${m[1]}`;
+  u.pathname = parts.join('/');
+  u.search = '';
+  u.hash = '';
+  return u.href;
+}
+
 /** แยกเนื้อหาจาก HTML ด้วยโปรไฟล์เว็บ */
 function parseHtmlWithProfile(html, pageUrl, profile) {
   const doc = new DOMParser().parseFromString(html, 'text/html');

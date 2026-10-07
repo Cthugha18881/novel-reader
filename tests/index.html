@@ -1186,7 +1186,49 @@
         window.guardedFetch = orig;
       }
     });
-    test('describeBatchSkipped: สรุปตอนที่ข้ามและเหตุผล / ไม่มีตอนข้าม = ว่าง', () => {
+    test('splitPageTitle: 《เรื่อง》 ตอน - เว็บ / เรื่อง Chapter - Chapter: ชื่อ - เว็บ / เรื่อง-ตอน แบบเดิม', () => {
+      const a = splitPageTitle('《夜無疆》 第8章 曾照彩雲歸 - 天天看小說');
+      const b = splitPageTitle('I Can Equip Infinitely Chapter 3 - Chapter 3: Strange World - Infinite Equipment');
+      const c = splitPageTitle('Survive on the Train! Chapter 7 - WTR-LAB');
+      const d = splitPageTitle('凡人修仙传-第十章 名字-69书吧');
+      const e = splitPageTitle('My Book_Prologue');
+      return eq([a, b, c, d], [
+        { book: '夜無疆', chapter: '第8章 曾照彩雲歸' },
+        { book: 'I Can Equip Infinitely', chapter: 'Chapter 3: Strange World' },
+        { book: 'Survive on the Train!', chapter: 'Chapter 7' },
+        { book: '凡人修仙传', chapter: '第十章 名字' }
+      ]) && e.book === 'My Book' && e.chapter === 'Prologue';
+    });
+    test('findNextIdInHtml: รหัสตอนถัดไปในข้อมูลของหน้า (webnovel) / ไม่มีรหัส หรือรหัสเดิม = null', () => {
+      const u = 'https://www.webnovel.com/book/36845737800834505/99163779840917757';
+      return findNextIdInHtml(`var g={nextChapterId:'99163782256838115',preChapterId:'1'}`, u) === 'https://www.webnovel.com/book/36845737800834505/99163782256838115' &&
+        findNextIdInHtml(`"nextcId":"555"`, 'https://x.com/book/name_1/chap-name_444') === 'https://x.com/book/name_1/555' &&
+        findNextIdInHtml(`nextChapterId:''`, u) === null &&
+        findNextIdInHtml(`nextChapterId:'99163779840917757'`, u) === null &&
+        findNextIdInHtml(`nextChapterId:'123'`, 'https://x.com/book/intro') === null;
+    });
+    test('scrambledTextRatio: ข้อความสลับตัวอักษร (ROT13) = สูง / ภาษาอังกฤษปกติและภาษาอื่น = 0', () => {
+      const plain = Array(6).fill('The old man walked to the edge of the cliff and looked at the sea. He was tired, but his eyes were full of light and he smiled at the boy who stood with him.').join('\n');
+      const mixed = plain.split('\n').map((p, i) => i < 2 ? p : rot13(p)).join('\n');
+      return scrambledTextRatio(rot13(plain)) > 0.9 && scrambledTextRatio(mixed) > 0.5 && scrambledTextRatio(plain) === 0 && scrambledTextRatio('他走到悬崖边上看着大海。'.repeat(40)) === 0;
+    });
+    test('chapterNumberFromUrl / chapterNumberFromContent: เลขตอนจาก URL ที่บอกชัด และหัวตอนในเนื้อหา', () => {
+      return eq([
+        chapterNumberFromUrl('https://wtr-lab.com/en/novel/1/x/chapter-12'), chapterNumberFromUrl('https://a.com/book/ep/3'), chapterNumberFromUrl('https://a.com/novel/123_8.html'),
+        chapterNumberFromContent('#8 【Second Station】\nbody'), chapterNumberFromContent('Chapter 6 Arms\nbody'), chapterNumberFromContent('第12章 名字\n正文'), chapterNumberFromContent('ordinary text', 'Book Chapter 5'), chapterNumberFromContent('no heading here', '')
+      ], [12, 3, null, 8, 6, 12, 5, null]);
+    });
+    test('findDuplicateSourceChapter: ต้นฉบับขึ้นต้นเหมือนตอนที่มีอยู่ = ซ้ำ / ตอนรอแปลและข้อความสั้นไม่นับ', () => {
+      const body = 'Ye Qiyan opened the train door and looked at the platform outside, where a thin fog covered everything in sight. ' .repeat(3);
+      const chaps = [
+        { id: 'a', title: 'บทที่ 8', paragraphs: [{ src: body, th: 'x' }] },
+        { id: 'b', title: 'รอแปล', status: 'pending', paragraphs: [{ src: 'Another body text that is long enough to count as a real chapter for the fingerprint check here.'.repeat(2), th: '' }] }
+      ];
+      return findDuplicateSourceChapter(chaps, body.replace(/ /g, '  '))?.id === 'a' &&
+        findDuplicateSourceChapter(chaps, 'A different chapter about something else entirely, long enough to compare against the stored chapters.'.repeat(2)) === null &&
+        findDuplicateSourceChapter(chaps, chaps[1].paragraphs[0].src) === null && findDuplicateSourceChapter(chaps, 'short') === null;
+    });
+    test('describeBatchSkipped:สรุปตอนที่ข้ามและเหตุผล / ไม่มีตอนข้าม = ว่าง', () => {
       const err = { message: 'Google Gemini ไม่ยอมรับเนื้อหา' };
       const s = describeBatchSkipped(['ก', 'ข', 'ค', 'ง'], err);
       return describeBatchSkipped([], null) === '' && s.includes('ข้าม 4 ตอน') && s.includes('"ก"') && s.includes('อีก 1 ตอน') && s.includes(err.message);

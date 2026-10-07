@@ -399,6 +399,9 @@ async function runBatchJob({ bookId, count }) {
         try {
           page = await scrapePage(targetUrl, signal, { bookId });
           const { text, nextUrl, rawChapTitle, rawBookTitle, author, lockInfo } = page;
+          // เว็บส่งตอนที่มีอยู่แล้วมาซ้ำ (ส่งผิดหน้า): หยุดก่อนแปล ไม่เสีย token และลำดับตอนไม่เพี้ยน
+          const dup = findDuplicateSourceChapter(existingAll, text);
+          if (dup) throw duplicateChapterError(dup);
           if (author) ctx.author = author;
 
           const result = await translateChapter(text, ctx, {
@@ -496,7 +499,7 @@ async function runBatchJob({ bookId, count }) {
             }
           }
           // ปัญหาจาก AI/เพดาน/การตั้งค่า ไม่เกี่ยวกับ URL จึงไม่ต้องแนะนำให้แก้ลิงก์
-          const urlProblem = isMissingPageError(err) || !(err instanceof LLMError);
+          const urlProblem = isMissingPageError(err) || !(err instanceof LLMError || err instanceof SourceContentError);
           stopDesc = `หยุดที่ตอนที่ ${i}: ${isMissingPageError(err) ? 'ไม่พบหน้านิยาย (เลข URL กระโดด)' : err.message}` +
             (urlProblem ? `\n(กดปุ่ม "แก้ URL ถัดไป" เพื่อใส่ลิงก์ใหม่)` : '');
           break;
