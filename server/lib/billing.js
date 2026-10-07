@@ -3,24 +3,24 @@
 // PromptPay = ซื้อสิทธิ์ 30 วันทีละครั้ง (PromptPay ตัดเงินอัตโนมัติไม่ได้)
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-export const PAID_PLANS = ['plus', 'pro'];
+export const PAID_PLANS = ['plus', 'pro', 'max'];
 export const PASS_DAYS = 30;
-const PLAN_LABELS = { plus: 'Plus', pro: 'Pro' };
+const PLAN_LABELS = { plus: 'Plus', pro: 'Pro', max: 'Max' };
 
 /** ค่าตั้งของระบบชำระเงินจาก environment variables (ไม่ตั้ง = ปิดรับชำระเงิน แอพส่วนอื่นยังใช้ได้) */
 export function readBillingEnv(env) {
   const cfg = {
     secretKey: env.STRIPE_SECRET_KEY || '',
     webhookSecret: env.STRIPE_WEBHOOK_SECRET || '',
-    prices: { plus: env.STRIPE_PRICE_PLUS || '', pro: env.STRIPE_PRICE_PRO || '' },
+    prices: { plus: env.STRIPE_PRICE_PLUS || '', pro: env.STRIPE_PRICE_PRO || '', max: env.STRIPE_PRICE_MAX || '' },
     // ราคาซื้อ 30 วันผ่าน PromptPay (บาท)
-    passThb: { plus: Number(env.DT_PASS_PLUS_THB) || 99, pro: Number(env.DT_PASS_PRO_THB) || 249 },
+    passThb: { plus: Number(env.DT_PASS_PLUS_THB) || 59, pro: Number(env.DT_PASS_PRO_THB) || 179, max: Number(env.DT_PASS_MAX_THB) || 299 },
     promptpay: env.DT_PROMPTPAY !== 'false'
   };
   cfg.testMode = /^(sk|rk)_test_/.test(cfg.secretKey);
   cfg.missing = Object.entries({
     STRIPE_SECRET_KEY: cfg.secretKey, STRIPE_WEBHOOK_SECRET: cfg.webhookSecret,
-    STRIPE_PRICE_PLUS: cfg.prices.plus, STRIPE_PRICE_PRO: cfg.prices.pro
+    STRIPE_PRICE_PLUS: cfg.prices.plus, STRIPE_PRICE_PRO: cfg.prices.pro, STRIPE_PRICE_MAX: cfg.prices.max
   }).filter(([, v]) => !v).map(([k]) => k);
   return cfg;
 }

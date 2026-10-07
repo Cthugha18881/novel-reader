@@ -15,10 +15,9 @@ window.DUSKTALE_HOSTED = {
   // ใช้แสดงผลในแอพเท่านั้น (โควตาจริงอยู่ที่ตาราง dt_plans ในฐานข้อมูล)
   freeMonthlyTokens: 400000,
   tokensPerChapter: 20000,
-  // ระบบชำระเงิน: เปิดเมื่อตั้ง Stripe บนเซิร์ฟเวอร์ครบแล้ว (docs/backend-setup.md ขั้นที่ 6)
-  // billingTestMode: true = แสดงป้าย "โหมดทดสอบ" (ใช้บัตรทดสอบของ Stripe ไม่มีเงินจริง)
+  // ระบบชำระเงิน: แอพถามเซิร์ฟเวอร์เอง (/api/billing/prices) เปิดปุ่มสมัครเมื่อตั้ง Stripe บนเซิร์ฟเวอร์ครบ
+  // ราคาที่แสดงก็มาจาก Stripe ค่าด้านล่างใช้เฉพาะตอนต่อเซิร์ฟเวอร์ไม่ได้
   billingEnabled: false,
   billingTestMode: true,
-  // ราคาต่อเดือน (บาท) ใช้แสดงในแอพ ต้องตรงกับราคาที่ตั้งใน Stripe และ DT_PASS_*_THB บนเซิร์ฟเวอร์
-  prices: { plus: 99, pro: 249 }
+  prices: { plus: 59, pro: 179, max: 299 }
 };

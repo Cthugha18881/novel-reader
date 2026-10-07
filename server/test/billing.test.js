@@ -8,16 +8,16 @@ import {
 } from '../lib/billing.js';
 
 const BILLING_ENV = {
-  STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_WEBHOOK_SECRET: 'whsec_test', STRIPE_PRICE_PLUS: 'price_plus', STRIPE_PRICE_PRO: 'price_pro'
+  STRIPE_SECRET_KEY: 'sk_test_abc', STRIPE_WEBHOOK_SECRET: 'whsec_test', STRIPE_PRICE_PLUS: 'price_plus', STRIPE_PRICE_PRO: 'price_pro', STRIPE_PRICE_MAX: 'price_max'
 };
 
-test('readBillingEnv: บอกค่าที่ขาด ราคาเริ่มต้น 99/249 และโหมดทดสอบ', () => {
+test('readBillingEnv: บอกค่าที่ขาด ราคาเริ่มต้น 59/179/299 และโหมดทดสอบ', () => {
   const empty = readBillingEnv({});
-  assert.deepEqual(empty.missing, ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_PLUS', 'STRIPE_PRICE_PRO']);
+  assert.deepEqual(empty.missing, ['STRIPE_SECRET_KEY', 'STRIPE_WEBHOOK_SECRET', 'STRIPE_PRICE_PLUS', 'STRIPE_PRICE_PRO', 'STRIPE_PRICE_MAX']);
   const b = readBillingEnv(BILLING_ENV);
   assert.deepEqual(b.missing, []);
   assert.equal(b.testMode, true);
-  assert.deepEqual(b.passThb, { plus: 99, pro: 249 });
+  assert.deepEqual(b.passThb, { plus: 59, pro: 179, max: 299 });
   assert.equal(readBillingEnv({ ...BILLING_ENV, STRIPE_SECRET_KEY: 'sk_live_x' }).testMode, false);
   assert.equal(readBillingEnv({ ...BILLING_ENV, DT_PROMPTPAY: 'false' }).promptpay, false);
 });
@@ -47,6 +47,7 @@ test('validateCheckoutRequest', () => {
   const b = readBillingEnv(BILLING_ENV);
   assert.ok(validateCheckoutRequest({ plan: 'plus', method: 'card' }, b).ok);
   assert.ok(validateCheckoutRequest({ plan: 'pro', method: 'promptpay' }, b).ok);
+  assert.ok(validateCheckoutRequest({ plan: 'max', method: 'card' }, b).ok);
   assert.equal(validateCheckoutRequest({ plan: 'free', method: 'card' }, b).ok, false);
   assert.equal(validateCheckoutRequest({ plan: 'plus', method: 'bitcoin' }, b).ok, false);
   assert.equal(validateCheckoutRequest({ plan: 'plus', method: 'promptpay' }, readBillingEnv({ ...BILLING_ENV, DT_PROMPTPAY: 'false' })).ok, false);
@@ -65,7 +66,7 @@ test('buildCheckoutParams: บัตร = สมัครรายเดือ�
   assert.equal(pp.mode, 'payment');
   assert.deepEqual(pp.payment_method_types, ['promptpay']);
   assert.equal(pp.line_items[0].price_data.currency, 'thb');
-  assert.equal(pp.line_items[0].price_data.unit_amount, 9900);
+  assert.equal(pp.line_items[0].price_data.unit_amount, 5900);
   assert.equal(pp.customer, 'cus_1');
   assert.equal(pp.customer_email, undefined);
   assert.equal(pp.metadata.kind, 'pass');
@@ -82,6 +83,7 @@ test('subscriptionPatch: รองรับวันสิ้นรอบทั�
   assert.equal(newShape.p_user, null);
   assert.equal(newShape.p_cancel, true);
   assert.equal(planForPrice('price_other', b), null);
+  assert.equal(planForPrice('price_max', b), 'max');
 });
 
 test('passFromSession: ให้สิทธิ์เฉพาะที่จ่ายแล้วและเป็นการซื้อ 30 วัน', () => {
@@ -212,4 +214,40 @@ test('webhook: ยกเลิกการสมัคร -> บันทึก�
   assert.equal(res.status, 200);
   assert.equal(JSON.parse(calls.find(c => c.url.endsWith('/rpc/dt_billing_apply_subscription')).init.body).p_status, 'canceled');
   assert.equal((await POST(webhookRequest({ type: 'invoice.created', data: { object: {} } }))).status, 200);
+});
+
+test('prices: ปิดรับชำระเงิน -> enabled false พร้อมราคาตั้งต้น ไม่เรียก Stripe', async () => {
+  setupEnv();
+  delete process.env.STRIPE_SECRET_KEY;
+  const calls = mockFetch();
+  const { GET, resetPriceCache } = await import('../api/billing/prices.js');
+  resetPriceCache();
+  const data = await (await GET(new Request('https://api.example/api/billing/prices', { headers: { Origin: 'https://cthugha18881.github.io' } }))).json();
+  assert.equal(data.enabled, false);
+  assert.deepEqual(data.plans.max, { monthlyThb: 299, passThb: 299 });
+  assert.ok(!calls.some(c => c.url.startsWith('https://api.stripe.com/')));
+});
+
+test('prices: อ่านราคารายเดือนจาก Stripe (บาท) และจำไว้ ไม่เรียกซ้ำ', async () => {
+  setupEnv();
+  const calls = [];
+  globalThis.fetch = async (url) => {
+    calls.push(String(url));
+    const id = String(url).split('/').pop();
+    const amounts = { price_plus: 6900, price_pro: 17900, price_max: 29900 };
+    return new Response(JSON.stringify({ id, currency: 'thb', unit_amount: amounts[id] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+  const { GET, resetPriceCache } = await import('../api/billing/prices.js');
+  resetPriceCache();
+  const req = () => new Request('https://api.example/api/billing/prices', { headers: { Origin: 'https://cthugha18881.github.io' } });
+  const res = await GET(req());
+  const data = await res.json();
+  assert.equal(data.enabled, true);
+  assert.equal(data.testMode, true);
+  assert.equal(data.plans.plus.monthlyThb, 69);
+  assert.equal(data.plans.plus.passThb, 59);
+  assert.equal(data.plans.max.monthlyThb, 299);
+  assert.equal(res.headers.get('Access-Control-Allow-Origin'), 'https://cthugha18881.github.io');
+  await GET(req());
+  assert.equal(calls.length, 3);
 });

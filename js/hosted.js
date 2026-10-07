@@ -18,7 +18,7 @@ const HOSTED = (() => {
     // ระบบชำระเงิน (Stripe): ปิดไว้จนกว่าจะตั้งค่าบนเซิร์ฟเวอร์ครบ ราคาใช้แสดงผลเท่านั้น (ราคาจริงอยู่ที่ Stripe)
     billingEnabled: c.billingEnabled === true,
     billingTestMode: c.billingTestMode === true,
-    prices: { plus: Number(c.prices?.plus) || 99, pro: Number(c.prices?.pro) || 249 }
+    prices: { plus: Number(c.prices?.plus) || 59, pro: Number(c.prices?.pro) || 179, max: Number(c.prices?.max) || 299 }
   };
 })();
 const HOSTED_SESSION_KEY = 'nov_hosted_session';

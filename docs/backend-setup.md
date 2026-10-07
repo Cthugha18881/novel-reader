@@ -116,16 +116,17 @@ commit แล้ว push รอ GitHub Actions ผ่าน (ประมาณ 
 
 ## 6. รับชำระเงินด้วย Stripe (เริ่มจากโหมดทดสอบ)
 
-ราคา: Plus 99 บาท / Pro 249 บาท ต่อ 30 วัน · บัตร = สมัครรายเดือนต่ออายุอัตโนมัติ · PromptPay = ซื้อ 30 วันทีละครั้ง (PromptPay ตัดเงินอัตโนมัติไม่ได้)
+ราคา: Plus 59 / Pro 179 / Max 299 บาท ต่อ 30 วัน (แอพอ่านราคาจาก Stripe ผ่าน `/api/billing/prices` แก้ราคาที่ Stripe ที่เดียว) · บัตร = สมัครรายเดือนต่ออายุอัตโนมัติ · PromptPay = ซื้อ 30 วันทีละครั้ง (PromptPay ตัดเงินอัตโนมัติไม่ได้)
 ข้อมูลบัตรกรอกที่หน้าของ Stripe เท่านั้น ไม่ผ่านแอพหรือเซิร์ฟเวอร์ของเรา
 
 1. สมัคร [Stripe](https://dashboard.stripe.com/register) เลือกประเทศ **Thailand** (PromptPay ใช้ได้เฉพาะบัญชีไทย) แล้วอยู่ใน **Test mode / Sandbox** (สวิตช์มุมขวาบน) ระหว่างทดสอบ ยังไม่ต้องกรอกข้อมูลธุรกิจหรือบัญชีธนาคาร
-2. **Product catalog → Add product** สร้าง 2 รายการ:
-   - `Dusktale Plus` → Recurring · Monthly · **99 THB**
-   - `Dusktale Pro` → Recurring · Monthly · **249 THB**
+2. **Product catalog → Add product** สร้าง 3 รายการ:
+   - `Dusktale Plus` → Recurring · Monthly · **59 THB**
+   - `Dusktale Pro` → Recurring · Monthly · **179 THB**
+   - `Dusktale Max` → Recurring · Monthly · **299 THB**
    เปิดแต่ละรายการ คัดลอก **Price ID** (`price_...`) ไว้
 3. **Settings → Payment methods** เปิด **PromptPay** (และ Cards ซึ่งเปิดอยู่แล้ว)
-4. **Settings → Billing → Customer portal** กด **Activate test link** / Save: อนุญาตยกเลิกการสมัคร อัปเดตบัตร ดูใบเสร็จ (ถ้าอยากให้เปลี่ยน Plus ↔ Pro เองได้ ให้เพิ่มสองราคานี้ในหัวข้อ Subscriptions)
+4. **Settings → Billing → Customer portal** กด **Activate test link** / Save: อนุญาตยกเลิกการสมัคร อัปเดตบัตร ดูใบเสร็จ (ถ้าอยากให้เปลี่ยนแพ็กเกจเองได้ ให้เพิ่มทั้ง 3 ราคาในหัวข้อ Subscriptions)
 5. **Developers → Webhooks → Add endpoint**
    - URL: `https://novel-reader-server.vercel.app/api/billing/webhook`
    - Events: `checkout.session.completed`, `checkout.session.async_payment_succeeded`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`
@@ -139,11 +140,12 @@ commit แล้ว push รอ GitHub Actions ผ่าน (ประมาณ 
    | `STRIPE_WEBHOOK_SECRET` | `whsec_...` (ลับ) |
    | `STRIPE_PRICE_PLUS` | `price_...` ของ Plus |
    | `STRIPE_PRICE_PRO` | `price_...` ของ Pro |
-   | `DT_PASS_PLUS_THB` / `DT_PASS_PRO_THB` | ไม่ต้องใส่ถ้าใช้ 99 / 249 (ราคา PromptPay 30 วัน) |
+   | `STRIPE_PRICE_MAX` | `price_...` ของ Max |
+   | `DT_PASS_PLUS_THB` / `DT_PASS_PRO_THB` / `DT_PASS_MAX_THB` | ไม่ต้องใส่ถ้าใช้ 59 / 179 / 299 (ราคา PromptPay 30 วัน) |
 
    แล้ว **Deployments → Redeploy** · เปิด `/api/health` ต้องเห็น `"billing":{"ok":true,...,"testMode":true}`
 8. Supabase → SQL Editor → รัน `server/schema.sql` ทั้งไฟล์อีกครั้ง (เพิ่มคอลัมน์การชำระเงินและฟังก์ชัน `dt_billing_*`)
-9. แก้ `js/hosted-config.js` เป็น `billingEnabled: true` (หรือบอก Claude) แล้ว push
+9. ไม่ต้องแก้แอพ: แอพถาม `/api/billing/prices` เอง เมื่อตั้งครบ ปุ่มสมัครจะขึ้นเอง (แอพจำผลไว้ 6 ชั่วโมง เปิดหน้าแพ็กเกจจะเช็กใหม่)
 
 **ทดสอบ (ไม่มีเงินจริง):** แอพ → ตั้งค่า → 🤖 AI → "แพ็กเกจ / สมัคร"
 - บัตร: `4242 4242 4242 4242` วันหมดอายุอนาคตใดก็ได้ CVC 3 หลักใดก็ได้ → กลับมาที่แอพ แพ็กเกจต้องเปลี่ยนภายในไม่กี่วินาที
@@ -151,7 +153,7 @@ commit แล้ว push รอ GitHub Actions ผ่าน (ประมาณ 
 - ยกเลิก: "จัดการการสมัคร / ใบเสร็จ" → Cancel → แพ็กเกจยังใช้ได้จนครบรอบ
 - Stripe → Developers → Webhooks → endpoint ต้องเห็นคำขอสถานะ 200
 
-**ก่อนรับเงินจริง:** ยืนยันตัวตน/ธุรกิจและบัญชีธนาคารใน Stripe, สร้าง Product/Price/Webhook ชุดใหม่ใน Live mode แล้วเปลี่ยนค่าใน Vercel เป็นของ Live, ตั้ง `billingTestMode: false`, ย้ายเซิร์ฟเวอร์จาก Vercel Hobby (ห้ามใช้เชิงพาณิชย์) ไป Vercel Pro หรือ Cloudflare Workers และใส่ชื่อ/ที่ติดต่อผู้ให้บริการจริงในหน้ากฎหมาย
+**ก่อนรับเงินจริง:** ยืนยันตัวตน/ธุรกิจและบัญชีธนาคารใน Stripe, สร้าง Product/Price/Webhook ชุดใหม่ใน Live mode แล้วเปลี่ยนค่าใน Vercel เป็นของ Live, ย้ายเซิร์ฟเวอร์จาก Vercel Hobby (ห้ามใช้เชิงพาณิชย์) ไป Vercel Pro หรือ Cloudflare Workers และใส่ชื่อ/ที่ติดต่อผู้ให้บริการจริงในหน้ากฎหมาย
 
 ## งานดูแลระบบ (SQL Editor)
 
@@ -177,18 +179,33 @@ update public.dt_plans set monthly_tokens = 300000 where id = 'free';
 
 ถ้าเปลี่ยนโควตาแพ็กเกจฟรี ให้แก้ `freeMonthlyTokens` ใน `js/hosted-config.js` ด้วย (ใช้แสดงจำนวนตอนในแอพ)
 
-### สิทธิ์ของแอพตามแพ็กเกจ (v3.12.0)
+### สิทธิ์ของแอพตามแพ็กเกจ (v3.14.0)
 
-แอพจำกัดการใช้งานเป็น 4 ระดับ (ค่าตั้งต้นอยู่ใน `js/plans.js` → `PLAN_DEFAULTS`):
+แอพจำกัดการใช้งานเป็น 5 ระดับ (ค่าตั้งต้นอยู่ใน `js/plans.js` → `PLAN_DEFAULTS` และ `PLAN_HOSTED_TOKENS`):
 
-| | ผู้เยี่ยมชม | สมาชิกฟรี | Plus | Pro |
-|---|---|---|---|---|
-| แปลด้วย API Key ของผู้ใช้ | 20 ตอน/วัน | 40 ตอน/วัน | ไม่จำกัด | ไม่จำกัด |
-| ชั้นหนังสือ | 3 เรื่อง | 10 เรื่อง | ไม่จำกัด | ไม่จำกัด |
-| แปลล่วงหน้าแบบชุด | 5 ตอน/ครั้ง | 10 | 50 | 100 |
-| ผู้ช่วย AI | 10 คำถาม/วัน | 30 | ไม่จำกัด | ไม่จำกัด |
-| คู่มือเรื่อง/บันทึกเหตุการณ์อัตโนมัติ, EPUB, เพลงประกอบ | – | ✓ | ✓ | ✓ |
-| โหมด "ดีที่สุด" | – | – | ✓ | ✓ |
+| | ผู้เยี่ยมชม | สมาชิกฟรี | Plus | Pro | Max |
+|---|---|---|---|---|---|
+| ราคา / 30 วัน | – | 0 | 59 บาท | 179 บาท | 299 บาท |
+| AI ของ Dusktale (`monthly_tokens`) | – | 400K (≈20 ตอน) | 1.6M (≈80) | 6M (≈300) | 12M (≈600) |
+| แปลด้วย API Key ของผู้ใช้ | 10 ตอน/วัน | 20 | 40 | ไม่จำกัด | ไม่จำกัด |
+| ชั้นหนังสือ | 3 เรื่อง | 10 เรื่อง | ไม่จำกัด | ไม่จำกัด | ไม่จำกัด |
+| แปลล่วงหน้าแบบชุด | 5 ตอน/ครั้ง | 10 | 30 | 100 | 100 |
+| ผู้ช่วย AI | 10 คำถาม/วัน | 30 | ไม่จำกัด | ไม่จำกัด | ไม่จำกัด |
+| คู่มือเรื่อง/บันทึกเหตุการณ์อัตโนมัติ, EPUB, เพลงประกอบ | – | ✓ | ✓ | ✓ | ✓ |
+| โหมด "ดีที่สุด" | – | – | ✓ | ✓ | ✓ |
+
+`max_concurrent` (3/4/6/8) เป็นเพดานกันใช้งานผิดปกติ ไม่ใช่ฟีเจอร์ที่ขาย
+
+ฐานข้อมูลที่สร้างก่อน v3.14.0 (รันไฟล์ schema ซ้ำไม่ทับค่าเดิม) ให้รันคำสั่งนี้ครั้งเดียว:
+
+```sql
+insert into public.dt_plans (id, name, monthly_tokens, max_output_tokens, max_concurrent, sort)
+  values ('max', 'Max', 12000000, 16384, 8, 3) on conflict (id) do nothing;
+update public.dt_plans set monthly_tokens = 1600000, features = features || '{"byokChaptersPerDay": 40, "batchMax": 30}'::jsonb where id = 'plus';
+update public.dt_plans set monthly_tokens = 6000000 where id = 'pro';
+update public.dt_plans set features = features || '{"byokChaptersPerDay": 20}'::jsonb where id = 'free';
+update public.dt_plans set features = '{"byokChaptersPerDay": null, "maxBooks": null, "batchMax": 100, "assistantPerDay": null, "autoBible": true, "epub": true, "bgm": true, "bestMode": true}'::jsonb where id = 'max';
+```
 
 - ผู้เยี่ยมชม (ไม่เข้าสู่ระบบ) ใช้ค่าในแอพ สมาชิกใช้คอลัมน์ `dt_plans.features` ที่ส่งมาทาง `/api/me` (แอพจำไว้ใช้ออฟไลน์ได้ 7 วัน อัปเดตทุก 6 ชั่วโมง)
 - ข้อมูลที่มีอยู่แล้วไม่ถูกล็อกทุกระดับ: อ่าน แก้คำแปล คลังศัพท์ สำรอง/กู้คืน ส่งออก TXT

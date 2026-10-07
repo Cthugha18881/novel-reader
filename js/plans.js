@@ -1,18 +1,24 @@
 // ==================== ระดับสมาชิกและสิทธิ์การใช้งาน ====================
-// ผู้เยี่ยมชม (ไม่เข้าสู่ระบบ) / สมาชิกฟรี / Plus / Pro: จำกัดจำนวนต่อวันและเปิด-ปิดบางฟีเจอร์
+// ผู้เยี่ยมชม (ไม่เข้าสู่ระบบ) / สมาชิกฟรี / Plus / Pro / Max: จำกัดจำนวนต่อวันและเปิด-ปิดบางฟีเจอร์
 // ค่าในไฟล์นี้เป็นค่าตั้งต้น สมาชิกที่เข้าสู่ระบบใช้ค่าจากเซิร์ฟเวอร์ (ตาราง dt_plans.features) ถ้ามี
 // ไม่ล็อกข้อมูลที่มีอยู่แล้วเสมอ: อ่าน แก้คำแปล คลังศัพท์ สำรอง/กู้คืน ส่งออก TXT ใช้ได้ทุกระดับ
 // ถ้าไม่ได้ตั้งบริการ Dusktale (hosted-config.js ว่าง) จะไม่จำกัดอะไรเลย เพราะไม่มีทางเข้าสู่ระบบ
 
 // null = ไม่จำกัด
 const PLAN_DEFAULTS = {
-  guest: { name: 'ผู้เยี่ยมชม', byokChaptersPerDay: 20, maxBooks: 3, batchMax: 5, assistantPerDay: 10, autoBible: false, epub: false, bgm: false, bestMode: false },
-  free: { name: 'สมาชิกฟรี', byokChaptersPerDay: 40, maxBooks: 10, batchMax: 10, assistantPerDay: 30, autoBible: true, epub: true, bgm: true, bestMode: false },
-  plus: { name: 'Plus', byokChaptersPerDay: null, maxBooks: null, batchMax: 50, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true },
+  guest: { name: 'ผู้เยี่ยมชม', byokChaptersPerDay: 10, maxBooks: 3, batchMax: 5, assistantPerDay: 10, autoBible: false, epub: false, bgm: false, bestMode: false },
+  free: { name: 'สมาชิกฟรี', byokChaptersPerDay: 20, maxBooks: 10, batchMax: 10, assistantPerDay: 30, autoBible: true, epub: true, bgm: true, bestMode: false },
+  plus: { name: 'Plus', byokChaptersPerDay: 40, maxBooks: null, batchMax: 30, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true },
   pro: { name: 'Pro', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true },
+  max: { name: 'Max', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true },
   unlimited: { name: 'ไม่จำกัด', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true }
 };
-const PLAN_ORDER = ['guest', 'free', 'plus', 'pro'];
+const PLAN_ORDER = ['guest', 'free', 'plus', 'pro', 'max'];
+const PAID_PLAN_IDS = ['plus', 'pro', 'max'];
+// โควตา AI ของ Dusktale ต่อเดือน (ใช้แสดงผล ค่าจริงอยู่ที่ dt_plans.monthly_tokens)
+const PLAN_HOSTED_TOKENS = { guest: 0, free: 400000, plus: 1600000, pro: 6000000, max: 12000000 };
+// ราคาต่อ 30 วัน (บาท) ถ้าโหลดราคาจากเซิร์ฟเวอร์ไม่ได้ (ราคาจริงอยู่ที่ Stripe)
+const PLAN_PRICE_FALLBACK = { plus: 59, pro: 179, max: 299 };
 const PLAN_CACHE_KEY = 'nov_plan_cache';
 // สิทธิ์ที่จำไว้ใช้ได้นานแค่ไหนตอนออฟไลน์ (เกินนี้ถือเป็นสมาชิกฟรีจนกว่าจะต่อเซิร์ฟเวอร์ได้)
 const PLAN_CACHE_MAX_AGE = 7 * 24 * 3600 * 1000;
@@ -226,10 +232,13 @@ async function renderPlanBox() {
 // ---------- ตารางเปรียบเทียบแพ็กเกจ ----------
 function buildPlansTableHtml(currentTier) {
   const fmt = (v, unit) => v === null ? 'ไม่จำกัด' : v === true ? '✓' : v === false ? '–' : `${v}${unit ? ` ${unit}` : ''}`;
-  const hostedTokens = { guest: '–', free: '400K token/เดือน (≈20 ตอน)', plus: '4M token/เดือน (≈200 ตอน)', pro: '12M token/เดือน (≈600 ตอน)' };
+  const perChapter = (typeof HOSTED !== 'undefined' && HOSTED.tokensPerChapter) || 20000;
+  const tokenLabel = (n) => n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}K`;
+  const hostedTokens = (t) => PLAN_HOSTED_TOKENS[t] ? `${tokenLabel(PLAN_HOSTED_TOKENS[t])} token/เดือน (≈${Math.floor(PLAN_HOSTED_TOKENS[t] / perChapter)} ตอน)` : '–';
   const rows = [
+    ['ราคา / 30 วัน', t => PAID_PLAN_IDS.includes(t) ? `${planPrice(t)} บาท` : 'ฟรี'],
     ['แปลด้วย API Key ของคุณ', t => fmt(PLAN_DEFAULTS[t].byokChaptersPerDay, 'ตอน/วัน')],
-    ['แปลด้วย AI ของ Dusktale', t => hostedTokens[t]],
+    ['แปลด้วย AI ของ Dusktale', hostedTokens],
     ['ชั้นหนังสือ', t => fmt(PLAN_DEFAULTS[t].maxBooks, 'เรื่อง')],
     ['แปลล่วงหน้าแบบชุด', t => fmt(PLAN_DEFAULTS[t].batchMax, 'ตอน/ครั้ง')],
     ['ผู้ช่วย AI', t => fmt(PLAN_DEFAULTS[t].assistantPerDay, 'คำถาม/วัน')],
@@ -240,46 +249,94 @@ function buildPlansTableHtml(currentTier) {
   return `<div class="plans-table-wrap"><table class="plans-table"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
-function openPlansModal() {
+function renderPlansModalBody() {
   const ent = getEntitlements();
   const body = document.getElementById('plans-modal-body');
   if (!body) return;
   body.innerHTML = `${buildPlansTableHtml(ent.tier)}
     ${buildPurchaseHtml(ent)}
     <p class="hint">ทุกระดับ: อ่านตอนที่แปลไว้ แก้คำแปล คลังศัพท์ สำรอง/กู้คืนข้อมูล และส่งออก TXT ได้เสมอ ไม่มีการล็อกข้อมูลของคุณ · ซิงก์หลายเครื่องและแปลล่วงหน้าบนเซิร์ฟเวอร์ตามมาในรุ่นถัดไป</p>`;
+}
+
+function openPlansModal() {
+  renderPlansModalBody();
   openModal('plans-modal');
+  // ราคาและสถานะรับชำระเงินล่าสุดจากเซิร์ฟเวอร์ (เปลี่ยนแล้ววาดใหม่)
+  const before = JSON.stringify(billingInfo);
+  loadBillingInfo().then(() => {
+    if (JSON.stringify(billingInfo) !== before && document.getElementById('plans-modal')?.classList.contains('active')) renderPlansModalBody();
+  }).catch(() => {});
 }
 
 // ---------- ชำระเงิน (Stripe Checkout) ----------
+// ราคาและสถานะจากเซิร์ฟเวอร์ (GET /api/billing/prices) แก้ราคาที่ Stripe/Vercel ที่เดียว แอพตามเอง
+const BILLING_INFO_KEY = 'nov_billing_info';
+const BILLING_INFO_MAX_AGE = 6 * 3600 * 1000;
+let billingInfo = (() => {
+  try {
+    const c = JSON.parse(localStorage.getItem(BILLING_INFO_KEY) || 'null');
+    return c && typeof c === 'object' && c.plans ? c : null;
+  } catch (e) { return null; }
+})();
+
+async function loadBillingInfo(force = false) {
+  if (typeof isHostedConfigured !== 'function' || !isHostedConfigured()) return null;
+  if (!force && billingInfo && Date.now() - (billingInfo.at || 0) < BILLING_INFO_MAX_AGE) return billingInfo;
+  const res = await fetch(`${HOSTED.apiBase}/billing/prices`);
+  if (!res.ok) return billingInfo;
+  const data = await res.json().catch(() => null);
+  if (!data || typeof data !== 'object') return billingInfo;
+  billingInfo = { enabled: data.enabled === true, testMode: data.testMode === true, plans: data.plans && typeof data.plans === 'object' ? data.plans : {}, at: Date.now() };
+  try { localStorage.setItem(BILLING_INFO_KEY, JSON.stringify(billingInfo)); } catch (e) {}
+  return billingInfo;
+}
+
+/** ราคาต่อ 30 วัน (บาท): จากเซิร์ฟเวอร์ → ค่าใน hosted-config.js → ค่าตั้งต้น */
+function planPrice(plan, kind = 'monthlyThb') {
+  const fromServer = Number(billingInfo?.plans?.[plan]?.[kind]);
+  if (Number.isFinite(fromServer) && fromServer > 0) return fromServer;
+  const fromConfig = typeof HOSTED !== 'undefined' ? Number(HOSTED.prices?.[plan]) : NaN;
+  return Number.isFinite(fromConfig) && fromConfig > 0 ? fromConfig : PLAN_PRICE_FALLBACK[plan];
+}
+
 function billingAvailable() {
-  return typeof HOSTED !== 'undefined' && HOSTED.billingEnabled && typeof isHostedConfigured === 'function' && isHostedConfigured();
+  if (typeof isHostedConfigured !== 'function' || !isHostedConfigured()) return false;
+  return billingInfo?.enabled === true || (typeof HOSTED !== 'undefined' && HOSTED.billingEnabled);
+}
+
+function billingIsTestMode() {
+  return billingInfo ? billingInfo.testMode === true : (typeof HOSTED !== 'undefined' && HOSTED.billingTestMode);
 }
 
 /** ส่วนสมัครแพ็กเกจใต้ตาราง: ผู้เยี่ยมชมต้องเข้าสู่ระบบก่อน / สมัครรายเดือนอยู่แล้วมีปุ่มจัดการการสมัคร */
 function buildPurchaseHtml(ent) {
   if (ent.tier === 'unlimited') return '';
   if (ent.tier === 'guest') {
-    return `<div class="plan-buy"><p class="hint">เข้าสู่ระบบฟรีด้วยอีเมลก่อน แล้วสมัคร Plus หรือ Pro ได้จากหน้านี้</p>
+    return `<div class="plan-buy"><p class="hint">เข้าสู่ระบบฟรีด้วยอีเมลก่อน แล้วสมัคร Plus, Pro หรือ Max ได้จากหน้านี้</p>
       <div class="modal-actions"><button class="btn btn-primary" onclick="closeModal('plans-modal'); openHostedSignIn()">เข้าสู่ระบบฟรี</button></div></div>`;
   }
-  if (!billingAvailable()) return '<p class="hint">แพ็กเกจ Plus และ Pro จะเปิดให้สมัครเร็วๆ นี้</p>';
+  if (!billingAvailable()) return '<p class="hint">แพ็กเกจ Plus, Pro และ Max จะเปิดให้สมัครเร็วๆ นี้</p>';
   const b = (typeof hostedMe !== 'undefined' && hostedMe?.billing) || {};
   const subActive = ['active', 'trialing', 'past_due'].includes(b.subStatus);
-  const testBadge = HOSTED.billingTestMode ? '<span class="plan-test-badge">โหมดทดสอบ ไม่มีการตัดเงินจริง</span>' : '';
+  const testBadge = billingIsTestMode() ? '<span class="plan-test-badge">โหมดทดสอบ ไม่มีการตัดเงินจริง</span>' : '';
   const status = describeBillingStatus(b);
   const card = (plan) => {
-    const price = HOSTED.prices[plan];
     const name = PLAN_DEFAULTS[plan].name;
+    const monthly = planPrice(plan);
+    const pass = planPrice(plan, 'passThb');
+    const perChapter = PLAN_HOSTED_TOKENS[plan] ? (monthly / Math.floor(PLAN_HOSTED_TOKENS[plan] / ((typeof HOSTED !== 'undefined' && HOSTED.tokensPerChapter) || 20000))).toFixed(2) : '';
+    // PromptPay ก่อน: คนไทยใช้มากกว่า และค่าธรรมเนียมต่ำกว่าบัตร
     return `<div class="plan-buy-card${ent.tier === plan ? ' plan-buy-current' : ''}">
-      <div class="plan-buy-name">${escapeHtml(name)} <span class="plan-buy-price">${price} บาท</span><span class="hint"> / 30 วัน</span></div>
-      ${subActive ? '' : `<button class="btn btn-primary btn-sm" onclick="startCheckout('${plan}', 'card')">สมัครรายเดือนด้วยบัตร</button>`}
-      <button class="btn btn-sm" onclick="startCheckout('${plan}', 'promptpay')">จ่าย PromptPay (30 วัน)</button>
+      <div class="plan-buy-name">${escapeHtml(name)} <span class="plan-buy-price">${monthly} บาท</span><span class="hint"> / 30 วัน</span></div>
+      ${perChapter ? `<div class="hint">ตกตอนละประมาณ ${perChapter} บาท (AI ของ Dusktale)</div>` : ''}
+      <button class="btn btn-primary btn-sm" onclick="startCheckout('${plan}', 'promptpay')">จ่าย PromptPay ${pass} บาท (30 วัน)</button>
+      ${subActive ? '' : `<button class="btn btn-sm" onclick="startCheckout('${plan}', 'card')">สมัครรายเดือนด้วยบัตร</button>`}
     </div>`;
   };
   return `<div class="plan-buy">
     <div class="plan-buy-head"><b>สมัครแพ็กเกจ</b>${testBadge}</div>
     ${status ? `<div class="hint">${status}</div>` : ''}
-    <div class="plan-buy-grid">${card('plus')}${card('pro')}</div>
+    <div class="plan-buy-grid">${PAID_PLAN_IDS.map(card).join('')}</div>
     <p class="hint">บัตร: ต่ออายุอัตโนมัติทุกเดือน ยกเลิกได้ทุกเมื่อ ใช้ได้จนครบรอบที่จ่ายแล้ว · PromptPay: จ่ายครั้งเดียวได้ 30 วัน ซื้อเพิ่มก่อนหมดได้ วันจะต่อจากเดิม</p>
     ${b.hasCustomer ? '<div class="modal-actions"><button class="btn btn-sm" onclick="openBillingPortal()">จัดการการสมัคร / ใบเสร็จ</button></div>' : ''}
     <div id="billing-msg" class="hint" aria-live="polite"></div>
