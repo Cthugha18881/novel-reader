@@ -221,6 +221,8 @@ async function runBatchQueue(firstJob) {
   let job = firstJob;
   while (job) {
     await runBatchJob(job);
+    // แปลตอนใหม่ที่ติดตามไว้แล้ว: ลด/ล้างป้าย "เพิ่ม N ตอนใหม่เข้าคิวแล้ว"
+    if (typeof syncFollowBadgeWithPending === 'function') await syncFollowBadgeWithPending(job.bookId).catch(() => {});
     job = batchQueue.shift() || null;
   }
   checkAndRefreshBottomStatus();

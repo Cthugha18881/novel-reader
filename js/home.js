@@ -294,6 +294,8 @@ async function renderHomeDetail(bookId) {
   const sorted = [...chaps];
   applySortToChapters(sorted, sortMode);
   const pending = chaps.filter(isPendingChapter).length;
+  // ตอนใหม่ที่เพิ่มเข้าคิวถูกแปลไปแล้ว (จากที่ไหนก็ตาม): ป้ายต้องตรงกับที่ยังรอแปลจริง
+  if (typeof syncFollowBadgeWithPending === 'function') await syncFollowBadgeWithPending(bookId, pending);
   const id = jsArg(bookId);
   const keepScroll = document.getElementById('home-view').scrollTop;
   const prevListScroll = document.getElementById(`shelf-chaps-${bookId}`)?.scrollTop || 0;

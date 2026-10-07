@@ -356,6 +356,19 @@ async function autoCheckFollowedBooks({ force = [] } = {}) {
   }
 }
 
+/**
+ * ป้าย "เพิ่ม N ตอนใหม่เข้าคิวแล้ว" ต้องไม่เกินจำนวนตอนที่ยังรอแปลจริง (แปลไปแล้วลดตาม แปลหมดป้ายหาย)
+ * pending = จำนวนตอนรอแปลของเรื่อง (ไม่ใส่ = นับจากฐานข้อมูล)
+ */
+async function syncFollowBadgeWithPending(bookId, pending) {
+  const s = getNewChapterStates()[bookId];
+  if (!s?.queued) return;
+  const left = Number.isInteger(pending) ? pending : (await dbGetChaptersByBook(bookId)).filter(isPendingChapter).length;
+  if (left >= s.queued) return;
+  setNewChapterState(bookId, left > 0 ? { ...s, queued: left } : null);
+  renderNewChapterBadge(bookId);
+}
+
 /** เปิดอ่านเรื่องแล้ว: ล้างป้าย "เพิ่มตอนใหม่เข้าคิวแล้ว" */
 function clearFollowQueuedBadge(bookId) {
   const s = getNewChapterStates()[bookId];
