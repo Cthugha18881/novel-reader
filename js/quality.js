@@ -11,7 +11,8 @@ const VERSION_REASON_LABELS = {
   refetch: 'ก่อนดึงจากหน้าเว็บใหม่',
   paste: 'ก่อนวางเนื้อหาเต็ม',
   restore: 'ก่อนกู้คืนฉบับเก่า',
-  benchmark: 'ก่อนใช้ผลเทียบโมเดล'
+  benchmark: 'ก่อนใช้ผลเทียบโมเดล',
+  sync: 'ฉบับในเครื่องนี้ ก่อนรับฉบับใหม่กว่าจากอีกเครื่อง'
 };
 const VERSION_KEEP_DEFAULT = 3;
 const VERSION_KEEP_MAX = 10;

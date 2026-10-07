@@ -98,6 +98,7 @@ function openSettingsModal(tab) {
   if (startSel) startSel.value = getStartPage();
   openModal('settings-modal');
   if (typeof renderPlanBox === 'function') renderPlanBox();
+  if (typeof renderCloudSyncBox === 'function') renderCloudSyncBox(true);
   renderSafetySettings();
   renderBookshelfBackupNote();
 }

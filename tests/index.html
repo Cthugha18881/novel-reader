@@ -27,6 +27,7 @@
   <script src="../js/llm.js"></script>
   <script src="../js/hosted.js"></script>
   <script src="../js/plans.js"></script>
+  <script src="../js/sync.js"></script>
   <script src="../js/usage.js"></script>
   <script src="../js/lang.js"></script>
   <script src="../js/api.js"></script>
@@ -47,9 +48,20 @@
   <script src="../js/export.js"></script>
   <script>
     const results = [];
+    // test แบบ async: รอให้เสร็จก่อนสรุปผล (ดูท้ายไฟล์)
+    const pendingTests = [];
     function test(name, fn) {
       try {
         const out = fn();
+        if (out && typeof out.then === 'function') {
+          const entry = { name, ok: false, detail: 'ยังไม่เสร็จ' };
+          results.push(entry);
+          pendingTests.push(Promise.resolve(out).then(
+            v => { entry.ok = v !== false; entry.detail = v === false ? 'returned false' : ''; },
+            err => { entry.ok = false; entry.detail = err.message; }
+          ));
+          return;
+        }
         results.push({ name, ok: out !== false, detail: out === false ? 'returned false' : '' });
       } catch (err) {
         results.push({ name, ok: false, detail: err.message });
@@ -1042,6 +1054,47 @@
       return guest.includes('เข้าสู่ระบบฟรี') && !guest.includes('startCheckout') && free.includes('เร็วๆ นี้') && !free.includes('startCheckout') &&
         buildPurchaseHtml({ tier: 'unlimited' }) === '';
     });
+    test('sync: key / ลายนิ้วมือ / เวลาแก้ล่าสุด', () => {
+      const b = SYNC_STORES.find(s => s.store === 'books');
+      const c = SYNC_STORES.find(s => s.store === 'chapters');
+      const g = SYNC_STORES.find(s => s.store === 'glossaries');
+      const p = parseSyncKey('g:林动:x');
+      return syncKeyOf(b, { bookId: 'bk1' }) === 'b:bk1' && syncKeyOf(c, { id: 'c1' }) === 'c:c1' && syncKeyOf(g, { src: '林动' }) === 'g:林动' &&
+        syncKeyOf(c, {}) === null && p.store === 'glossaries' && p.id === '林动:x' && parseSyncKey('x:1') === null && parseSyncKey('') === null &&
+        syncFingerprint({ a: 1 }) === syncFingerprint({ a: 1 }) && syncFingerprint({ a: 1 }) !== syncFingerprint({ a: 2 }) &&
+        syncRecordTime('chapters', { translationMeta: { translatedAt: 50 }, updatedAt: 10 }) === 50 && syncRecordTime('books', { updatedAt: 7 }) === 7 &&
+        syncRecordTime('bookData', {}) === 0 && syncRecordTime('books', null) === 0;
+    });
+    test('sync: ตัดสินตอนชนกัน (ไม่แก้ในเครื่อง=ใช้คลาวด์, ชน=ใหม่กว่าชนะ, ลบ vs แก้=ไม่ให้ข้อมูลหาย)', () => {
+      return decideSyncMerge({ baseFp: 'a', localFp: 'a' }) === 'apply' &&
+        decideSyncMerge({ baseFp: undefined, localFp: undefined }) === 'apply' &&
+        decideSyncMerge({ baseFp: 'a', localFp: 'b', localTime: 5, remoteTime: 9 }) === 'apply' &&
+        decideSyncMerge({ baseFp: 'a', localFp: 'b', localTime: 9, remoteTime: 5 }) === 'keep' &&
+        decideSyncMerge({ baseFp: 'a', localFp: 'b', remoteDeleted: true, localTime: 1, remoteTime: 9 }) === 'keep' &&
+        decideSyncMerge({ baseFp: 'a', localFp: undefined, remoteDeleted: false }) === 'apply' &&
+        decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: true }) === 'apply' &&
+        decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: false }) === 'keep';
+    });
+    test('sync: แบ่งชุดตามขนาดและจำนวน', () => {
+      const recs = Array.from({ length: 5 }, (_, i) => ({ key: `c:${i}`, data: 'x'.repeat(100) }));
+      const bySize = chunkSyncRecords(recs, 300, 100);
+      const byCount = chunkSyncRecords(recs, 1e9, 2);
+      return bySize.length === 3 && bySize.flat().length === 5 && byCount.map(b => b.length).join() === '2,2,1' && chunkSyncRecords([]).length === 0 &&
+        formatSyncBytes(2 * 1048576) === '2.0 MB' && formatSyncBytes(2048) === '2 KB';
+    });
+    test('sync: บีบอัดแล้วแตกกลับได้ข้อมูลเดิม (ภาษาไทย/จีน)', async () => {
+      const obj = { id: 'c1', paragraphs: [{ src: '林动走了过来'.repeat(50), th: 'หลินต้งเดินเข้ามา'.repeat(50) }] };
+      const enc = await encodeSyncData(obj);
+      const back = await decodeSyncData(enc);
+      let bad = false;
+      try { await decodeSyncData('zz:abc'); } catch (e) { bad = true; }
+      return JSON.stringify(back) === JSON.stringify(obj) && (enc.startsWith('z1:') ? enc.length < JSON.stringify(obj).length : enc.startsWith('j1:')) && bad &&
+        JSON.stringify(await decodeSyncData('j1:{"a":1}')) === '{"a":1}';
+    });
+    test('sync: ไม่ได้ตั้งบริการ = ไม่มีซิงก์ / แพ็กเกจ Plus ขึ้นไปมีพื้นที่คลาวด์', () => {
+      return !canUseCloudSync() && !isCloudSyncActive() && PLAN_DEFAULTS.plus.cloudSync && PLAN_DEFAULTS.plus.cloudStorageMB === 100 &&
+        PLAN_DEFAULTS.max.cloudStorageMB === 600 && !PLAN_DEFAULTS.free.cloudSync && buildPlansTableHtml('free').includes('✓ 300 MB');
+    });
     test('plans: ตารางแพ็กเกจมีทุกระดับและไฮไลต์ระดับปัจจุบัน', () => {
       const html = buildPlansTableHtml('free');
       return PLAN_ORDER.every(t => html.includes(PLAN_DEFAULTS[t].name)) && (html.match(/plan-current/g) || []).length > 5 && html.includes('ระดับของคุณ') &&
@@ -1169,14 +1222,17 @@
       const list = buildKnownEntityList(d.extras, d.activeTerms, '张三拔出炎龙剑');
       return list.includes('林动') && list.includes('炎龙剑 = ดาบมังกรเพลิง') && list.includes('张三') && !list.includes('元丹境');
     });
-    const passed = results.filter(r => r.ok).length;
-    const summary = document.getElementById('summary');
-    summary.textContent = `ผ่าน ${passed}/${results.length}`;
-    summary.className = passed === results.length ? 'pass' : 'fail';
-    document.getElementById('results').innerHTML = results.map(r =>
-      `<li class="${r.ok ? 'pass' : 'fail'}">${r.ok ? '✓' : '✗'} ${r.name.replace(/</g, '&lt;')}${r.detail ? ' — ' + r.detail.replace(/</g, '&lt;') : ''}</li>`
-    ).join('');
-    window.__testResults = results;
+    // รอ test แบบ async ให้ครบก่อนแสดงผล (CI อ่าน window.__testResults ทันทีที่มีค่า)
+    Promise.allSettled(pendingTests).then(() => {
+      const passed = results.filter(r => r.ok).length;
+      const summary = document.getElementById('summary');
+      summary.textContent = `ผ่าน ${passed}/${results.length}`;
+      summary.className = passed === results.length ? 'pass' : 'fail';
+      document.getElementById('results').innerHTML = results.map(r =>
+        `<li class="${r.ok ? 'pass' : 'fail'}">${r.ok ? '✓' : '✗'} ${r.name.replace(/</g, '&lt;')}${r.detail ? ' — ' + r.detail.replace(/</g, '&lt;') : ''}</li>`
+      ).join('');
+      window.__testResults = results;
+    });
   </script>
 </body>
 </html>

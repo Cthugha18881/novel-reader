@@ -155,6 +155,26 @@ commit แล้ว push รอ GitHub Actions ผ่าน (ประมาณ 
 
 **ก่อนรับเงินจริง:** ยืนยันตัวตน/ธุรกิจและบัญชีธนาคารใน Stripe, สร้าง Product/Price/Webhook ชุดใหม่ใน Live mode แล้วเปลี่ยนค่าใน Vercel เป็นของ Live, ย้ายเซิร์ฟเวอร์จาก Vercel Hobby (ห้ามใช้เชิงพาณิชย์) ไป Vercel Pro หรือ Cloudflare Workers และใส่ชื่อ/ที่ติดต่อผู้ให้บริการจริงในหน้ากฎหมาย
 
+## 7. ซิงก์หลายเครื่อง + สำรองบนคลาวด์ (v3.15.0)
+
+ไม่ต้องตั้งค่าเพิ่มที่ Vercel แค่รัน `server/schema.sql` ทั้งไฟล์อีกครั้ง (เพิ่มตาราง `dt_sync`, ฟังก์ชัน `dt_sync_push/pull/status` และสิทธิ์ `cloudSync` / `cloudStorageMB` ของแต่ละแพ็กเกจ)
+
+- เปิดในแอพ: ตั้งค่า → 💾 ข้อมูล → "ซิงก์อัตโนมัติในเครื่องนี้" (Plus ขึ้นไป) ทำทีละเครื่อง
+- ซิงก์: ชั้นหนังสือ (รวมตำแหน่งอ่าน) ตอน คลังศัพท์ ข้อมูลเสริมของเรื่อง (คู่มือเรื่อง บุ๊กมาร์ก ปก แชตผู้ช่วย) · ไม่ซิงก์: API Key ค่าตั้งของเครื่อง ประวัติเวอร์ชัน สถิติ
+- ข้อมูลบีบอัด (gzip) ในเบราว์เซอร์ก่อนส่ง เซิร์ฟเวอร์ไม่อ่านเนื้อหา พื้นที่นับหลังบีบอัด: Plus 100MB / Pro 300MB / Max 600MB
+- ส่งขึ้นต้องมีแพ็กเกจที่มี `cloudSync` (ฐานข้อมูลตรวจเอง) ดึงลงได้เสมอแม้แพ็กเกจหมดอายุ
+- ชนกัน: ฉบับที่แก้ล่าสุดชนะ ตอนที่แพ้เก็บไว้ในประวัติเวอร์ชัน ("ฉบับในเครื่องนี้ ก่อนรับฉบับใหม่กว่าจากอีกเครื่อง")
+- **พื้นที่ฐานข้อมูล:** Supabase Free มี 500MB รวมทุกคน พอสำหรับทดสอบ ก่อนเปิดให้คนทั่วไปใช้ซิงก์ต้องอัปเกรดเป็น Supabase Pro (8GB)
+
+```sql
+-- ใครใช้พื้นที่ซิงก์เท่าไร
+select u.email, count(*) filter (where not s.deleted) as items, pg_size_pretty(sum(s.size)::bigint) as used
+from public.dt_sync s join auth.users u on u.id = s.user_id group by u.email order by sum(s.size) desc;
+
+-- ลบข้อมูลซิงก์ของผู้ใช้ (เมื่อขอลบ)
+delete from public.dt_sync where user_id = (select id from auth.users where email = 'reader@example.com');
+```
+
 ## งานดูแลระบบ (SQL Editor)
 
 ```sql

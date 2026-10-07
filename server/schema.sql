@@ -35,6 +35,11 @@ update public.dt_plans set features = '{"byokChaptersPerDay": 40, "maxBooks": nu
   where id = 'plus' and features = '{}'::jsonb;
 update public.dt_plans set features = '{"byokChaptersPerDay": null, "maxBooks": null, "batchMax": 100, "assistantPerDay": null, "autoBible": true, "epub": true, "bgm": true, "bestMode": true}'::jsonb
   where id in ('pro', 'max') and features = '{}'::jsonb;
+-- ซิงก์หลายเครื่อง + สำรองบนคลาวด์ (เพิ่มเฉพาะคีย์ที่ยังไม่มี ไม่ทับค่าที่แก้ไว้) cloudStorageMB = พื้นที่หลังบีบอัด
+update public.dt_plans set features = jsonb_build_object('cloudSync', false, 'cloudStorageMB', 0) || features where id = 'free' and not features ? 'cloudSync';
+update public.dt_plans set features = jsonb_build_object('cloudSync', true, 'cloudStorageMB', 100) || features where id = 'plus' and not features ? 'cloudSync';
+update public.dt_plans set features = jsonb_build_object('cloudSync', true, 'cloudStorageMB', 300) || features where id = 'pro' and not features ? 'cloudSync';
+update public.dt_plans set features = jsonb_build_object('cloudSync', true, 'cloudStorageMB', 600) || features where id = 'max' and not features ? 'cloudSync';
 
 -- ---------- ผู้ใช้ ----------
 create table if not exists public.dt_profiles (
@@ -224,6 +229,99 @@ begin
   from public.dt_profiles pr join public.dt_plans pl on pl.id = public.dt_effective_plan(pr.user_id) where pr.user_id = p_user;
   return v;
 end $$;
+
+-- ---------- ซิงก์หลายเครื่อง / สำรองบนคลาวด์ ----------
+-- 1 แถว = 1 รายการในเครื่อง (key เช่น c:<id ตอน>, b:<id เรื่อง>, g:<คำศัพท์>, d:<id เรื่อง>)
+-- data = เนื้อหาที่แอพบีบอัดมาแล้ว (เซิร์ฟเวอร์ไม่อ่านเนื้อหา) seq = ลำดับการเปลี่ยนแปลง ใช้ดึงเฉพาะที่ใหม่กว่าที่เครื่องมีแล้ว
+create sequence if not exists public.dt_sync_seq;
+create table if not exists public.dt_sync (
+  user_id uuid not null references auth.users (id) on delete cascade,
+  key text not null,
+  seq bigint not null default nextval('public.dt_sync_seq'),
+  deleted boolean not null default false,
+  data text,
+  size integer not null default 0,
+  updated_at timestamptz not null default now(),
+  primary key (user_id, key)
+);
+create index if not exists dt_sync_user_seq on public.dt_sync (user_id, seq);
+alter table public.dt_sync enable row level security;
+drop policy if exists "own sync" on public.dt_sync;
+create policy "own sync" on public.dt_sync for select to authenticated using (user_id = auth.uid());
+
+-- ส่งรายการขึ้นคลาวด์: ตรวจแพ็กเกจ (features.cloudSync) และพื้นที่ (features.cloudStorageMB) ก่อนเขียน
+create or replace function public.dt_sync_push(p_user uuid, p_records jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_features jsonb; v_limit bigint; v_used bigint; v_old bigint; v_new bigint; v_seq bigint;
+begin
+  if jsonb_typeof(p_records) <> 'array' or jsonb_array_length(p_records) = 0 then
+    return jsonb_build_object('ok', false, 'reason', 'invalid');
+  end if;
+  if jsonb_array_length(p_records) > 500 then return jsonb_build_object('ok', false, 'reason', 'too_many'); end if;
+  if exists (select 1 from jsonb_to_recordset(p_records) as x(key text, deleted boolean, data text)
+             where x.key is null or length(x.key) > 300 or length(coalesce(x.data, '')) > 3000000) then
+    return jsonb_build_object('ok', false, 'reason', 'invalid');
+  end if;
+  insert into public.dt_profiles (user_id) values (p_user) on conflict do nothing;
+  perform 1 from public.dt_profiles where user_id = p_user for update;  -- ส่งพร้อมกันหลายแท็บ: เขียนทีละคำขอ
+  select features into v_features from public.dt_plans where id = public.dt_effective_plan(p_user);
+  if not coalesce((v_features->>'cloudSync')::boolean, false) then
+    return jsonb_build_object('ok', false, 'reason', 'plan');
+  end if;
+  v_limit := coalesce((v_features->>'cloudStorageMB')::bigint, 0) * 1048576;
+  select coalesce(sum(size), 0) into v_used from public.dt_sync where user_id = p_user and not deleted;
+  select coalesce(sum(s.size), 0) into v_old from public.dt_sync s
+    join jsonb_to_recordset(p_records) as x(key text, deleted boolean, data text) on s.key = x.key
+    where s.user_id = p_user and not s.deleted;
+  select coalesce(sum(case when coalesce(x.deleted, false) then 0 else length(coalesce(x.data, '')) end), 0) into v_new
+    from jsonb_to_recordset(p_records) as x(key text, deleted boolean, data text);
+  if v_new > v_old and v_used - v_old + v_new > v_limit then
+    return jsonb_build_object('ok', false, 'reason', 'storage', 'used', v_used, 'limit', v_limit);
+  end if;
+  insert into public.dt_sync (user_id, key, deleted, data, size, updated_at)
+    select p_user, x.key, coalesce(x.deleted, false),
+           case when coalesce(x.deleted, false) then null else x.data end,
+           case when coalesce(x.deleted, false) then 0 else length(coalesce(x.data, '')) end, now()
+    from jsonb_to_recordset(p_records) as x(key text, deleted boolean, data text)
+  on conflict (user_id, key) do update set
+    seq = nextval('public.dt_sync_seq'), deleted = excluded.deleted, data = excluded.data, size = excluded.size, updated_at = now();
+  select max(seq) into v_seq from public.dt_sync where user_id = p_user;
+  return jsonb_build_object('ok', true, 'seq', v_seq, 'used', v_used - v_old + v_new, 'limit', v_limit);
+end $$;
+
+-- ดึงรายการที่เปลี่ยนหลัง seq ที่เครื่องมีแล้ว (ดึงได้แม้แพ็กเกจหมดอายุ: ข้อมูลเป็นของผู้ใช้เสมอ)
+create or replace function public.dt_sync_pull(p_user uuid, p_since bigint, p_limit integer)
+returns jsonb language sql stable security definer set search_path = public as $$
+  with r as (
+    select key, seq, deleted, data, updated_at from public.dt_sync
+    where user_id = p_user and seq > coalesce(p_since, 0)
+    order by seq limit least(greatest(coalesce(p_limit, 100), 1), 200)
+  )
+  select jsonb_build_object(
+    'records', coalesce((select jsonb_agg(jsonb_build_object('key', r.key, 'seq', r.seq, 'deleted', r.deleted, 'data', r.data, 'at', r.updated_at) order by r.seq) from r), '[]'::jsonb),
+    'next', coalesce((select max(r.seq) from r), coalesce(p_since, 0)),
+    'more', (select count(*) from r) >= least(greatest(coalesce(p_limit, 100), 1), 200)
+  );
+$$;
+
+create or replace function public.dt_sync_status(p_user uuid)
+returns jsonb language sql stable security definer set search_path = public as $$
+  select jsonb_build_object(
+    'used', coalesce(sum(size) filter (where not deleted), 0),
+    'count', count(*) filter (where not deleted),
+    'seq', coalesce(max(seq), 0),
+    'lastAt', max(updated_at),
+    'limit', coalesce((select (pl.features->>'cloudStorageMB')::bigint from public.dt_plans pl where pl.id = public.dt_effective_plan(p_user)), 0) * 1048576,
+    'enabled', coalesce((select (pl.features->>'cloudSync')::boolean from public.dt_plans pl where pl.id = public.dt_effective_plan(p_user)), false)
+  ) from public.dt_sync where user_id = p_user;
+$$;
+
+revoke all on function public.dt_sync_push(uuid, jsonb) from public, anon, authenticated;
+revoke all on function public.dt_sync_pull(uuid, bigint, integer) from public, anon, authenticated;
+revoke all on function public.dt_sync_status(uuid) from public, anon, authenticated;
+grant execute on function public.dt_sync_push(uuid, jsonb) to service_role;
+grant execute on function public.dt_sync_pull(uuid, bigint, integer) to service_role;
+grant execute on function public.dt_sync_status(uuid) to service_role;
 
 -- ---------- ระบบชำระเงิน (เรียกจากเซิร์ฟเวอร์เท่านั้น) ----------
 create or replace function public.dt_billing_profile(p_user uuid)

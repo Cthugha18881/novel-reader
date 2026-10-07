@@ -8,6 +8,9 @@
     "api/billing/portal.js": { "maxDuration": 15 },
     "api/billing/webhook.js": { "maxDuration": 30 },
     "api/billing/prices.js": { "maxDuration": 15 },
-    "api/billing/sync.js": { "maxDuration": 15 }
+    "api/billing/sync.js": { "maxDuration": 15 },
+    "api/sync/push.js": { "maxDuration": 30 },
+    "api/sync/pull.js": { "maxDuration": 30 },
+    "api/sync/status.js": { "maxDuration": 15 }
   }
 }

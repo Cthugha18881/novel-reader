@@ -105,6 +105,8 @@ function initDB() {
 // kind: 'books' | 'chapters' | 'glossary' | 'bookData' | 'replaced'
 function markDataChanged(kind, bookId = null) {
   if (typeof onLocalDataChanged === 'function') onLocalDataChanged(kind, bookId);
+  // ซิงก์หลายเครื่อง (sync.js): รอให้นิ่งแล้วส่งขึ้นคลาวด์
+  if (typeof scheduleCloudSync === 'function') scheduleCloudSync(kind);
 }
 
 function dbGetMeta(key) {

@@ -6,12 +6,13 @@
 
 // null = ไม่จำกัด
 const PLAN_DEFAULTS = {
-  guest: { name: 'ผู้เยี่ยมชม', byokChaptersPerDay: 10, maxBooks: 3, batchMax: 5, assistantPerDay: 10, autoBible: false, epub: false, bgm: false, bestMode: false },
-  free: { name: 'สมาชิกฟรี', byokChaptersPerDay: 20, maxBooks: 10, batchMax: 10, assistantPerDay: 30, autoBible: true, epub: true, bgm: true, bestMode: false },
-  plus: { name: 'Plus', byokChaptersPerDay: 40, maxBooks: null, batchMax: 30, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true },
-  pro: { name: 'Pro', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true },
-  max: { name: 'Max', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true },
-  unlimited: { name: 'ไม่จำกัด', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true }
+  guest: { name: 'ผู้เยี่ยมชม', byokChaptersPerDay: 10, maxBooks: 3, batchMax: 5, assistantPerDay: 10, autoBible: false, epub: false, bgm: false, bestMode: false, cloudSync: false, cloudStorageMB: 0 },
+  free: { name: 'สมาชิกฟรี', byokChaptersPerDay: 20, maxBooks: 10, batchMax: 10, assistantPerDay: 30, autoBible: true, epub: true, bgm: true, bestMode: false, cloudSync: false, cloudStorageMB: 0 },
+  plus: { name: 'Plus', byokChaptersPerDay: 40, maxBooks: null, batchMax: 30, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: true, cloudStorageMB: 100 },
+  pro: { name: 'Pro', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: true, cloudStorageMB: 300 },
+  max: { name: 'Max', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: true, cloudStorageMB: 600 },
+  // ไม่ได้ตั้งบริการ Dusktale: ไม่มีเซิร์ฟเวอร์ให้ซิงก์
+  unlimited: { name: 'ไม่จำกัด', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: false, cloudStorageMB: 0 }
 };
 const PLAN_ORDER = ['guest', 'free', 'plus', 'pro', 'max'];
 const PAID_PLAN_IDS = ['plus', 'pro', 'max'];
@@ -28,7 +29,8 @@ const PLAN_FEATURE_LABELS = {
   autoBible: 'คู่มือเรื่องและบันทึกเหตุการณ์อัตโนมัติ',
   epub: 'ส่งออกไฟล์ EPUB',
   bgm: 'เพลงประกอบการอ่าน',
-  bestMode: 'โหมดแปล "ดีที่สุด" (เกลาสำนวน + ตรวจความหมาย)'
+  bestMode: 'โหมดแปล "ดีที่สุด" (เกลาสำนวน + ตรวจความหมาย)',
+  cloudSync: 'ซิงก์หลายเครื่อง + สำรองบนคลาวด์'
 };
 
 /** รวมค่าตั้งต้นของระดับกับค่าจากเซิร์ฟเวอร์ (รับเฉพาะคีย์ที่รู้จักและชนิดถูกต้อง) */
@@ -242,7 +244,8 @@ function buildPlansTableHtml(currentTier) {
     ['ชั้นหนังสือ', t => fmt(PLAN_DEFAULTS[t].maxBooks, 'เรื่อง')],
     ['แปลล่วงหน้าแบบชุด', t => fmt(PLAN_DEFAULTS[t].batchMax, 'ตอน/ครั้ง')],
     ['ผู้ช่วย AI', t => fmt(PLAN_DEFAULTS[t].assistantPerDay, 'คำถาม/วัน')],
-    ...Object.keys(PLAN_FEATURE_LABELS).map(k => [PLAN_FEATURE_LABELS[k], t => fmt(PLAN_DEFAULTS[t][k])])
+    ...Object.keys(PLAN_FEATURE_LABELS).map(k => [PLAN_FEATURE_LABELS[k], t =>
+      k === 'cloudSync' && PLAN_DEFAULTS[t].cloudSync ? `✓ ${PLAN_DEFAULTS[t].cloudStorageMB} MB` : fmt(PLAN_DEFAULTS[t][k])])
   ];
   const head = PLAN_ORDER.map(t => `<th scope="col"${t === currentTier ? ' class="plan-current"' : ''}>${escapeHtml(PLAN_DEFAULTS[t].name)}${t === currentTier ? '<br><small>ระดับของคุณ</small>' : ''}</th>`).join('');
   const body = rows.map(([label, cell]) => `<tr><th scope="row">${escapeHtml(label)}</th>${PLAN_ORDER.map(t => `<td${t === currentTier ? ' class="plan-current"' : ''}>${escapeHtml(cell(t))}</td>`).join('')}</tr>`).join('');
@@ -255,7 +258,7 @@ function renderPlansModalBody() {
   if (!body) return;
   body.innerHTML = `${buildPlansTableHtml(ent.tier)}
     ${buildPurchaseHtml(ent)}
-    <p class="hint">ทุกระดับ: อ่านตอนที่แปลไว้ แก้คำแปล คลังศัพท์ สำรอง/กู้คืนข้อมูล และส่งออก TXT ได้เสมอ ไม่มีการล็อกข้อมูลของคุณ · ซิงก์หลายเครื่องและแปลล่วงหน้าบนเซิร์ฟเวอร์ตามมาในรุ่นถัดไป</p>`;
+    <p class="hint">ทุกระดับ: อ่านตอนที่แปลไว้ แก้คำแปล คลังศัพท์ สำรอง/กู้คืนข้อมูล และส่งออก TXT ได้เสมอ ไม่มีการล็อกข้อมูลของคุณ (ข้อมูลบนคลาวด์ดาวน์โหลดคืนได้แม้แพ็กเกจหมดอายุ) · แปลล่วงหน้าบนเซิร์ฟเวอร์และติดตามตอนใหม่ตามมาในรุ่นถัดไป</p>`;
 }
 
 function openPlansModal() {
