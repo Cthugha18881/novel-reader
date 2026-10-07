@@ -2,7 +2,7 @@
 // flow = เปิดตรงไปที่หน้ายกเลิก/เปลี่ยนแพ็กเกจของการสมัครที่ใช้อยู่ ไม่ต้องหาปุ่มเอง
 // ไม่มี flow (หรือเปิด flow ไม่ได้ เช่นยกเลิกไปแล้ว) = หน้าหลัก (บัตร ใบเสร็จ ต่ออายุกลับ)
 import { json, apiError, prepare, preflight, getUser, rpc, stripeRequest } from '../../lib/http.js';
-import { readBillingEnv } from '../../lib/billing.js';
+import { readBillingEnv, isSubscriptionCanceling } from '../../lib/billing.js';
 
 export function OPTIONS(request) {
   return preflight(request);
@@ -41,7 +41,7 @@ export async function POST(request) {
       const subs = await stripeRequest(billing, 'GET', '/subscriptions', { customer: profile.customerId, status: 'all', limit: 5 });
       const sub = (subs?.data || []).find(s => ACTIVE_SUB.includes(s.status));
       // ยกเลิกไว้แล้ว (รอสิ้นรอบ): ไม่มีหน้ายกเลิกซ้ำ เปิดหน้าหลักให้กด "ต่ออายุ" แทน
-      if (sub && !(flow === 'cancel' && sub.cancel_at_period_end)) subscriptionId = sub.id;
+      if (sub && !(flow === 'cancel' && isSubscriptionCanceling(sub))) subscriptionId = sub.id;
     }
     let session;
     try {

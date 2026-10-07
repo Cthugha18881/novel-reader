@@ -266,6 +266,19 @@ function openPlansModal() {
   loadBillingInfo().then(() => {
     if (JSON.stringify(billingInfo) !== before && document.getElementById('plans-modal')?.classList.contains('active')) renderPlansModalBody();
   }).catch(() => {});
+  // เคยชำระเงินแล้ว: ดึงสถานะการสมัครล่าสุดจาก Stripe (เช่นยกเลิก/เปลี่ยนแพ็กเกจจากที่อื่น)
+  if (billingAvailable() && typeof hostedMe !== 'undefined' && hostedMe?.billing?.hasCustomer) {
+    const beforeMe = JSON.stringify(hostedMe.billing);
+    syncBillingStatus().then(me => {
+      if (me && JSON.stringify(me.billing) !== beforeMe && document.getElementById('plans-modal')?.classList.contains('active')) renderPlansModalBody();
+    });
+  }
+}
+
+/** ให้เซิร์ฟเวอร์ดึงสถานะจาก Stripe มาบันทึก แล้วโหลดแพ็กเกจใหม่ (พลาดไม่เป็นไร ใช้ข้อมูลเดิม) */
+async function syncBillingStatus() {
+  try { await billingPost('sync'); } catch (e) { console.warn('billing sync failed:', e.message); }
+  try { return await fetchHostedMe(); } catch (e) { return null; }
 }
 
 // ---------- ชำระเงิน (Stripe Checkout) ----------
@@ -443,9 +456,9 @@ async function handleBillingReturn() {
   // กลับจากหน้ายกเลิก/เปลี่ยนแพ็กเกจ: รอ webhook แล้วแสดงสถานะใหม่
   if (result === 'updated' && isHostedSignedIn()) {
     showGlobalToast('กำลังอัปเดตสถานะการสมัคร...');
-    await new Promise(r => setTimeout(r, 2500));
     try {
-      const me = await fetchHostedMe();
+      const me = await syncBillingStatus();
+      if (!me) throw new Error('no data');
       hideGlobalToast();
       appAlert(`แพ็กเกจตอนนี้: ${me.planName || me.plan}\n${describeBillingStatus(me.billing) || ''}`, { title: 'อัปเดตการสมัครแล้ว' });
     } catch (e) {
@@ -458,7 +471,9 @@ async function handleBillingReturn() {
   showGlobalToast('ชำระเงินสำเร็จ กำลังอัปเดตแพ็กเกจ...');
   for (let i = 0; i < 6; i++) {
     try {
-      const me = await fetchHostedMe();
+      // รอบแรก: ดึงสถานะการสมัครจาก Stripe เอง ไม่ต้องรอ webhook (PromptPay รอ webhook ตามปกติ)
+      const me = i === 0 ? await syncBillingStatus() : await fetchHostedMe();
+      if (!me) throw new Error('no data');
       if (me.plan !== before || me.billing?.source === 'subscription' || me.billing?.source === 'pass') {
         hideGlobalToast();
         appAlert(`ขอบคุณที่สนับสนุน Dusktale แพ็กเกจของคุณตอนนี้: ${me.planName || me.plan}\n${describeBillingStatus(me.billing) || ''}`, { title: 'ชำระเงินสำเร็จ' });

@@ -122,8 +122,13 @@ export function subscriptionPatch(sub, billing) {
     p_status: sub?.status || 'incomplete',
     p_plan: plan,
     p_period_end: periodEnd ? new Date(periodEnd * 1000).toISOString() : null,
-    p_cancel: !!sub?.cancel_at_period_end
+    p_cancel: isSubscriptionCanceling(sub)
   };
+}
+
+/** ยกเลิกแล้ว รอสิ้นรอบ: API รุ่นเก่าใช้ cancel_at_period_end, รุ่นใหม่ (หน้า portal) ตั้งวันยกเลิกไว้ที่ cancel_at */
+export function isSubscriptionCanceling(sub) {
+  return !!sub?.cancel_at_period_end || (Number(sub?.cancel_at) > 0 && sub?.status !== 'canceled');
 }
 
 /** Checkout ที่จ่าย PromptPay สำเร็จแล้ว -> สิทธิ์ 30 วัน (null ถ้ายังไม่ได้เงินหรือไม่ใช่การซื้อแบบนี้) */

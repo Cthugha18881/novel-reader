@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import {
   readBillingEnv, formEncode, parseStripeSignature, verifyStripeSignature, validateCheckoutRequest,
-  buildCheckoutParams, planForPrice, subscriptionPatch, passFromSession
+  buildCheckoutParams, planForPrice, subscriptionPatch, passFromSession, isSubscriptionCanceling
 } from '../lib/billing.js';
 
 const BILLING_ENV = {
@@ -282,4 +282,42 @@ test('portal: flow ยกเลิก/เปลี่ยนแพ็กเกจ
   const sent = decodeURIComponent(calls.find(c => c.url.endsWith('/billing_portal/sessions')).init.body);
   assert.match(sent, /flow_data\[type\]=subscription_cancel/);
   assert.match(sent, /flow_data\[subscription_cancel\]\[subscription\]=sub_9/);
+});
+test('ยกเลิกรอสิ้นรอบ: รองรับทั้ง cancel_at_period_end (รุ่นเก่า) และ cancel_at (หน้า portal รุ่นใหม่)', () => {
+  const b = readBillingEnv(BILLING_ENV);
+  assert.equal(isSubscriptionCanceling({ status: 'active', cancel_at_period_end: true }), true);
+  assert.equal(isSubscriptionCanceling({ status: 'active', cancel_at_period_end: false, cancel_at: 1_900_000_000 }), true);
+  assert.equal(isSubscriptionCanceling({ status: 'active', cancel_at_period_end: false, cancel_at: null }), false);
+  assert.equal(isSubscriptionCanceling({ status: 'canceled', cancel_at: 1_900_000_000 }), false);
+  const patch = subscriptionPatch({ id: 'sub_1', status: 'active', cancel_at: 1_900_000_000, cancel_at_period_end: false, items: { data: [{ current_period_end: 1_900_000_000, price: { id: 'price_max' } }] } }, b);
+  assert.equal(patch.p_cancel, true);
+  assert.equal(patch.p_plan, 'max');
+});
+
+test('sync: ดึงการสมัครที่ใช้งานอยู่จาก Stripe มาบันทึก (ไม่รอ webhook)', async () => {
+  const { pickSubscription } = await import('../api/billing/sync.js');
+  assert.equal(pickSubscription([{ id: 'a', status: 'canceled', created: 5 }, { id: 'b', status: 'active', created: 1 }]).id, 'b');
+  assert.equal(pickSubscription([{ id: 'a', status: 'canceled', created: 1 }, { id: 'c', status: 'canceled', created: 9 }]).id, 'c');
+  assert.equal(pickSubscription([]), null);
+
+  setupEnv();
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    calls.push({ url: u, init });
+    const reply = (data) => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (u.endsWith('/auth/v1/user')) return reply({ id: 'u1' });
+    if (u.endsWith('/rpc/dt_billing_profile')) return reply({ customerId: 'cus_1', subStatus: 'active' });
+    if (u.startsWith('https://api.stripe.com/v1/subscriptions?')) return reply({ data: [{ id: 'sub_9', status: 'active', cancel_at: 1_900_000_000, customer: 'cus_1', items: { data: [{ current_period_end: 1_900_000_000, price: { id: 'price_max' } }] } }] });
+    if (u.includes('/rpc/')) return reply({ ok: true });
+    return new Response('{}', { status: 404 });
+  };
+  const { POST } = await import('../api/billing/sync.js');
+  const res = await POST(appRequest('/api/billing/sync', {}));
+  assert.equal(res.status, 200);
+  assert.equal((await res.json()).synced, true);
+  const args = JSON.parse(calls.find(c => c.url.endsWith('/rpc/dt_billing_apply_subscription')).init.body);
+  assert.equal(args.p_user, 'u1');
+  assert.equal(args.p_cancel, true);
+  assert.equal(args.p_plan, 'max');
 });
