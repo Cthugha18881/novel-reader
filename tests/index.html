@@ -28,6 +28,7 @@
   <script src="../js/hosted.js"></script>
   <script src="../js/plans.js"></script>
   <script src="../js/sync.js"></script>
+  <script src="../js/feedback.js"></script>
   <script src="../js/usage.js"></script>
   <script src="../js/lang.js"></script>
   <script src="../js/api.js"></script>
@@ -1006,6 +1007,15 @@
       const parsed = new URL(url, 'https://example.invalid');
       return parsed.pathname.endsWith('/auth/v1/authorize') && parsed.searchParams.get('provider') === 'google' &&
         parsed.searchParams.get('redirect_to') === 'https://cthugha18881.github.io/novel-reader/';
+    });
+    test('feedback: ข้อมูลวินิจฉัยไม่มีคีย์ / ลิงก์ GitHub Issue กรอกหัวข้อและรายละเอียด', async () => {
+      await logDiagnostic({ source: 'test', message: 'failed with key AIzaSyA1234567890abcdefXYZ' }).catch(() => {});
+      const d = await buildFeedbackDiagnostics();
+      const text = JSON.stringify(d);
+      const url = new URL(buildFeedbackIssueUrl('bug', 'แปลไม่ได้\nขึ้น error 500', { version: 'v1', recentErrors: [] }));
+      return 'userAgent' in d && 'plan' in d && Array.isArray(d.recentErrors) && !/AIza[0-9A-Za-z_-]{10,}/.test(text) &&
+        url.searchParams.get('title') === '[ปัญหา] แปลไม่ได้' && url.searchParams.get('body').includes('ขึ้น error 500') &&
+        url.searchParams.get('body').includes('"version": "v1"') && url.origin === 'https://github.com';
     });
     test('hosted: session หมดอายุ / ต่ออายุ', () => {
       const s = sessionFromAuthResponse({ access_token: 'a', refresh_token: 'r', expires_in: 3600, user: { email: 'x@y.z' } }, 1000);

@@ -234,6 +234,38 @@ begin
   return v;
 end $$;
 
+-- ---------- ความเห็น / แจ้งปัญหา จากในแอพ ----------
+-- อ่านได้ที่ Table Editor -> dt_feedback (เปลี่ยน status เป็น seen / done ได้เอง)
+create table if not exists public.dt_feedback (
+  id bigserial primary key,
+  user_id uuid references auth.users (id) on delete set null,
+  email text,
+  created_at timestamptz not null default now(),
+  category text not null default 'other',
+  message text not null,
+  diagnostics jsonb,
+  status text not null default 'new'
+);
+create index if not exists dt_feedback_time on public.dt_feedback (created_at desc);
+alter table public.dt_feedback enable row level security;
+drop policy if exists "own feedback" on public.dt_feedback;
+create policy "own feedback" on public.dt_feedback for select to authenticated using (user_id = auth.uid());
+
+-- ส่งได้ไม่เกิน 20 ครั้งต่อวันต่อบัญชี
+create or replace function public.dt_feedback_add(p_user uuid, p_email text, p_category text, p_message text, p_diagnostics jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare v_count integer; v_id bigint;
+begin
+  select count(*) into v_count from public.dt_feedback where user_id = p_user and created_at > now() - interval '1 day';
+  if v_count >= 20 then return jsonb_build_object('ok', false, 'reason', 'rate'); end if;
+  insert into public.dt_feedback (user_id, email, category, message, diagnostics)
+    values (p_user, left(p_email, 320), left(coalesce(p_category, 'other'), 20), left(p_message, 4000), p_diagnostics)
+    returning id into v_id;
+  return jsonb_build_object('ok', true, 'id', v_id);
+end $$;
+revoke all on function public.dt_feedback_add(uuid, text, text, text, jsonb) from public, anon, authenticated;
+grant execute on function public.dt_feedback_add(uuid, text, text, text, jsonb) to service_role;
+
 -- ---------- ซิงก์หลายเครื่อง / สำรองบนคลาวด์ ----------
 -- 1 แถว = 1 รายการในเครื่อง (key เช่น c:<id ตอน>, b:<id เรื่อง>, g:<คำศัพท์>, d:<id เรื่อง>)
 -- data = เนื้อหาที่แอพบีบอัดมาแล้ว (เซิร์ฟเวอร์ไม่อ่านเนื้อหา) seq = ลำดับการเปลี่ยนแปลง ใช้ดึงเฉพาะที่ใหม่กว่าที่เครื่องมีแล้ว

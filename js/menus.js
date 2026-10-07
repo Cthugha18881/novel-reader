@@ -18,7 +18,9 @@ function openMoreMenu(anchor) {
   openActionMenu(anchor, [
     { icon: '📖', label: 'คลังศัพท์', hint: 'ชื่อเฉพาะและคำแปลที่ล็อกไว้', onSelect: openGlossaryModal },
     { icon: '🧭', label: 'คู่มือเรื่อง', hint: 'ตัวละคร สรรพนาม แนวทางสำนวน', onSelect: openBibleModal },
-    { icon: '⚙️', label: 'ตั้งค่า', hint: 'API key โมเดล สำรองข้อมูล', onSelect: openSettingsModal },    { icon: '📲', label: 'ติดตั้งแอพ', hint: 'อ่านแบบออฟไลน์ได้', hidden: !deferredInstallPrompt, onSelect: promptInstallApp }
+    { icon: '⚙️', label: 'ตั้งค่า', hint: 'API key โมเดล สำรองข้อมูล', onSelect: openSettingsModal },
+    { icon: '💬', label: 'ส่งความเห็น / แจ้งปัญหา', hint: 'บอกสิ่งที่เจอหรืออยากได้', onSelect: () => openFeedbackModal() },
+    { icon: '📲', label: 'ติดตั้งแอพ', hint: 'อ่านแบบออฟไลน์ได้', hidden: !deferredInstallPrompt, onSelect: promptInstallApp }
   ], { title: 'เมนู' });
 }
 

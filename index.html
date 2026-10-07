@@ -6,7 +6,7 @@
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/hosted-config.js"></script>
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.17.1</title>
+  <title>Dusktale v3.18.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -188,7 +188,7 @@
           </select>
         </div>
         <div id="home-grid" class="home-grid"></div>
-        <p class="legal-links"><a href="legal/privacy.html">นโยบายความเป็นส่วนตัว</a> · <a href="legal/terms.html">ข้อกำหนดการใช้งาน</a></p>
+        <p class="legal-links"><a href="#" onclick="openFeedbackModal(); return false;">💬 ส่งความเห็น / แจ้งปัญหา</a> · <a href="legal/privacy.html">นโยบายความเป็นส่วนตัว</a> · <a href="legal/terms.html">ข้อกำหนดการใช้งาน</a></p>
       </div>
       <div id="home-detail-view" hidden></div>
     </div>
@@ -585,6 +585,35 @@
       <div class="modal-actions">
         <button class="btn" onclick="closeModal('site-profiles-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="saveSiteProfilesModal()">บันทึก</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: FEEDBACK (ส่งความเห็น / แจ้งปัญหา) -->
+  <div class="modal-overlay" id="feedback-modal" style="z-index: 75;">
+    <div class="modal-box">
+      <div class="modal-head">
+        <div class="modal-title">ส่งความเห็น / แจ้งปัญหา</div>
+        <button class="modal-close" onclick="closeModal('feedback-modal')" aria-label="ปิด">✕</button>
+      </div>
+      <div class="modal-scrollable-body">
+        <label class="form-label" for="feedback-category">เรื่องอะไร</label>
+        <select id="feedback-category" class="form-input">
+          <option value="bug">🐞 เจอปัญหา / ใช้งานไม่ได้</option>
+          <option value="translation">📖 คุณภาพคำแปล</option>
+          <option value="idea">💡 อยากได้ฟีเจอร์ / ข้อเสนอ</option>
+          <option value="billing">💳 แพ็กเกจ / การชำระเงิน</option>
+          <option value="other">💬 อื่นๆ</option>
+        </select>
+        <label class="form-label" for="feedback-message" style="margin-top: 10px;">รายละเอียด</label>
+        <textarea id="feedback-message" class="form-input" rows="6" maxlength="4000" placeholder="เช่น ทำอะไรอยู่ เห็นข้อความอะไร หรืออยากให้เป็นแบบไหน"></textarea>
+        <label class="feedback-diag-toggle"><input type="checkbox" id="feedback-include-diag" checked> แนบข้อมูลช่วยแก้ปัญหา (รุ่นแอพ เบราว์เซอร์ และข้อผิดพลาดล่าสุด ไม่มี API Key และเนื้อหานิยาย)</label>
+        <details class="feedback-diag-preview"><summary>ดูข้อมูลที่จะแนบ</summary><pre id="feedback-diag-text" class="mono"></pre></details>
+        <div id="feedback-msg" class="hint" aria-live="polite"></div>
+      </div>
+      <div class="modal-actions">
+        <button class="btn" onclick="closeModal('feedback-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" id="feedback-send-btn" onclick="sendFeedbackFromUi()">ส่งความเห็น</button>
       </div>
     </div>
   </div>
@@ -1121,6 +1150,7 @@
   <script src="js/hosted.js"></script>
   <script src="js/plans.js"></script>
   <script src="js/sync.js"></script>
+  <script src="js/feedback.js"></script>
   <script src="js/usage.js"></script>
   <script src="js/lang.js"></script>
   <script src="js/api.js"></script>
