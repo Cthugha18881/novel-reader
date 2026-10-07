@@ -251,3 +251,35 @@ test('prices: อ่านราคารายเดือนจาก Stripe (
   await GET(req());
   assert.equal(calls.length, 3);
 });
+test('portal: flow ยกเลิก/เปลี่ยนแพ็กเกจ เปิดหน้าเฉพาะของการสมัครที่ใช้อยู่ แล้วกลับมาที่แอพ', async () => {
+  const { buildPortalParams } = await import('../api/billing/portal.js');
+  const plain = buildPortalParams({ customerId: 'cus_1', siteUrl: 'https://site/app/?x=1' });
+  assert.equal(plain.return_url, 'https://site/app/');
+  assert.equal(plain.flow_data, undefined);
+  const cancel = buildPortalParams({ customerId: 'cus_1', siteUrl: 'https://site/app/', flow: 'cancel', subscriptionId: 'sub_1' });
+  assert.equal(cancel.flow_data.type, 'subscription_cancel');
+  assert.equal(cancel.flow_data.subscription_cancel.subscription, 'sub_1');
+  assert.equal(cancel.flow_data.after_completion.redirect.return_url, 'https://site/app/?billing=updated');
+  const update = buildPortalParams({ customerId: 'cus_1', siteUrl: 'https://site/app/', flow: 'update', subscriptionId: 'sub_1' });
+  assert.equal(update.flow_data.type, 'subscription_update');
+  assert.equal(buildPortalParams({ customerId: 'cus_1', siteUrl: 'x', flow: 'cancel' }).flow_data, undefined);
+
+  setupEnv();
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const u = String(url);
+    calls.push({ url: u, init });
+    const reply = (data) => new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    if (u.endsWith('/auth/v1/user')) return reply({ id: 'u1' });
+    if (u.endsWith('/rpc/dt_billing_profile')) return reply({ customerId: 'cus_1', subStatus: 'active' });
+    if (u.startsWith('https://api.stripe.com/v1/subscriptions?')) return reply({ data: [{ id: 'sub_old', status: 'canceled' }, { id: 'sub_9', status: 'active', cancel_at_period_end: false }] });
+    if (u.endsWith('/billing_portal/sessions')) return reply({ url: 'https://billing.stripe.com/p/session/y' });
+    return new Response('{}', { status: 404 });
+  };
+  const { POST } = await import('../api/billing/portal.js');
+  const res = await POST(appRequest('/api/billing/portal', { flow: 'cancel' }));
+  assert.equal(res.status, 200);
+  const sent = decodeURIComponent(calls.find(c => c.url.endsWith('/billing_portal/sessions')).init.body);
+  assert.match(sent, /flow_data\[type\]=subscription_cancel/);
+  assert.match(sent, /flow_data\[subscription_cancel\]\[subscription\]=sub_9/);
+});

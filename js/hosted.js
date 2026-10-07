@@ -235,7 +235,7 @@ async function renderHostedAccountBox(refresh = false) {
     <div class="hosted-quota" id="hosted-quota">${hostedMe && !refresh ? quotaHtml(hostedMe) : '<div class="hint">กำลังโหลดโควตา...</div>'}</div>
     <div class="hosted-row">
       <button class="btn btn-sm" onclick="renderHostedAccountBox(true)">รีเฟรชโควตา</button>
-      ${typeof openPlansModal === 'function' ? '<button class="btn btn-sm" onclick="openPlansModal()">แพ็กเกจ / สมัคร</button>' : ''}
+      ${typeof openPlansModal === 'function' ? '<button class="btn btn-sm" onclick="openPlansModal()">แพ็กเกจ / การสมัคร</button>' : ''}
       <button class="btn btn-sm" onclick="hostedSignOutFromUi()">ออกจากระบบ</button>
     </div>
     <div id="hosted-msg" class="hint" aria-live="polite"></div>

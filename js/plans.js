@@ -320,6 +320,25 @@ function buildPurchaseHtml(ent) {
   const subActive = ['active', 'trialing', 'past_due'].includes(b.subStatus);
   const testBadge = billingIsTestMode() ? '<span class="plan-test-badge">โหมดทดสอบ ไม่มีการตัดเงินจริง</span>' : '';
   const status = describeBillingStatus(b);
+  // สมัครรายเดือนอยู่: ไม่แสดงปุ่มซื้อ (ซื้อซ้อนเสียเงินเปล่า) เปลี่ยนแพ็กเกจ/ยกเลิกผ่านปุ่มด้านล่าง
+  if (subActive) {
+    const canceled = !!b.cancelAtPeriodEnd;
+    return `<div class="plan-buy">
+      <div class="plan-buy-head"><b>การสมัครของคุณ</b>${testBadge}</div>
+      ${status ? `<div class="plan-sub-status">${escapeHtml(status)}</div>` : ''}
+      <div class="plan-sub-actions">
+        ${canceled
+          ? '<button class="btn btn-primary btn-sm" onclick="openBillingPortal()">ต่ออายุการสมัคร</button>'
+          : `<button class="btn btn-primary btn-sm" onclick="openBillingPortal('update')">เปลี่ยนแพ็กเกจ</button>
+             <button class="btn btn-sm" onclick="openBillingPortal('cancel')">ยกเลิกการสมัคร</button>`}
+        <button class="btn btn-sm" onclick="openBillingPortal()">บัตร / ใบเสร็จ</button>
+      </div>
+      <p class="hint">${canceled
+        ? 'ยกเลิกแล้ว จะไม่ตัดเงินรอบถัดไป ใช้ได้จนครบรอบที่จ่าย อยากใช้ต่อกด "ต่ออายุการสมัคร"'
+        : 'ยกเลิกได้ทุกเมื่อ ใช้ได้จนครบรอบที่จ่ายแล้ว · อัปเกรดจ่ายแค่ส่วนต่างของรอบนี้ · ลดแพ็กเกจมีผลรอบถัดไป'}</p>
+      <div id="billing-msg" class="hint" aria-live="polite"></div>
+    </div>`;
+  }
   const card = (plan) => {
     const name = PLAN_DEFAULTS[plan].name;
     const monthly = planPrice(plan);
@@ -330,7 +349,7 @@ function buildPurchaseHtml(ent) {
       <div class="plan-buy-name">${escapeHtml(name)} <span class="plan-buy-price">${monthly} บาท</span><span class="hint"> / 30 วัน</span></div>
       ${perChapter ? `<div class="hint">ตกตอนละประมาณ ${perChapter} บาท (AI ของ Dusktale)</div>` : ''}
       <button class="btn btn-primary btn-sm" onclick="startCheckout('${plan}', 'promptpay')">จ่าย PromptPay ${pass} บาท (30 วัน)</button>
-      ${subActive ? '' : `<button class="btn btn-sm" onclick="startCheckout('${plan}', 'card')">สมัครรายเดือนด้วยบัตร</button>`}
+      <button class="btn btn-sm" onclick="startCheckout('${plan}', 'card')">สมัครรายเดือนด้วยบัตร</button>
     </div>`;
   };
   return `<div class="plan-buy">
@@ -338,7 +357,7 @@ function buildPurchaseHtml(ent) {
     ${status ? `<div class="hint">${status}</div>` : ''}
     <div class="plan-buy-grid">${PAID_PLAN_IDS.map(card).join('')}</div>
     <p class="hint">บัตร: ต่ออายุอัตโนมัติทุกเดือน ยกเลิกได้ทุกเมื่อ ใช้ได้จนครบรอบที่จ่ายแล้ว · PromptPay: จ่ายครั้งเดียวได้ 30 วัน ซื้อเพิ่มก่อนหมดได้ วันจะต่อจากเดิม</p>
-    ${b.hasCustomer ? '<div class="modal-actions"><button class="btn btn-sm" onclick="openBillingPortal()">จัดการการสมัคร / ใบเสร็จ</button></div>' : ''}
+    ${b.hasCustomer ? '<div class="modal-actions"><button class="btn btn-sm" onclick="openBillingPortal()">ใบเสร็จ / ประวัติการชำระเงิน</button></div>' : ''}
     <div id="billing-msg" class="hint" aria-live="polite"></div>
   </div>`;
 }
@@ -395,10 +414,11 @@ async function startCheckout(plan, method) {
   }
 }
 
-async function openBillingPortal() {
-  setBillingMsg('กำลังเปิดหน้าจัดการการสมัคร...');
+/** หน้าจัดการการสมัครของ Stripe: flow 'cancel' = หน้ายกเลิก, 'update' = หน้าเปลี่ยนแพ็กเกจ, ไม่ใส่ = หน้าหลัก */
+async function openBillingPortal(flow) {
+  setBillingMsg(flow === 'cancel' ? 'กำลังเปิดหน้ายกเลิกการสมัคร...' : flow === 'update' ? 'กำลังเปิดหน้าเปลี่ยนแพ็กเกจ...' : 'กำลังเปิดหน้าจัดการการสมัคร...');
   try {
-    const { url } = await billingPost('portal');
+    const { url } = await billingPost('portal', flow ? { flow } : {});
     if (!/^https:\/\/billing\.stripe\.com\//.test(url || '')) throw new Error('ได้ลิงก์ที่ไม่ถูกต้อง');
     location.href = url;
   } catch (err) {
@@ -418,6 +438,19 @@ async function handleBillingReturn() {
   if (result === 'cancel') {
     showGlobalToast('ยกเลิกการชำระเงินแล้ว ยังไม่มีการตัดเงิน');
     setTimeout(hideGlobalToast, 3000);
+    return;
+  }
+  // กลับจากหน้ายกเลิก/เปลี่ยนแพ็กเกจ: รอ webhook แล้วแสดงสถานะใหม่
+  if (result === 'updated' && isHostedSignedIn()) {
+    showGlobalToast('กำลังอัปเดตสถานะการสมัคร...');
+    await new Promise(r => setTimeout(r, 2500));
+    try {
+      const me = await fetchHostedMe();
+      hideGlobalToast();
+      appAlert(`แพ็กเกจตอนนี้: ${me.planName || me.plan}\n${describeBillingStatus(me.billing) || ''}`, { title: 'อัปเดตการสมัครแล้ว' });
+    } catch (e) {
+      hideGlobalToast();
+    }
     return;
   }
   if (result !== 'success' || !isHostedSignedIn()) return;

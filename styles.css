@@ -1173,3 +1173,6 @@ input.chap-chk, input.gloss-item-chk { width: 24px; height: 24px; }
 .plan-buy-name { font-weight: 600; }
 .plan-buy-price { font-size: 18px; color: var(--accent-text); margin-left: 4px; }
 .hosted-billing:empty { display: none; }
+.plan-sub-status { font-weight: 600; color: var(--accent-text); }
+.plan-sub-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.plan-sub-actions .btn { min-height: 38px; }
