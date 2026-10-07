@@ -6,13 +6,13 @@
 
 // null = ไม่จำกัด
 const PLAN_DEFAULTS = {
-  guest: { name: 'ผู้เยี่ยมชม', byokChaptersPerDay: 10, maxBooks: 3, batchMax: 5, assistantPerDay: 10, autoBible: false, epub: false, bgm: false, bestMode: false, cloudSync: false, cloudStorageMB: 0 },
-  free: { name: 'สมาชิกฟรี', byokChaptersPerDay: 20, maxBooks: 10, batchMax: 10, assistantPerDay: 30, autoBible: true, epub: true, bgm: true, bestMode: false, cloudSync: false, cloudStorageMB: 0 },
-  plus: { name: 'Plus', byokChaptersPerDay: 40, maxBooks: null, batchMax: 30, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: true, cloudStorageMB: 100 },
-  pro: { name: 'Pro', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: true, cloudStorageMB: 300 },
-  max: { name: 'Max', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: true, cloudStorageMB: 600 },
+  guest: { name: 'ผู้เยี่ยมชม', byokChaptersPerDay: 10, maxBooks: 3, batchMax: 5, assistantPerDay: 10, autoBible: false, epub: false, bgm: false, bestMode: false, cloudSync: false, cloudStorageMB: 0, followBooks: 0 },
+  free: { name: 'สมาชิกฟรี', byokChaptersPerDay: 20, maxBooks: 10, batchMax: 10, assistantPerDay: 30, autoBible: true, epub: true, bgm: true, bestMode: false, cloudSync: false, cloudStorageMB: 0, followBooks: 0 },
+  plus: { name: 'Plus', byokChaptersPerDay: 40, maxBooks: null, batchMax: 30, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: true, cloudStorageMB: 100, followBooks: 0 },
+  pro: { name: 'Pro', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: true, cloudStorageMB: 300, followBooks: 10 },
+  max: { name: 'Max', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: true, cloudStorageMB: 600, followBooks: null },
   // ไม่ได้ตั้งบริการ Dusktale: ไม่มีเซิร์ฟเวอร์ให้ซิงก์
-  unlimited: { name: 'ไม่จำกัด', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: false, cloudStorageMB: 0 }
+  unlimited: { name: 'ไม่จำกัด', byokChaptersPerDay: null, maxBooks: null, batchMax: 100, assistantPerDay: null, autoBible: true, epub: true, bgm: true, bestMode: true, cloudSync: false, cloudStorageMB: 0, followBooks: null }
 };
 const PLAN_ORDER = ['guest', 'free', 'plus', 'pro', 'max'];
 const PAID_PLAN_IDS = ['plus', 'pro', 'max'];
@@ -145,6 +145,9 @@ function describePlanLimit(kind, ent = getEntitlements()) {
     case 'assistant': return `วันนี้ถามผู้ช่วย AI ครบ ${ent.assistantPerDay} คำถามแล้ว (${ent.name}) ${upsell} ${fmt(next.assistantPerDay, 'คำถามต่อวัน')} · เริ่มนับใหม่พรุ่งนี้`;
     case 'books': return `ชั้นหนังสือมีครบ ${ent.maxBooks} เรื่องแล้ว (${ent.name}) เรื่องเดิมยังอ่านและแปลต่อได้ตามปกติ ${upsell} ${fmt(next.maxBooks, 'เรื่อง')} หรือลบเรื่องที่อ่านจบแล้ว (สำรองไฟล์ไว้ก่อนได้)`;
     case 'batch': return `${ent.name} แปลล่วงหน้าได้ครั้งละไม่เกิน ${ent.batchMax} ตอน ${upsell} ${fmt(next.batchMax, 'ตอนต่อครั้ง')}`;
+    case 'follow': return ent.followBooks
+      ? `${ent.name} ติดตามตอนใหม่อัตโนมัติได้ ${ent.followBooks} เรื่อง เลิกติดตามเรื่องอื่นก่อน หรือแพ็กเกจ Max ติดตามได้ไม่จำกัด`
+      : 'ติดตามตอนใหม่อัตโนมัติใช้ได้ตั้งแต่แพ็กเกจ Pro ขึ้นไป (กด "เช็กตอนใหม่" เองได้ทุกระดับ)';
     default: return `${PLAN_FEATURE_LABELS[kind] || 'ฟีเจอร์นี้'} ใช้ได้ตั้งแต่${PLAN_DEFAULTS.free[kind] ? 'สมาชิกฟรี (เข้าสู่ระบบด้วยอีเมล)' : 'แพ็กเกจ Plus'}ขึ้นไป`;
   }
 }
@@ -244,6 +247,7 @@ function buildPlansTableHtml(currentTier) {
     ['ชั้นหนังสือ', t => fmt(PLAN_DEFAULTS[t].maxBooks, 'เรื่อง')],
     ['แปลล่วงหน้าแบบชุด', t => fmt(PLAN_DEFAULTS[t].batchMax, 'ตอน/ครั้ง')],
     ['ผู้ช่วย AI', t => fmt(PLAN_DEFAULTS[t].assistantPerDay, 'คำถาม/วัน')],
+    ['ติดตามตอนใหม่อัตโนมัติ', t => PLAN_DEFAULTS[t].followBooks === 0 ? '–' : fmt(PLAN_DEFAULTS[t].followBooks, 'เรื่อง')],
     ...Object.keys(PLAN_FEATURE_LABELS).map(k => [PLAN_FEATURE_LABELS[k], t =>
       k === 'cloudSync' && PLAN_DEFAULTS[t].cloudSync ? `✓ ${PLAN_DEFAULTS[t].cloudStorageMB} MB` : fmt(PLAN_DEFAULTS[t][k])])
   ];
@@ -258,7 +262,7 @@ function renderPlansModalBody() {
   if (!body) return;
   body.innerHTML = `${buildPlansTableHtml(ent.tier)}
     ${buildPurchaseHtml(ent)}
-    <p class="hint">ทุกระดับ: อ่านตอนที่แปลไว้ แก้คำแปล คลังศัพท์ สำรอง/กู้คืนข้อมูล และส่งออก TXT ได้เสมอ ไม่มีการล็อกข้อมูลของคุณ (ข้อมูลบนคลาวด์ดาวน์โหลดคืนได้แม้แพ็กเกจหมดอายุ) · แปลล่วงหน้าบนเซิร์ฟเวอร์และติดตามตอนใหม่ตามมาในรุ่นถัดไป</p>`;
+    <p class="hint">ทุกระดับ: อ่านตอนที่แปลไว้ แก้คำแปล คลังศัพท์ สำรอง/กู้คืนข้อมูล และส่งออก TXT ได้เสมอ ไม่มีการล็อกข้อมูลของคุณ (ข้อมูลบนคลาวด์ดาวน์โหลดคืนได้แม้แพ็กเกจหมดอายุ) · กดเช็กตอนใหม่เองได้ทุกระดับ ติดตามอัตโนมัติจะเช็กให้ระหว่างเปิดแอพ</p>`;
 }
 
 function openPlansModal() {

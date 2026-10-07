@@ -40,6 +40,10 @@ update public.dt_plans set features = jsonb_build_object('cloudSync', false, 'cl
 update public.dt_plans set features = jsonb_build_object('cloudSync', true, 'cloudStorageMB', 100) || features where id = 'plus' and not features ? 'cloudSync';
 update public.dt_plans set features = jsonb_build_object('cloudSync', true, 'cloudStorageMB', 300) || features where id = 'pro' and not features ? 'cloudSync';
 update public.dt_plans set features = jsonb_build_object('cloudSync', true, 'cloudStorageMB', 600) || features where id = 'max' and not features ? 'cloudSync';
+-- ติดตามตอนใหม่อัตโนมัติ (จำนวนเรื่อง, null = ไม่จำกัด) แอพเช็กในเครื่องผู้ใช้ ไม่ใช่เซิร์ฟเวอร์
+update public.dt_plans set features = jsonb_build_object('followBooks', 0) || features where id in ('free', 'plus') and not features ? 'followBooks';
+update public.dt_plans set features = jsonb_build_object('followBooks', 10) || features where id = 'pro' and not features ? 'followBooks';
+update public.dt_plans set features = jsonb_build_object('followBooks', null) || features where id = 'max' and not features ? 'followBooks';
 
 -- ---------- ผู้ใช้ ----------
 create table if not exists public.dt_profiles (

@@ -1095,6 +1095,33 @@
       return !canUseCloudSync() && !isCloudSyncActive() && PLAN_DEFAULTS.plus.cloudSync && PLAN_DEFAULTS.plus.cloudStorageMB === 100 &&
         PLAN_DEFAULTS.max.cloudStorageMB === 600 && !PLAN_DEFAULTS.free.cloudSync && buildPlansTableHtml('free').includes('✓ 300 MB');
     });
+    test('follow: รหัสตอนใหม่คิดจากลิงก์ (สองเครื่องได้รหัสเดียวกัน)', () => {
+      const a = newChapterIdFor('bk1', 'https://x.test/book/1/105.html');
+      return a === newChapterIdFor('bk1', 'https://x.test/book/1/105.html') && a !== newChapterIdFor('bk1', 'https://x.test/book/1/106.html') &&
+        a.startsWith('bk1_u_') && a !== newChapterIdFor('bk2', 'https://x.test/book/1/105.html');
+    });
+    test('follow: เลือกเรื่องที่ถึงเวลาเช็ก (ตามสิทธิ์ อ่านล่าสุดก่อน ข้ามที่กำลังแปล)', () => {
+      const now = 10_000_000;
+      const books = [
+        { bookId: 'a', follow: true, updatedAt: 3 }, { bookId: 'b', follow: true, updatedAt: 9 },
+        { bookId: 'c', follow: true, updatedAt: 5 }, { bookId: 'd', updatedAt: 99 }
+      ];
+      const ids = (list) => list.map(b => b.bookId).join(',');
+      const all = pickFollowedBooksDue(books, { limit: null, checked: {}, now });
+      const two = pickFollowedBooksDue(books, { limit: 2, checked: {}, now });
+      const recent = pickFollowedBooksDue(books, { limit: null, checked: { b: now - 60000 }, now });
+      const forced = pickFollowedBooksDue(books, { limit: null, checked: { b: now - 60000 }, now, force: ['b'] });
+      const busy = pickFollowedBooksDue(books, { limit: null, checked: {}, now, busy: id => id === 'c' });
+      return ids(all) === 'b,c,a' && ids(two) === 'b,c' && ids(recent) === 'c,a' && ids(forced) === 'b,c,a' && ids(busy) === 'b,a' &&
+        pickFollowedBooksDue(books, { limit: 0, checked: {}, now }).length === 0 && isBookFollowed({ follow: true }) && !isBookFollowed(null);
+    });
+    test('follow: สิทธิ์ Pro 10 เรื่อง / Max ไม่จำกัด / ต่ำกว่าไม่มี และข้อความขีดจำกัด', () => {
+      const html = buildPlansTableHtml('pro');
+      return PLAN_DEFAULTS.pro.followBooks === 10 && PLAN_DEFAULTS.max.followBooks === null && PLAN_DEFAULTS.plus.followBooks === 0 &&
+        html.includes('ติดตามตอนใหม่อัตโนมัติ') && html.includes('10 เรื่อง') &&
+        describePlanLimit('follow', { tier: 'free', ...PLAN_DEFAULTS.free }).includes('Pro') &&
+        describePlanLimit('follow', { tier: 'pro', ...PLAN_DEFAULTS.pro }).includes('10 เรื่อง');
+    });
     test('plans: ตารางแพ็กเกจมีทุกระดับและไฮไลต์ระดับปัจจุบัน', () => {
       const html = buildPlansTableHtml('free');
       return PLAN_ORDER.every(t => html.includes(PLAN_DEFAULTS[t].name)) && (html.match(/plan-current/g) || []).length > 5 && html.includes('ระดับของคุณ') &&

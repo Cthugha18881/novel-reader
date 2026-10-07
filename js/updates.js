@@ -74,16 +74,24 @@ async function checkBookForNewChapters(bookId, signal = null) {
   }
 }
 
+/**
+ * รหัสของตอนที่เพิ่มจากการเช็กตอนใหม่: คิดจากลิงก์ของตอน (ไม่ใช่เวลา)
+ * สองเครื่องที่ซิงก์กันเจอตอนเดียวกัน จะได้รหัสเดียวกัน ซิงก์แล้วไม่เกิดตอนซ้ำ
+ */
+function newChapterIdFor(bookId, url) {
+  return `${bookId}_u_${hashString(normalizeUrl(url) || url || '')}`;
+}
+
 /** เพิ่มตอนใหม่ที่เช็กเจอเป็น "ตอนที่รอแปล" (ยังไม่ใช้โควตา AI) */
 async function queueNewChapters(bookId, result) {
   const chaps = await dbGetChaptersByBook(bookId);
   let order = chaps.reduce((m, c) => Math.max(m, c.order || 0), 0);
-  const now = Date.now();
+  const haveIds = new Set(chaps.map(c => c.id));
   let records = [];
   if (result.mode === 'toc') {
     const have = new Set(chaps.map(c => normalizeUrl(c.sourceUrl)).filter(Boolean));
-    records = result.fresh.filter(en => !have.has(normalizeUrl(en.url))).map((en, k) => ({
-      id: `${bookId}_chap_${now}_n${k}`,
+    records = result.fresh.filter(en => !have.has(normalizeUrl(en.url)) && !haveIds.has(newChapterIdFor(bookId, en.url))).map((en) => ({
+      id: newChapterIdFor(bookId, en.url),
       bookId,
       order: ++order,
       title: en.title || `ตอน ${order}`,
@@ -95,10 +103,10 @@ async function queueNewChapters(bookId, result) {
       nextUrl: null
     }));
   } else if (result.mode === 'next' && result.page) {
-    if (chaps.some(c => sameSourceUrl(c.sourceUrl, result.url))) return 0;
+    if (chaps.some(c => sameSourceUrl(c.sourceUrl, result.url)) || haveIds.has(newChapterIdFor(bookId, result.url))) return 0;
     // เก็บต้นฉบับที่ดึงมาแล้วไว้เลย ตอนแปลจะไม่ต้องดึงหน้าเว็บซ้ำ
     records = [{
-      id: `${bookId}_chap_${now}_n0`,
+      id: newChapterIdFor(bookId, result.url),
       bookId,
       order: ++order,
       title: result.page.rawChapTitle || `ตอน ${order}`,
@@ -227,6 +235,12 @@ function newChapterBadgeHtml(bookId) {
   const s = getNewChapterStates()[bookId];
   if (!s) return '';
   const when = new Date(s.checkedAt).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' });
+  // ติดตามเรื่องอยู่: เช็กเจอแล้วเพิ่มเข้าคิวให้เอง
+  if (s.queued > 0) {
+    return `<span class="new-chap-badge">🆕 เพิ่ม ${s.queued} ตอนใหม่เข้าคิวรอแปลแล้ว</span>
+      <button class="btn btn-primary btn-sm" onclick="chooseBatchCount(${jsArg(bookId)})">⚡ แปลเลย</button>
+      <span class="text-muted" style="font-size: 11px;">เจอเมื่อ ${escapeHtml(when)}</span>`;
+  }
   if (s.count > 0) {
     return `<span class="new-chap-badge">🆕 ${s.atLeast ? 'มีตอนใหม่' : `${s.count} ตอนใหม่`}</span>
       <button class="btn btn-primary btn-sm" onclick="queueNewChaptersFromBadge(${jsArg(bookId)})">เพิ่มเข้าคิว</button>
@@ -242,3 +256,119 @@ function renderNewChapterBadge(bookId) {
   // ป้าย "ตอนใหม่" บนปกการ์ดในหน้าแรก
   else if (typeof refreshHomeBook === 'function') refreshHomeBook(bookId);
 }
+
+// ==================== ติดตามตอนใหม่อัตโนมัติ (Pro/Max) ====================
+// เรื่องที่ติดตาม (book.follow = true ซิงก์ไปทุกเครื่อง): แอพเช็กตอนใหม่เองตอนเปิด และทุก 30 นาทีระหว่างเปิด
+// เจอแล้วเพิ่มเป็น "ตอนที่รอแปล" อย่างเดียว ไม่ใช้โควตา AI จนกว่าผู้ใช้จะกดแปล
+// ทำในเครื่องของผู้ใช้ (ดึงหน้าเว็บแบบเดียวกับกดเช็กเอง) ไม่ใช่เซิร์ฟเวอร์ของ Dusktale
+const FOLLOW_CHECKED_KEY = 'nov_follow_checked';
+const FOLLOW_INTERVAL_MS = 30 * 60000;
+
+function isBookFollowed(book) {
+  return book?.follow === true;
+}
+
+function getFollowLimit() {
+  return typeof getEntitlements === 'function' ? getEntitlements().followBooks : null;
+}
+
+/** เปิด/ปิดการติดตาม (จำนวนเรื่องตามแพ็กเกจ เลิกติดตามได้เสมอ) */
+async function setBookFollow(bookId, on) {
+  const books = await dbGetAllBooks();
+  const book = books.find(b => b.bookId === bookId);
+  if (!book) return;
+  if (on) {
+    const limit = getFollowLimit();
+    const followed = books.filter(b => isBookFollowed(b) && b.bookId !== bookId).length;
+    if (limit !== null && followed >= limit) {
+      if (typeof showPlanLimit === 'function') showPlanLimit('follow');
+      return;
+    }
+  }
+  await dbSaveBook({ ...book, follow: !!on, updatedAt: Date.now() });
+  if (typeof refreshShelfViewOnly === 'function') await refreshShelfViewOnly(bookId);
+  showGlobalToast(on ? `ติดตาม "${book.title || 'นิยาย'}" แล้ว แอพจะเช็กตอนใหม่ให้เองทุก 30 นาทีระหว่างเปิดแอพ` : 'เลิกติดตามแล้ว');
+  setTimeout(hideGlobalToast, 2500);
+  if (on) setTimeout(() => autoCheckFollowedBooks({ force: [bookId] }).catch(() => {}), 1500);
+}
+
+function readFollowChecked() {
+  try {
+    const v = JSON.parse(localStorage.getItem(FOLLOW_CHECKED_KEY) || '{}');
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch (e) { return {}; }
+}
+
+/** เรื่องที่ถึงเวลาเช็ก: ติดตามอยู่ ไม่ได้กำลังแปลล่วงหน้า เช็กครั้งล่าสุดเกิน 30 นาที (เรียงตามที่อ่านล่าสุด ตัดตามสิทธิ์) */
+function pickFollowedBooksDue(books, { limit, checked, now = Date.now(), busy = () => false, force = [] }) {
+  const followed = books.filter(isBookFollowed).sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  const allowed = limit === null || limit === undefined ? followed : followed.slice(0, Math.max(0, limit));
+  return allowed.filter(b => !busy(b.bookId) && (force.includes(b.bookId) || now - (Number(checked[b.bookId]) || 0) >= FOLLOW_INTERVAL_MS));
+}
+
+let followCheckRunning = false;
+
+async function autoCheckFollowedBooks({ force = [] } = {}) {
+  if (followCheckRunning || newChapterChecking) return;
+  if (typeof db === 'undefined' || !db) return;
+  const limit = getFollowLimit();
+  if (limit === 0) return;
+  const checked = readFollowChecked();
+  const busy = (id) => { const s = typeof getBatchStatus === 'function' ? getBatchStatus(id) : null; return !!s && ['running', 'queued'].includes(s.kind); };
+  const due = pickFollowedBooksDue(await dbGetAllBooks(), { limit, checked, busy, force });
+  if (!due.length) return;
+  followCheckRunning = true;
+  const controller = beginTask('followcheck');
+  let addedTotal = 0, booksWithNew = 0;
+  try {
+    for (let i = 0; i < due.length; i++) {
+      if (controller.signal.aborted) break;
+      const b = due[i];
+      try {
+        const result = await checkBookForNewChapters(b.bookId, controller.signal);
+        const added = result.count > 0 ? await queueNewChapters(b.bookId, result) : 0;
+        const prev = getNewChapterStates()[b.bookId];
+        if (added) {
+          addedTotal += added;
+          booksWithNew++;
+          // นับสะสมจนกว่าผู้ใช้จะเปิดอ่านเรื่องนั้น
+          setNewChapterState(b.bookId, { count: 0, queued: (prev?.queued || 0) + added, mode: result.mode, checkedAt: Date.now() });
+        } else if (!prev?.queued) {
+          setNewChapterState(b.bookId, { count: 0, mode: result.mode, checkedAt: Date.now(), note: result.mode === 'none' ? result.reason : '' });
+        }
+      } catch (err) {
+        if (isAbortError(err)) break;
+        console.warn('follow check failed', b.bookId, err.message);
+      }
+      checked[b.bookId] = Date.now();
+      try { localStorage.setItem(FOLLOW_CHECKED_KEY, JSON.stringify(checked)); } catch (e) {}
+      renderNewChapterBadge(b.bookId);
+      if (i < due.length - 1) await sleepAbortable(1500, controller.signal).catch(() => {});
+    }
+  } finally {
+    endTask('followcheck', controller);
+    followCheckRunning = false;
+  }
+  if (addedTotal) {
+    showGlobalToast(`🆕 พบตอนใหม่ ${addedTotal} ตอน (${booksWithNew} เรื่องที่ติดตาม) เพิ่มเข้าคิวรอแปลแล้ว`);
+    setTimeout(hideGlobalToast, 5000);
+    if (typeof homeOpen !== 'undefined' && homeOpen && typeof refreshHome === 'function') refreshHome();
+  }
+}
+
+/** เปิดอ่านเรื่องแล้ว: ล้างป้าย "เพิ่มตอนใหม่เข้าคิวแล้ว" */
+function clearFollowQueuedBadge(bookId) {
+  const s = getNewChapterStates()[bookId];
+  if (s?.queued) {
+    setNewChapterState(bookId, null);
+    renderNewChapterBadge(bookId);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  // เปิดแอพ: รอให้หน้าโหลดและซิงก์เสร็จก่อน แล้วค่อยเช็ก
+  setTimeout(() => autoCheckFollowedBooks().catch(() => {}), 20000);
+  setInterval(() => {
+    if (document.visibilityState === 'visible') autoCheckFollowedBooks().catch(() => {});
+  }, 5 * 60000);
+});

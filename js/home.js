@@ -259,7 +259,9 @@ function homeCardHtml({ b, count, cover }) {
   const batching = status && ['running', 'queued'].includes(status.kind);
   const badges = [
     b.bookId === currentBookId ? '<span class="cover-badge reading">กำลังอ่าน</span>' : '',
-    ns?.count > 0 ? `<span class="cover-badge new">🆕 ${ns.atLeast ? 'ตอนใหม่' : `${ns.count} ตอนใหม่`}</span>` : ''
+    ns?.queued > 0 ? `<span class="cover-badge new">🆕 ${ns.queued} ตอนใหม่</span>` :
+      (ns?.count > 0 ? `<span class="cover-badge new">🆕 ${ns.atLeast ? 'ตอนใหม่' : `${ns.count} ตอนใหม่`}</span>` : ''),
+    typeof isBookFollowed === 'function' && isBookFollowed(b) ? '<span class="cover-badge follow" title="ติดตามตอนใหม่อยู่">🔔</span>' : ''
   ].join('');
   return `<article class="home-card${batching ? ' is-batching' : ''}" data-book="${escapeHtml(b.bookId)}">
     <button class="home-cover" onclick="openHome({ bookId: ${id} })" aria-label="${escapeHtml(b.title || 'นิยาย')}: ดูรายละเอียดและตอนทั้งหมด">
@@ -314,7 +316,8 @@ async function renderHomeDetail(bookId) {
         <div class="home-detail-actions">
           <button class="btn btn-primary" onclick="continueReadingBook(${id})">▶ อ่านต่อ</button>
           <button class="btn" onclick="chooseBatchCount(${id})">⚡ แปลล่วงหน้า</button>
-          <button class="btn" onclick="checkNewChaptersForBook(${id})" title="เช็กว่าเว็บต้นฉบับมีตอนใหม่หรือยัง (ไม่ใช้โควตา AI)">🔔 เช็กตอนใหม่</button>
+          <button class="btn" onclick="checkNewChaptersForBook(${id})" title="เช็กว่าเว็บต้นฉบับมีตอนใหม่หรือยัง (ไม่ใช้โควตา AI)">🔎 เช็กตอนใหม่</button>
+          <button class="btn${isBookFollowed(book) ? ' btn-primary' : ''}" onclick="setBookFollow(${id}, ${!isBookFollowed(book)})" aria-pressed="${isBookFollowed(book)}" title="เช็กตอนใหม่ให้เองทุก 30 นาทีระหว่างเปิดแอพ เจอแล้วเพิ่มเข้าคิวรอแปล (ไม่ใช้โควตา AI)">${isBookFollowed(book) ? '🔔 ติดตามอยู่' : '🔔 ติดตามตอนใหม่'}</button>
           <button class="btn" onclick="openHomeBookMenu(this, ${id})" title="เมนูอื่นๆ ของเรื่องนี้" aria-label="เมนูอื่นๆ ของเรื่องนี้">⋯</button>
         </div>
         <div class="home-newchap" id="newchap-${escapeHtml(bookId)}">${newChapterBadgeHtml(bookId)}</div>
@@ -347,6 +350,7 @@ async function renderHomeDetail(bookId) {
 
 // ---------- คำสั่ง ----------
 async function continueReadingBook(bookId) {
+  if (typeof clearFollowQueuedBadge === 'function') clearFollowQueuedBadge(bookId);
   if (currentBookId !== bookId) await loadBookFromDB(bookId);
   closeHome();
 }
@@ -362,7 +366,10 @@ function openHomeBookMenu(anchor, bookId) {
     running
       ? { icon: '⏹', label: status.kind === 'running' ? 'หยุดแปลล่วงหน้า' : 'ยกเลิกคิวแปล', onSelect: () => cancelBatchTranslate(bookId) }
       : { icon: '⚡', label: 'แปลล่วงหน้า…', hint: 'ใช้โควตา AI · บอกค่าใช้จ่ายก่อนเริ่ม', onSelect: () => chooseBatchCount(bookId) },
-    { icon: '🔔', label: 'เช็กตอนใหม่', hint: 'ไม่ใช้โควตา AI', onSelect: () => checkNewChaptersForBook(bookId) },
+    { icon: '🔎', label: 'เช็กตอนใหม่', hint: 'ไม่ใช้โควตา AI', onSelect: () => checkNewChaptersForBook(bookId) },
+    isBookFollowed(entry?.b)
+      ? { icon: '🔕', label: 'เลิกติดตามตอนใหม่', onSelect: () => setBookFollow(bookId, false) }
+      : { icon: '🔔', label: 'ติดตามตอนใหม่อัตโนมัติ', hint: 'เช็กให้เองระหว่างเปิดแอพ · Pro ขึ้นไป', onSelect: () => setBookFollow(bookId, true) },
     { icon: '🖼', label: hasCover ? 'เปลี่ยนภาพปก' : 'ใส่ภาพปก', onSelect: () => pickBookCover(bookId) },
     { icon: '🧹', label: 'ใช้ปกสีอัตโนมัติ', hint: 'ลบภาพปกที่ใส่ไว้', hidden: !hasCover, onSelect: () => removeBookCover(bookId) },
     { icon: '✎', label: 'แก้ชื่อเรื่อง', onSelect: () => renameBook(bookId) },
