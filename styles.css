@@ -85,9 +85,15 @@ body.theme-dark {
 body {
   font-family: var(--font-ui);
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   flex-direction: column;
   transition: background-color 0.2s, color 0.2s;
+}
+
+/* iPhone/iPad: ช่องกรอกที่ตัวอักษรเล็กกว่า 16px ทำให้ Safari ซูมหน้าเองตอนแตะ (แล้วไม่ซูมกลับ) */
+@supports (-webkit-touch-callout: none) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea, .form-input { font-size: max(16px, 1em) !important; }
 }
 
 body.modal-open {
@@ -103,7 +109,7 @@ header {
   position: sticky; top: 0; z-index: 40;
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 16px; border-bottom: 1px solid var(--border);
-  backdrop-filter: blur(8px); background-color: var(--bg);
+  -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); background-color: var(--bg);
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
 .brand-box { display: flex; align-items: center; gap: 8px; }
@@ -164,7 +170,7 @@ body.theme-dark .btn-danger { background: #b91c1c !important; }
 .top-floating-btn {
   position: fixed; top: 62px; z-index: 35; width: 32px; height: 32px; border-radius: 50%;
   background: rgba(0,0,0,0.05); border: 1px solid rgba(0,0,0,0.12);
-  backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center;
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); display: flex; align-items: center; justify-content: center;
   cursor: pointer; color: inherit; opacity: 0.65;
   transition: opacity 0.2s, background-color 0.2s, transform 0.2s, top 0.2s;
 }
@@ -366,7 +372,7 @@ body.theme-dark .chap-nav { border-top-color: rgba(255,255,255,0.1); }
 .mobile-dock {
   display: flex; position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
   background: inherit; border-top: 1px solid rgba(0,0,0,0.08); padding: 8px 12px;
-  justify-content: space-around; align-items: center; backdrop-filter: blur(12px);
+  justify-content: space-around; align-items: center; -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
   transition: transform 0.2s ease, opacity 0.2s ease;
 }
 body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
@@ -389,7 +395,7 @@ body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
 /* MODALS */
 .modal-overlay {
   display: none; position: fixed; inset: 0; z-index: 50;
-  background: rgba(0,0,0,0.6); backdrop-filter: blur(3px);
+  background: rgba(0,0,0,0.6); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
   align-items: center; justify-content: center; padding: 16px;
   overscroll-behavior: contain;
 }
@@ -398,7 +404,8 @@ body.theme-dark .mobile-dock { border-top-color: rgba(255,255,255,0.1); }
   width: 100%; max-width: 660px; max-height: 90vh; border-radius: var(--radius-lg);
   padding: 20px; box-shadow: var(--shadow-lg);
   background-color: var(--surface); color: var(--text); border: 1px solid var(--border);
-  display: flex; flex-direction: column; overflow: hidden;
+  /* เนื้อหายาวเกินจอและไม่มีส่วนที่เลื่อนได้ของตัวเอง (เช่นจอมือถือเล็ก): เลื่อนทั้งกล่องแทน ไม่ตัดทิ้ง */
+  display: flex; flex-direction: column; overflow-x: hidden; overflow-y: auto;
   overscroll-behavior: contain;
 }
 
@@ -582,14 +589,14 @@ body.modal-open .assistant-fab { display: none; }
 
 .assistant-panel {
   position: fixed; right: 16px; bottom: 70px; z-index: 47; width: 380px; max-width: calc(100vw - 32px);
-  height: 560px; max-height: calc(100vh - 110px); display: none; flex-direction: column;
+  height: 560px; max-height: calc(100vh - 110px); max-height: calc(100dvh - 110px); display: none; flex-direction: column;
   background: #fffdf8; color: #1f2937; border: 1px solid rgba(0, 0, 0, 0.12); border-radius: 12px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25); overflow: hidden;
 }
 .assistant-panel.open { display: flex; }
 body.theme-dark .assistant-panel { background: #1e2533; color: #e5e7eb; border-color: rgba(255, 255, 255, 0.12); }
 @media (max-width: 767px) {
-  .assistant-panel { left: 8px; right: 8px; width: auto; max-width: none; bottom: 112px; height: 70vh; max-height: calc(100vh - 130px); }
+  .assistant-panel { left: 8px; right: 8px; width: auto; max-width: none; bottom: 112px; height: 70vh; height: 70dvh; max-height: calc(100vh - 130px); max-height: calc(100dvh - 130px); }
 }
 .assistant-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid rgba(0, 0, 0, 0.08); }
 .assistant-sub { font-size: 11px; opacity: 0.65; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -636,7 +643,7 @@ body.theme-dark .story-log-row { border-color: rgba(255, 255, 255, 0.12); }
 /* ---------- Reading experience (ตั้งค่าการอ่าน / เสียงอ่าน / ค้นหา / บุ๊กมาร์ก) ---------- */
 .reader-panel {
   position: fixed; left: 50%; bottom: 70px; transform: translateX(-50%); z-index: 48;
-  width: 400px; max-width: calc(100vw - 24px); max-height: calc(100vh - 140px); overflow-y: auto;
+  width: 400px; max-width: calc(100vw - 24px); max-height: calc(100vh - 140px); max-height: calc(100dvh - 140px); overflow-y: auto;
   display: none; padding: 10px 14px 12px; border-radius: 12px;
   background: #fffdf8; color: #1f2937; border: 1px solid rgba(0, 0, 0, 0.12); box-shadow: 0 16px 40px rgba(0, 0, 0, 0.25);
   font-size: 13px;
@@ -657,7 +664,7 @@ body.theme-dark .reader-row { border-bottom-color: rgba(255, 255, 255, 0.1); }
 body.page-buttons-on .page-nav-btns { display: flex; }
 .page-nav-btns button {
   width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: 13px; color: inherit;
-  background: rgba(0, 0, 0, 0.06); border: 1px solid rgba(0, 0, 0, 0.15); backdrop-filter: blur(6px); opacity: 0.75;
+  background: rgba(0, 0, 0, 0.06); border: 1px solid rgba(0, 0, 0, 0.15); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); opacity: 0.75;
 }
 body.theme-dark .page-nav-btns button { background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.18); }
 .page-nav-btns button:hover { opacity: 1; }
@@ -1183,6 +1190,9 @@ input.chap-chk, input.gloss-item-chk { width: 24px; height: 24px; }
 .plan-buy-card .btn { width: 100%; min-height: 38px; }
 .plan-buy-name { font-weight: 600; }
 .plan-buy-price { font-size: 18px; color: var(--accent-text); margin-left: 4px; }
+.plan-price-old { color: var(--text-muted); font-weight: 400; font-size: 0.82em; text-decoration-thickness: 1.5px; }
+.plan-price-now { font-weight: 700; color: var(--accent-text); white-space: nowrap; }
+.plan-off-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--danger-soft); color: var(--danger); vertical-align: middle; white-space: nowrap; }
 .hosted-billing:empty { display: none; }
 .plan-sub-status { font-weight: 600; color: var(--accent-text); }
 .plan-sub-actions { display: flex; gap: 8px; flex-wrap: wrap; }

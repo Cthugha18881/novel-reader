@@ -21,5 +21,7 @@ window.DUSKTALE_HOSTED = {
   // ราคาที่แสดงก็มาจาก Stripe ค่าด้านล่างใช้เฉพาะตอนต่อเซิร์ฟเวอร์ไม่ได้
   billingEnabled: false,
   billingTestMode: true,
-  prices: { plus: 59, pro: 179, max: 299 }
+  prices: { plus: 59, pro: 179, max: 299 },
+  // ราคาปกติหลังช่วงเปิดตัว แสดงขีดทับคู่กับราคาจริง (ขึ้นราคาที่ Stripe แล้วถ้าราคาจริงไม่ต่ำกว่านี้ ขีดทับจะหายเอง)
+  listPrices: { plus: 99, pro: 239, max: 399 }
 };

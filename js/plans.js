@@ -20,6 +20,9 @@ const PAID_PLAN_IDS = ['plus', 'pro', 'max'];
 const PLAN_HOSTED_TOKENS = { guest: 0, free: 400000, plus: 1600000, pro: 6000000, max: 12000000 };
 // ราคาต่อ 30 วัน (บาท) ถ้าโหลดราคาจากเซิร์ฟเวอร์ไม่ได้ (ราคาจริงอยู่ที่ Stripe)
 const PLAN_PRICE_FALLBACK = { plus: 59, pro: 179, max: 299 };
+// ราคาปกติหลังช่วงเปิดตัว (แสดงขีดทับคู่กับราคาจริง) ตั้งใหม่ได้ที่ hosted-config.js → listPrices
+// ไม่แสดงถ้าราคาปกติไม่สูงกว่าราคาที่ขายจริง (เช่นขึ้นราคาแล้ว)
+const PLAN_LIST_PRICE_FALLBACK = { plus: 99, pro: 239, max: 399 };
 const PLAN_CACHE_KEY = 'nov_plan_cache';
 // สิทธิ์ที่จำไว้ใช้ได้นานแค่ไหนตอนออฟไลน์ (เกินนี้ถือเป็นสมาชิกฟรีจนกว่าจะต่อเซิร์ฟเวอร์ได้)
 const PLAN_CACHE_MAX_AGE = 7 * 24 * 3600 * 1000;
@@ -241,7 +244,8 @@ function buildPlansTableHtml(currentTier) {
   const tokenLabel = (n) => n >= 1e6 ? `${+(n / 1e6).toFixed(1)}M` : `${Math.round(n / 1e3)}K`;
   const hostedTokens = (t) => PLAN_HOSTED_TOKENS[t] ? `${tokenLabel(PLAN_HOSTED_TOKENS[t])} token/เดือน (≈${Math.floor(PLAN_HOSTED_TOKENS[t] / perChapter)} ตอน)` : '–';
   const rows = [
-    ['ราคา / 30 วัน', t => PAID_PLAN_IDS.includes(t) ? `${planPrice(t)} บาท` : 'ฟรี'],
+    // แถวราคาเป็น HTML (ขีดทับราคาปกติ) แถวอื่นเป็นข้อความธรรมดา
+    ['ราคา / 30 วัน', t => PAID_PLAN_IDS.includes(t) ? { html: planPriceHtml(t) } : 'ฟรี'],
     ['แปลด้วย API Key ของคุณ', t => fmt(PLAN_DEFAULTS[t].byokChaptersPerDay, 'ตอน/วัน')],
     ['แปลด้วย AI ของ Dusktale', hostedTokens],
     ['ชั้นหนังสือ', t => fmt(PLAN_DEFAULTS[t].maxBooks, 'เรื่อง')],
@@ -252,7 +256,8 @@ function buildPlansTableHtml(currentTier) {
       k === 'cloudSync' && PLAN_DEFAULTS[t].cloudSync ? `✓ ${PLAN_DEFAULTS[t].cloudStorageMB} MB` : fmt(PLAN_DEFAULTS[t][k])])
   ];
   const head = PLAN_ORDER.map(t => `<th scope="col"${t === currentTier ? ' class="plan-current"' : ''}>${escapeHtml(PLAN_DEFAULTS[t].name)}${t === currentTier ? '<br><small>ระดับของคุณ</small>' : ''}</th>`).join('');
-  const body = rows.map(([label, cell]) => `<tr><th scope="row">${escapeHtml(label)}</th>${PLAN_ORDER.map(t => `<td${t === currentTier ? ' class="plan-current"' : ''}>${escapeHtml(cell(t))}</td>`).join('')}</tr>`).join('');
+  const cellHtml = (v) => (v && typeof v === 'object' ? v.html : escapeHtml(v));
+  const body = rows.map(([label, cell]) => `<tr><th scope="row">${escapeHtml(label)}</th>${PLAN_ORDER.map(t => `<td${t === currentTier ? ' class="plan-current"' : ''}>${cellHtml(cell(t))}</td>`).join('')}</tr>`).join('');
   return `<div class="plans-table-wrap"><table class="plans-table"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
 }
 
@@ -317,6 +322,25 @@ function planPrice(plan, kind = 'monthlyThb') {
   if (Number.isFinite(fromServer) && fromServer > 0) return fromServer;
   const fromConfig = typeof HOSTED !== 'undefined' ? Number(HOSTED.prices?.[plan]) : NaN;
   return Number.isFinite(fromConfig) && fromConfig > 0 ? fromConfig : PLAN_PRICE_FALLBACK[plan];
+}
+
+/** ราคาปกติ (ก่อนลด) คืน null ถ้าไม่มีส่วนลด */
+function planListPrice(plan, kind = 'monthlyThb') {
+  const fromConfig = typeof HOSTED !== 'undefined' ? Number(HOSTED.listPrices?.[plan]) : NaN;
+  const list = Number.isFinite(fromConfig) && fromConfig > 0 ? fromConfig : PLAN_LIST_PRICE_FALLBACK[plan];
+  return Number.isFinite(list) && list > planPrice(plan, kind) ? list : null;
+}
+
+/** ราคาแบบขีดทับราคาปกติ (HTML) เช่น ~~99~~ 59 บาท */
+function planPriceHtml(plan, kind = 'monthlyThb') {
+  const price = planPrice(plan, kind);
+  const list = planListPrice(plan, kind);
+  return `${list ? `<s class="plan-price-old" aria-label="ราคาปกติ ${list} บาท">${list}</s> ` : ''}<span class="plan-price-now">${price} บาท</span>`;
+}
+
+function planDiscountPercent(plan) {
+  const list = planListPrice(plan);
+  return list ? Math.round((1 - planPrice(plan) / list) * 100) : 0;
 }
 
 function billingAvailable() {
@@ -386,8 +410,9 @@ function buildPurchaseHtml(ent) {
     const pass = planPrice(plan, 'passThb');
     const perChapter = PLAN_HOSTED_TOKENS[plan] ? (monthly / Math.floor(PLAN_HOSTED_TOKENS[plan] / ((typeof HOSTED !== 'undefined' && HOSTED.tokensPerChapter) || 20000))).toFixed(2) : '';
     // PromptPay ก่อน: คนไทยใช้มากกว่า และค่าธรรมเนียมต่ำกว่าบัตร
+    const off = planDiscountPercent(plan);
     return `<div class="plan-buy-card${ent.tier === plan ? ' plan-buy-current' : ''}">
-      <div class="plan-buy-name">${escapeHtml(name)} <span class="plan-buy-price">${monthly} บาท</span><span class="hint"> / 30 วัน</span></div>
+      <div class="plan-buy-name">${escapeHtml(name)} <span class="plan-buy-price">${planPriceHtml(plan)}</span><span class="hint"> / 30 วัน</span>${off ? ` <span class="plan-off-badge">ราคาเปิดตัว -${off}%</span>` : ''}</div>
       ${perChapter ? `<div class="hint">ตกตอนละประมาณ ${perChapter} บาท (AI ของ Dusktale)</div>` : ''}
       <button class="btn btn-primary btn-sm" onclick="startCheckout('${plan}', 'promptpay')">จ่าย PromptPay ${pass} บาท (30 วัน)</button>
       <button class="btn btn-sm" onclick="startCheckout('${plan}', 'card')">สมัครรายเดือนด้วยบัตร</button>
@@ -397,6 +422,7 @@ function buildPurchaseHtml(ent) {
     <div class="plan-buy-head"><b>สมัครแพ็กเกจ</b>${testBadge}</div>
     ${status ? `<div class="hint">${status}</div>` : ''}
     <div class="plan-buy-grid">${PAID_PLAN_IDS.map(card).join('')}</div>
+    ${PAID_PLAN_IDS.some(p => planListPrice(p)) ? `<p class="hint">ราคาเปิดตัวช่วงแรก ราคาปกติ ${PAID_PLAN_IDS.filter(p => planListPrice(p)).map(p => `${escapeHtml(PLAN_DEFAULTS[p].name)} ${planListPrice(p)} บาท`).join(' / ')}</p>` : ''}
     <p class="hint">บัตร: ต่ออายุอัตโนมัติทุกเดือน ยกเลิกได้ทุกเมื่อ ใช้ได้จนครบรอบที่จ่ายแล้ว · PromptPay: จ่ายครั้งเดียวได้ 30 วัน ซื้อเพิ่มก่อนหมดได้ วันจะต่อจากเดิม</p>
     ${b.hasCustomer ? '<div class="modal-actions"><button class="btn btn-sm" onclick="openBillingPortal()">ใบเสร็จ / ประวัติการชำระเงิน</button></div>' : ''}
     <div id="billing-msg" class="hint" aria-live="polite"></div>

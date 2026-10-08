@@ -1143,7 +1143,20 @@
       return PLAN_ORDER.every(t => html.includes(PLAN_DEFAULTS[t].name)) && (html.match(/plan-current/g) || []).length > 5 && html.includes('ระดับของคุณ') &&
         html.includes('59 บาท') && html.includes('179 บาท') && html.includes('299 บาท') && html.includes('1.6M token') && html.includes('≈600 ตอน');
     });
-    test('errorFromStatus: dusktale ใช้ข้อความของเซิร์ฟเวอร์ ไม่พูดถึง API Key/เติมเครดิต', () => {
+    test('planListPrice / planPriceHtml: ขีดทับราคาปกติเมื่อสูงกว่าราคาขาย / ราคาขายเท่าหรือสูงกว่า = ไม่ขีด', () => {
+      const orig = HOSTED.listPrices;
+      try {
+        const html = planPriceHtml('pro');
+        const ok1 = planListPrice('plus') === 99 && planListPrice('pro') === 239 && planListPrice('max') === 399 &&
+          html.includes('<s class="plan-price-old"') && html.includes('239') && html.includes('179 บาท') && planDiscountPercent('plus') === 40;
+        HOSTED.listPrices = { plus: 59, pro: 100 };
+        const ok2 = planListPrice('plus') === null && planListPrice('pro') === null && !planPriceHtml('plus').includes('plan-price-old') && planDiscountPercent('pro') === 0;
+        return ok1 && ok2;
+      } finally {
+        HOSTED.listPrices = orig;
+      }
+    });
+    test('errorFromStatus: dusktaleใช้ข้อความของเซิร์ฟเวอร์ ไม่พูดถึง API Key/เติมเครดิต', () => {
       const q = errorFromStatus(402, 'โควตาแปลของเดือนนี้หมดแล้ว', 'dusktale');
       const a = errorFromStatus(401, 'x', 'dusktale');
       const byok = errorFromStatus(402, 'x');
