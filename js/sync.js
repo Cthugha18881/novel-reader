@@ -77,6 +77,44 @@ function chunkSyncRecords(records, maxChars = SYNC_BATCH_CHARS, maxCount = SYNC_
   return out;
 }
 
+// ---------- กันข้อมูลหายยกชุด ----------
+// ลบเรื่อง/คำศัพท์จำนวนมากพร้อมกันผ่านการซิงก์ (เช่นเครื่องที่ข้อมูลในเครื่องหายไป แล้วส่ง "ลบทั้งหมด" ขึ้นคลาวด์)
+// ต้องให้ผู้ใช้ยืนยันก่อนเสมอ ไม่ว่าจะเป็นการส่งขึ้นหรือดึงลง
+const SYNC_MASS_DELETE_MIN = { b: 3, g: 20 };
+
+function isMassSyncDeletion(prefix, deleting, total) {
+  const min = SYNC_MASS_DELETE_MIN[prefix];
+  return !!min && deleting >= min && deleting * 2 >= total;
+}
+
+/** นับรายการที่จะถูกลบเทียบกับทั้งหมด แยกตามชนิด (เรื่อง/คำศัพท์) ไม่นับหนังสือคู่มือ */
+function countSyncDeletions(deletingKeys, allKeys) {
+  const count = (keys, p) => keys.filter(k => k.startsWith(`${p}:`) && k !== 'b:default_novel').length;
+  const out = {};
+  Object.keys(SYNC_MASS_DELETE_MIN).forEach(p => { out[p] = { deleting: count(deletingKeys, p), total: count(allKeys, p) }; });
+  out.mass = Object.keys(SYNC_MASS_DELETE_MIN).some(p => isMassSyncDeletion(p, out[p].deleting, out[p].total));
+  return out;
+}
+
+/** ถามผู้ใช้: true = เก็บข้อมูลไว้ (ไม่ลบ) */
+async function confirmKeepOnMassDeletion(direction, counts) {
+  const parts = [];
+  if (counts.b.deleting) parts.push(`นิยาย ${counts.b.deleting} จาก ${counts.b.total} เรื่อง`);
+  if (counts.g.deleting) parts.push(`คำศัพท์ ${counts.g.deleting} จาก ${counts.g.total} คำ`);
+  const where = direction === 'push'
+    ? 'ในเครื่องนี้ไม่มีข้อมูลเหล่านี้แล้ว ถ้าซิงก์ต่อ ข้อมูลบนคลาวด์และในเครื่องอื่นจะถูกลบตามด้วย'
+    : 'อีกเครื่องหนึ่งลบข้อมูลเหล่านี้ไป ถ้าซิงก์ต่อ ข้อมูลในเครื่องนี้จะถูกลบตามด้วย';
+  if (typeof appChoose !== 'function') return true;
+  const pick = await appChoose(
+    `การซิงก์ครั้งนี้จะลบ${parts.join(' และ ')}\n${where}\nถ้าไม่ได้ตั้งใจลบ ให้เลือก "เก็บไว้" ระบบจะกู้ข้อมูลกลับมา`,
+    [
+      { label: 'เก็บไว้ ไม่ลบ', value: 'keep', variant: 'primary' },
+      { label: 'ลบตาม', value: 'delete', variant: 'danger' }
+    ],
+    { title: '⚠️ ซิงก์จะลบข้อมูลจำนวนมาก', cancelLabel: 'เก็บไว้ ไม่ลบ' });
+  return pick !== 'delete';
+}
+
 function formatSyncBytes(n) {
   return n >= 1048576 ? `${(n / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round((n || 0) / 1024))} KB`;
 }
@@ -153,39 +191,102 @@ async function localLibraryCount() {
   return (await dbGetAllBooks()).filter(b => b.bookId !== 'default_novel').length;
 }
 
+/** นับนิยาย (ไม่รวมหนังสือคู่มือ) และคำศัพท์ในฐานข้อมูลที่เปิดไว้ */
+function countLibraryInDb(target) {
+  return new Promise((resolve) => {
+    const out = { books: 0, terms: 0 };
+    try {
+      const tx = target.transaction(['books', 'glossaries'], 'readonly');
+      tx.objectStore('books').getAllKeys().onsuccess = (e) => { out.books = (e.target.result || []).filter(k => k !== 'default_novel').length; };
+      tx.objectStore('glossaries').count().onsuccess = (e) => { out.terms = e.target.result || 0; };
+      tx.oncomplete = () => resolve(out);
+      tx.onerror = tx.onabort = () => resolve(out);
+    } catch (e) {
+      resolve(out);
+    }
+  });
+}
+
+/**
+ * ตั้งค่า → ข้อมูล → "ค้นหาข้อมูลในเครื่องนี้": หาว่ามีนิยายอยู่ในฐานข้อมูลอื่นของเบราว์เซอร์นี้ไหม
+ * โหมดไม่เข้าสู่ระบบ: ย้ายเข้าบัญชีได้ ส่วนของบัญชีอื่นบอกแค่จำนวน (ต้องเข้าสู่ระบบบัญชีนั้นเองจึงจะเห็น)
+ */
+async function findLocalLibrariesFromUi() {
+  const lines = [];
+  const mine = await countLibraryInDb(db);
+  lines.push(`${isAccountDbActive() ? 'บัญชีนี้' : 'โหมดไม่เข้าสู่ระบบ'} (ที่เปิดอยู่): นิยาย ${mine.books} เรื่อง · คำศัพท์ ${mine.terms} คำ`);
+  let guestCount = null;
+  if (isAccountDbActive()) {
+    let guest;
+    try {
+      guest = await openNamedDB(DB_NAME);
+      guestCount = await countLibraryInDb(guest);
+    } catch (e) {} finally { guest?.close(); }
+    if (guestCount) lines.push(`โหมดไม่เข้าสู่ระบบ: นิยาย ${guestCount.books} เรื่อง · คำศัพท์ ${guestCount.terms} คำ`);
+  }
+  let others = 0;
+  if (indexedDB.databases) {
+    try {
+      const current = dbNameForAccount(activeDbAccount);
+      const names = (await indexedDB.databases()).map(d => d.name).filter(n => n && n.startsWith(`${DB_NAME}__acct_`) && n !== current);
+      for (const name of names) {
+        let other;
+        try {
+          other = await openNamedDB(name);
+          const c = await countLibraryInDb(other);
+          if (c.books || c.terms) others++;
+        } catch (e) {} finally { other?.close(); }
+      }
+    } catch (e) {}
+  }
+  if (others) lines.push(`บัญชีอื่นที่เคยเข้าสู่ระบบในเบราว์เซอร์นี้: ${others} บัญชีมีข้อมูลอยู่ (เข้าสู่ระบบบัญชีนั้นจึงจะเห็น)`);
+  const sync = !isAccountDbActive() || isCloudSyncActive() ? '' : '\nบัญชีนี้ยังไม่ได้เปิด "ซิงก์อัตโนมัติในเครื่องนี้" ข้อมูลในเครื่องนี้จึงยังไม่ได้ขึ้นคลาวด์';
+  const canMove = isAccountDbActive() && isSyncAccountMatched() && guestCount && (guestCount.books || guestCount.terms);
+  if (canMove) {
+    if (!(await offerGuestLibraryImport(true))) appAlert(lines.join('\n') + sync, { title: 'ข้อมูลในเครื่องนี้' });
+    return;
+  }
+  appAlert(lines.join('\n') + sync, { title: 'ข้อมูลในเครื่องนี้' });
+}
+
 /**
  * เข้าสู่ระบบแล้วมีนิยายที่อ่านตอนไม่ได้เข้าสู่ระบบในเครื่องนี้: ถามครั้งเดียวต่อบัญชีว่าจะย้ายมาไว้ในบัญชีไหม
  * (นิยายโหมดไม่เข้าสู่ระบบใครใช้เครื่องนี้ก็เห็นอยู่แล้ว การย้ายจึงไม่ทำให้ข้อมูลของใครรั่ว)
  */
-async function offerGuestLibraryImport() {
-  if (!isAccountDbActive() || !isSyncAccountMatched()) return;
-  if (await dbGetMeta(GUEST_IMPORT_ASKED_META).catch(() => null)) return;
+async function offerGuestLibraryImport(force = false) {
+  if (!isAccountDbActive() || !isSyncAccountMatched()) return false;
+  if (!force && await dbGetMeta(GUEST_IMPORT_ASKED_META).catch(() => null)) return false;
   let guest;
   try {
     guest = await openNamedDB(DB_NAME);
-    const books = await new Promise((resolve, reject) => {
-      const req = guest.transaction('books', 'readonly').objectStore('books').getAll();
-      req.onsuccess = () => resolve((req.result || []).filter(b => b.bookId !== 'default_novel'));
-      req.onerror = () => reject(req.error);
-    });
-    if (!books.length) return;
+    const { books, terms } = await countLibraryInDb(guest);
+    if (!books && !terms) return false;
     await dbSetMeta(GUEST_IMPORT_ASKED_META, Date.now());
+    const what = [books ? `นิยาย ${books} เรื่อง` : '', terms ? `คำศัพท์ ${terms} คำ` : ''].filter(Boolean).join(' และ ');
     const choice = await appChoose(
-      `ในเครื่องนี้มีนิยาย ${books.length} เรื่องที่อ่านตอนไม่ได้เข้าสู่ระบบ ย้ายมาไว้ในบัญชีนี้ไหม\n` +
-      'ย้ายแล้วนิยายพวกนี้จะอยู่กับบัญชีนี้ (และซิงก์ได้ถ้าแพ็กเกจรองรับ) และไม่แสดงในโหมดไม่เข้าสู่ระบบอีก ถ้าเป็นนิยายของคนอื่นที่ใช้เครื่องนี้ ให้เลือก "ไม่ย้าย"',
-      [{ label: `ย้าย ${books.length} เรื่องมาไว้ในบัญชีนี้`, value: 'move', variant: 'primary' }],
-      { title: 'นิยายในโหมดไม่เข้าสู่ระบบ', cancelLabel: 'ไม่ย้าย' });
-    if (choice !== 'move') return;
+      `ในเครื่องนี้มี${what}ที่อยู่ในโหมดไม่เข้าสู่ระบบ ย้ายมาไว้ในบัญชีนี้ไหม\n` +
+      'ย้ายแล้วข้อมูลพวกนี้จะอยู่กับบัญชีนี้ (และซิงก์ได้ถ้าแพ็กเกจรองรับ) และไม่แสดงในโหมดไม่เข้าสู่ระบบอีก ถ้าเป็นข้อมูลของคนอื่นที่ใช้เครื่องนี้ ให้เลือก "ไม่ย้าย"',
+      [{ label: 'ย้ายมาไว้ในบัญชีนี้', value: 'move', variant: 'primary' }],
+      { title: 'ข้อมูลในโหมดไม่เข้าสู่ระบบ', cancelLabel: 'ไม่ย้าย' });
+    if (choice !== 'move') return false;
     // ไม่ทับข้อมูลที่บัญชีมีอยู่แล้ว และไม่ย้ายค่าภายใน (สถานะซิงก์/ตัวนับรายวัน) ของโหมดไม่เข้าสู่ระบบ
     await copyAllStores(guest, db, { clearSource: true, onlyMissing: true, skipStores: ['meta'] });
+    // สถานะซิงก์เดิมของโหมดไม่เข้าสู่ระบบอ้างถึงข้อมูลที่ย้ายออกไปแล้ว ลบทิ้งกันส่งคำสั่งลบผิดๆ
+    await new Promise((resolve) => {
+      const tx = guest.transaction('meta', 'readwrite');
+      tx.objectStore('meta').delete(SYNC_STATE_KEY);
+      tx.oncomplete = tx.onerror = tx.onabort = () => resolve();
+    });
     bookLangCache.clear();
     await refreshInMemoryGlossaryCache();
     markDataChanged('replaced');
     if (typeof homeOpen !== 'undefined' && homeOpen && typeof refreshHome === 'function') await refreshHome();
-    showGlobalToast(`ย้ายนิยาย ${books.length} เรื่องมาไว้ในบัญชีนี้แล้ว`);
+    showGlobalToast(`ย้าย${what}มาไว้ในบัญชีนี้แล้ว`);
     setTimeout(hideGlobalToast, 2500);
+    return true;
   } catch (err) {
     console.warn('Guest library import failed:', err);
+    return false;
   } finally {
     guest?.close();
   }
@@ -193,8 +294,20 @@ async function offerGuestLibraryImport() {
 
 /** ลบนิยาย/ตอน/คลังศัพท์ของบัญชีที่เปิดอยู่ออกจากเครื่องนี้ (สำรองไฟล์ก่อนได้) */
 async function clearLocalLibraryFromUi() {
+  // ซิงก์ค้างอยู่หรือไม่ได้เปิดซิงก์: ข้อมูลในเครื่องนี้อาจยังไม่ได้ขึ้นคลาวด์ ต้องเตือนให้ชัด
+  let synced = false;
+  if (isCloudSyncActive()) {
+    showGlobalToast('กำลังซิงก์ข้อมูลล่าสุดขึ้นคลาวด์ก่อน...');
+    clearTimeout(cloudSyncTimer);
+    cloudSyncTimer = null;
+    synced = await runCloudSync().then(() => true, () => false);
+    hideGlobalToast();
+  }
+  const cloudNote = synced
+    ? 'ข้อมูลที่ซิงก์ไว้บนคลาวด์ยังอยู่ (เข้าสู่ระบบอีกครั้งแล้วดึงกลับได้ถ้าแพ็กเกจรองรับซิงก์)'
+    : '⚠️ ข้อมูลในเครื่องนี้ยังไม่ได้ซิงก์ขึ้นคลาวด์ (หรือยังซิงก์ไม่เสร็จ) ลบแล้วจะหายถาวร ต้องสำรองไฟล์ไว้ก่อน';
   const pick = await appChoose(
-    'ลบนิยาย ตอน คลังศัพท์ คู่มือเรื่อง บุ๊กมาร์ก และประวัติคำแปลของบัญชีนี้ออกจากเครื่องนี้\nข้อมูลที่ซิงก์ไว้บนคลาวด์ยังอยู่ (เข้าสู่ระบบอีกครั้งแล้วดึงกลับได้ถ้าแพ็กเกจรองรับซิงก์)\nลบแล้วกู้คืนในเครื่องนี้ไม่ได้ ถ้ายังไม่ได้สำรอง กด "สำรองไฟล์แล้วลบ"',
+    `ลบนิยาย ตอน คลังศัพท์ คู่มือเรื่อง บุ๊กมาร์ก และประวัติคำแปลของบัญชีนี้ออกจากเครื่องนี้\n${cloudNote}\nลบแล้วกู้คืนในเครื่องนี้ไม่ได้ ถ้ายังไม่ได้สำรอง กด "สำรองไฟล์แล้วลบ"`,
     [
       { label: '⬇️ สำรองไฟล์แล้วลบ', value: 'backup', variant: 'primary' },
       { label: 'ลบเลย', value: 'delete', variant: 'danger' }
@@ -309,7 +422,7 @@ function runCloudSync(opts = {}) {
   return cloudSyncRunning;
 }
 
-async function doCloudSync({ pullOnly = false, onProgress = null } = {}) {
+async function doCloudSync({ pullOnly = false, onProgress = null, restoring = false } = {}) {
   const report = (msg) => { if (onProgress) onProgress(msg); };
   if (!db) throw new Error('ฐานข้อมูลยังไม่พร้อม');
   if (!isHostedSignedIn()) throw new Error('กรุณาเข้าสู่ระบบ Dusktale ก่อน');
@@ -326,6 +439,27 @@ async function doCloudSync({ pullOnly = false, onProgress = null } = {}) {
   const firstSync = !state.firstDone;
   const touched = { stores: new Set(), bookIds: new Set(), chapIds: new Set(), deletedChapters: false };
   let pulled = 0, pushed = 0;
+  // รายการที่คลาวด์สั่งลบ: เก็บไว้ลบทีเดียวตอนดึงครบ เพื่อตรวจก่อนว่าเป็นการลบยกชุดหรือไม่
+  const pendingDeletes = [];
+
+  const applyWrites = async (writes) => {
+    cloudSyncApplying = true;
+    try {
+      await syncWriteLocal(writes);
+      // แจ้งแท็บอื่นในเครื่องนี้ (ไม่ตั้งรอบซิงก์ใหม่ เพราะ cloudSyncApplying)
+      const kinds = { books: 'books', chapters: 'chapters', glossaries: 'glossary', bookData: 'bookData' };
+      [...new Set(writes.map(w => w.store))].forEach(s => markDataChanged(kinds[s]));
+    } finally { cloudSyncApplying = false; }
+    writes.forEach(op => {
+      if (op.deleted) delete state.fps[op.key];
+      else state.fps[op.key] = syncFingerprint(op.rec);
+      touched.stores.add(op.store);
+      const bookId = op.store === 'chapters' ? (op.rec?.bookId || op.localBookId) : (op.store === 'glossaries' ? null : op.id);
+      if (bookId) touched.bookIds.add(bookId);
+      if (op.store === 'chapters') { touched.chapIds.add(op.id); if (op.deleted) touched.deletedChapters = true; }
+    });
+    pulled += writes.length;
+  };
 
   // 1) ดึงของใหม่จากคลาวด์
   report('กำลังดึงข้อมูลจากคลาวด์...');
@@ -370,36 +504,40 @@ async function doCloudSync({ pullOnly = false, onProgress = null } = {}) {
             paragraphs: local.paragraphs || []
           }).catch(() => {});
         }
-        writes.push(op);
+        if (op.deleted) {
+          op.localBookId = local?.bookId;
+          pendingDeletes.push(op);
+        } else {
+          writes.push(op);
+        }
       }
-      if (writes.length) {
-        cloudSyncApplying = true;
-        try {
-          await syncWriteLocal(writes);
-          // แจ้งแท็บอื่นในเครื่องนี้ (ไม่ตั้งรอบซิงก์ใหม่ เพราะ cloudSyncApplying)
-          const kinds = { books: 'books', chapters: 'chapters', glossaries: 'glossary', bookData: 'bookData' };
-          [...new Set(writes.map(w => w.store))].forEach(s => markDataChanged(kinds[s]));
-        } finally { cloudSyncApplying = false; }
-        writes.forEach(op => {
-          if (op.deleted) delete state.fps[op.key];
-          else state.fps[op.key] = syncFingerprint(op.rec);
-          touched.stores.add(op.store);
-          const bookId = op.store === 'chapters' ? (op.rec?.bookId || locals.get(op.key)?.bookId) : (op.store === 'glossaries' ? null : op.id);
-          if (bookId) touched.bookIds.add(bookId);
-          if (op.store === 'chapters') { touched.chapIds.add(op.id); if (op.deleted) touched.deletedChapters = true; }
-        });
-        pulled += writes.length;
-      }
+      if (writes.length) await applyWrites(writes);
     }
     state.cursor = Math.max(state.cursor || 0, Number(res.next) || 0);
     await dbSetMeta(SYNC_STATE_KEY, state);
     if (!res.more || !records.length) break;
     report(`กำลังดึงข้อมูลจากคลาวด์... (${pulled} รายการ)`);
   }
+  if (pendingDeletes.length) {
+    const allKeys = [];
+    for (const def of SYNC_STORES.filter(d => d.store === 'books' || d.store === 'glossaries')) {
+      await syncScanStore(def.store, (rec) => { const k = syncKeyOf(def, rec); if (k) allKeys.push(k); });
+    }
+    const counts = countSyncDeletions(pendingDeletes.map(op => op.key), allKeys);
+    if (counts.mass && await confirmKeepOnMassDeletion('pull', counts)) {
+      // เก็บไว้: ลืมลายนิ้วมือเดิม รอบส่งด้านล่างจะส่งกลับขึ้นคลาวด์ (เครื่องอื่นได้คืนด้วย)
+      pendingDeletes.forEach(op => { delete state.fps[op.key]; });
+      await dbSetMeta(SYNC_STATE_KEY, state);
+    } else {
+      await applyWrites(pendingDeletes);
+      await dbSetMeta(SYNC_STATE_KEY, state);
+    }
+  }
   if (pulled) await refreshAfterCloudPull(touched);
 
   // 2) ส่งของที่เปลี่ยนในเครื่องขึ้นไป
   let pushError = null;
+  let restoreAfterPush = false;
   if (!pullOnly && planAllows('cloudSync')) {
     report('กำลังตรวจข้อมูลที่เปลี่ยนในเครื่อง...');
     const changed = [];
@@ -413,7 +551,18 @@ async function doCloudSync({ pullOnly = false, onProgress = null } = {}) {
         if (state.fps[key] !== fp) changed.push({ key, fp, rec });
       });
     }
-    const deletedKeys = Object.keys(state.fps).filter(k => !seen.has(k));
+    let deletedKeys = Object.keys(state.fps).filter(k => !seen.has(k));
+    if (deletedKeys.length && !restoring) {
+      const counts = countSyncDeletions(deletedKeys, Object.keys(state.fps));
+      if (counts.mass && await confirmKeepOnMassDeletion('push', counts)) {
+        // เก็บไว้: ไม่ส่งคำสั่งลบ แล้วดึงของเหล่านี้กลับจากคลาวด์ (เริ่มดึงใหม่ตั้งแต่ต้น)
+        deletedKeys.forEach(k => { delete state.fps[k]; });
+        deletedKeys = [];
+        state.cursor = 0;
+        await dbSetMeta(SYNC_STATE_KEY, state);
+        restoreAfterPush = true;
+      }
+    }
     const outgoing = [];
     for (const c of changed) outgoing.push({ key: c.key, fp: c.fp, data: await encodeSyncData(c.rec) });
     deletedKeys.forEach(key => outgoing.push({ key, deleted: true }));
@@ -436,6 +585,10 @@ async function doCloudSync({ pullOnly = false, onProgress = null } = {}) {
   state.firstDone = true;
   state.lastAt = Date.now();
   await dbSetMeta(SYNC_STATE_KEY, state);
+  if (restoreAfterPush && !pushError) {
+    report('กำลังกู้ข้อมูลกลับจากคลาวด์...');
+    return doCloudSync({ pullOnly: true, onProgress, restoring: true });
+  }
   cloudSyncLast = {
     at: state.lastAt, ok: !pushError, pulled, pushed,
     message: pushError ? pushError.message : ''
@@ -529,6 +682,8 @@ async function renderCloudSyncBox(refreshStatus = false) {
     </label>
     <div class="hint">ซิงก์ชั้นหนังสือ ตำแหน่งอ่าน ตอนที่แปล คลังศัพท์ คู่มือเรื่อง บุ๊กมาร์ก และปก ไม่ซิงก์ API Key ค่าตั้งของเครื่อง และประวัติเวอร์ชัน · แก้ตอนเดียวกันจากสองเครื่อง ฉบับที่แพ้เก็บไว้ในประวัติเวอร์ชัน</div>
     ${usage ? `<div class="hint">${escapeHtml(usage)}</div>` : ''}
+    ${st && !st.count ? '<div class="hint text-warning">บนคลาวด์ยังไม่มีข้อมูลของบัญชีนี้ ถ้าอีกเครื่องมีนิยายอยู่ ให้เปิด "ซิงก์อัตโนมัติในเครื่องนี้" ที่เครื่องนั้นก่อน แล้วค่อยกดซิงก์ที่เครื่องนี้</div>' : ''}
+    ${!enabled ? '<div class="hint">ยังไม่ได้เปิดซิงก์อัตโนมัติในเครื่องนี้ ข้อมูลขึ้นคลาวด์เฉพาะตอนกด "ซิงก์ตอนนี้"</div>' : ''}
     <div class="plan-sub-actions"><button class="btn btn-sm" id="cloud-sync-now-btn" onclick="cloudSyncFromUi(false)">ซิงก์ตอนนี้</button></div>
     <div id="cloud-sync-msg" class="hint" aria-live="polite">${escapeHtml(last)}</div></div>`;
 }

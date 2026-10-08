@@ -1091,6 +1091,16 @@
         decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: true }) === 'apply' &&
         decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: false }) === 'keep';
     });
+    test('sync: ลบยกชุดต้องถาม (ลบเรื่องเดียว/คำศัพท์ไม่กี่คำไม่ถาม)', () => {
+      const all = ['b:default_novel', 'b:1', 'b:2', 'b:3', 'b:4', 'c:1', ...Array.from({ length: 30 }, (_, i) => `g:t${i}`)];
+      const wipe = countSyncDeletions(all, all);
+      const one = countSyncDeletions(['b:1', 'c:1'], all);
+      const fewTerms = countSyncDeletions(['g:t1', 'g:t2'], all);
+      const manyTerms = countSyncDeletions(all.filter(k => k.startsWith('g:')).slice(0, 20), all);
+      return wipe.mass && wipe.b.deleting === 4 && wipe.b.total === 4 &&
+        !one.mass && !fewTerms.mass && manyTerms.mass &&
+        !isMassSyncDeletion('b', 3, 10) && isMassSyncDeletion('b', 3, 6) && !isMassSyncDeletion('c', 999, 999);
+    });
     test('sync: แบ่งชุดตามขนาดและจำนวน', () => {
       const recs = Array.from({ length: 5 }, (_, i) => ({ key: `c:${i}`, data: 'x'.repeat(100) }));
       const bySize = chunkSyncRecords(recs, 300, 100);

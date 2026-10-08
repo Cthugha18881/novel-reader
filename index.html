@@ -6,7 +6,7 @@
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/hosted-config.js"></script>
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.24.1</title>
+  <title>Dusktale v3.24.2</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -1080,6 +1080,7 @@
           <div class="settings-btn-row">
             <button class="btn btn-secondary" onclick="exportBackup()" title="ดาวน์โหลดนิยาย ตอน และคลังศัพท์ทั้งหมดเป็นไฟล์ .json (ไม่รวม API Key)">⬇️ สำรองข้อมูลทั้งหมด</button>
             <button class="btn btn-secondary" onclick="triggerBackupImport()" title="นำเข้าไฟล์สำรอง .json (เลือกได้ว่าจะรวมกับของเดิมหรือแทนที่ทั้งหมด)">⬆️ นำเข้าไฟล์สำรอง</button>
+            <button class="btn btn-secondary" onclick="findLocalLibrariesFromUi()" title="นิยายหายจากชั้นหนังสือ: ตรวจว่ามีข้อมูลค้างอยู่ในโหมดไม่เข้าสู่ระบบของเบราว์เซอร์นี้ไหม แล้วย้ายเข้าบัญชีได้">🔎 ค้นหาข้อมูลในเครื่องนี้</button>
           </div>
           <input type="file" id="backup-file-input" accept=".json,application/json" style="display: none;" onchange="handleBackupFileSelected(this)">
           <div id="bookshelf-backup-note" class="settings-note"></div>
