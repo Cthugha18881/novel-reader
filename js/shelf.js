@@ -384,6 +384,10 @@ async function runBatchJob({ bookId, count }) {
             stopDesc = `แปลครบ ${successCount} ตอนแล้ว แต่หาลิงก์ตอนถัดไปไม่ได้: ${BOT_CHALLENGE_MESSAGE}\n(กดแปลล่วงหน้าอีกครั้งภายหลัง แอพจะหาลิงก์ให้เอง หรือกด "แก้ URL ถัดไป")`;
             break;
           }
+          if (!targetUrl && found.none) {
+            stopDesc = `แปลครบ ${successCount} ตอนแล้ว ถึงตอนล่าสุดที่เว็บมีตอนนี้ (ยังไม่มีตอนถัดไป) กด 🔎 เช็กตอนใหม่ภายหลังได้`;
+            break;
+          }
         } catch (err) {
           if (isAbortError(err)) break;
         }

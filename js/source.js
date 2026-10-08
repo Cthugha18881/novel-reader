@@ -9,6 +9,12 @@ function normalizeNavText(text) {
   return (text || '').replace(/[\s→>›»⟩▶►]/g, '');
 }
 
+// ปุ่ม "ตอนถัดไป" ของตอนล่าสุดที่ยังไม่มีตอนใหม่: บางเว็บชี้ไป .../0.html หรือ id=0 (หรือเป็น javascript:) ไม่ใช่ตอนจริง
+function isPlaceholderNextUrl(url) {
+  if (!url || !/^https?:/i.test(url)) return true;
+  return /\/0(\.html?)?\/?(\?.*)?$|[?&][a-z_]*id=0(&|$)/i.test(url);
+}
+
 // ---------- Site profiles ----------
 // ค่าตั้งต้นสำหรับเว็บยอดนิยม (selector อาจต้องปรับถ้าเว็บเปลี่ยนหน้าตา ระบบจะกลับไปใช้ตัวดึงแบบกลางให้อัตโนมัติถ้าหาเนื้อหาไม่เจอ)
 // ฟิลด์ของโปรไฟล์:
@@ -26,7 +32,9 @@ const BUILTIN_SITE_PROFILES = [
   // ตอนที่ต้องซื้อ/อ่านต่อในแอพ: HTML มี "vipStatus":2 "price":15 และ "download Webnovel app to continue" ส่วน "isAuth":1 = ผู้อ่านมีสิทธิ์แล้ว
   { host: 'webnovel.com', contentSelector: '', titleSelector: '', removeSelector: '', nextSelector: '', jinaTarget: '.cha-words', nextMode: 'link', lockPattern: '"vipStatus"\\s*:\\s*[1-9]|download Webnovel app to continue', unlockPattern: '"isAuth"\\s*:\\s*1' },
   // wtr-lab: เนื้อหาโหลดด้วย JavaScript และหน้าเว็บมี iframe โฆษณาที่ทำให้ r.jina.ai อ่านผิดหน้า จึงต้องระบุส่วนที่จะอ่าน
-  { host: 'wtr-lab.com', contentSelector: '', titleSelector: '', removeSelector: '', nextSelector: '', jinaTarget: '.reader-container', jinaWait: '.chapter-wrap p', noCache: true, nextMode: 'increment' }
+  { host: 'wtr-lab.com', contentSelector: '', titleSelector: '', removeSelector: '', nextSelector: '', jinaTarget: '.reader-container', jinaWait: '.chapter-wrap p', noCache: true, nextMode: 'increment' },
+  // jjwxc (晋江): markdown ของ r.jina.ai ได้กรอบโฆษณาแทนหน้านิยาย เนื้อหาจริงอยู่ใน #paragraph_comment_content (ไม่มีปุ่ม/โน้ตผู้เขียนปน)
+  { host: 'jjwxc.net', contentSelector: '#paragraph_comment_content', titleSelector: '.noveltext h2', removeSelector: '', nextSelector: '' }
 ];
 
 function hostOf(url) {
@@ -387,15 +395,20 @@ function findNextInHtml(doc, pageUrl, profile = null) {
   const rel = doc.querySelector('link[rel~="next"][href], a[rel~="next"][href]');
   const relUrl = pick(rel);
   let pageCandidate = null;
+  let placeholderNext = false;
   for (const a of doc.querySelectorAll('a[href]')) {
     const text = normalizeNavText(a.textContent);
     const url = pick(a);
+    const isNextLabel = NEXT_CHAPTER_LABEL.test(text);
+    if (isNextLabel && (!url || isPlaceholderNextUrl(url))) { placeholderNext = true; continue; }
     if (!url || sameSourceUrl(url, pageUrl)) continue;
-    if (NEXT_CHAPTER_LABEL.test(text)) return { url, kind: 'chapter' };
+    if (isNextLabel) return { url, kind: 'chapter' };
     if (!pageCandidate && NEXT_PAGE_LABEL.test(text)) pageCandidate = url;
   }
-  if (relUrl && !sameSourceUrl(relUrl, pageUrl)) return { url: relUrl, kind: 'chapter' };
-  return pageCandidate ? { url: pageCandidate, kind: 'page' } : null;
+  if (relUrl && !sameSourceUrl(relUrl, pageUrl) && !isPlaceholderNextUrl(relUrl)) return { url: relUrl, kind: 'chapter' };
+  if (pageCandidate) return { url: pageCandidate, kind: 'page' };
+  // มีปุ่มตอนถัดไปแต่ยังไม่มีลิงก์จริง = ตอนล่าสุด ไม่ต้องเดาเลข URL (เดาแล้วได้หน้าที่ไม่มีหรือตอนผิด)
+  return placeholderNext ? { url: null, kind: 'none' } : null;
 }
 
 // เว็บที่ไม่มีลิงก์ตอนถัดไปในหน้า แต่ฝังรหัสตอนถัดไปไว้ในข้อมูลของหน้า (เช่น webnovel: nextChapterId:'991...')
@@ -433,6 +446,11 @@ function parseHtmlWithProfile(html, pageUrl, profile) {
     try { title = (doc.querySelector(profile.titleSelector)?.textContent || '').trim(); } catch (e) {}
   }
   if (!title) title = (doc.querySelector('h1')?.textContent || doc.title || '').trim();
+  // หัวตอนเป็นแค่เลข (เช่น jjwxc "1"): ใช้หัวตอนจากชื่อหน้าเว็บ ("第1章") แทน
+  if (/^\d+$/.test(title)) {
+    const m = (doc.title || '').match(CHAPTER_MARK_REGEX);
+    if (m) title = m[0];
+  }
   return {
     paragraphs: htmlElementToParagraphs(contentEl),
     rawChapTitle: title.slice(0, 120),
@@ -508,7 +526,8 @@ function extractMarkdownLinks(markdown, pageUrl) {
 // ลิงก์นำทางของหน้าสารบัญ (หน้าถัดไป/ก่อนหน้า/กลับหน้าแรก) ไม่ใช่ตอน แม้ URL จะหน้าตาเหมือนตอน (เช่น index_2.html)
 const TOC_NAV_LABEL = /下一页|下一頁|上一页|上一頁|下页|上页|首页|尾页|目录|目錄|次のページ|前のページ|목록|이전|다음|nextpage|prevpage|previous|^prev$|^next$|^first$|^last$|หน้าถัดไป|หน้าก่อน|^«|^»/i;
 // URL ของหน้าแบ่งหน้าสารบัญ (ไม่ใช้ข้อความลิงก์ที่เป็นตัวเลข เพราะบางเว็บตั้งชื่อตอนเป็นตัวเลขล้วน)
-const TOC_PAGINATION_URL = /(index|list|catalog|chapters?|page)[_-]\d+(\.html?)?\/?$|[?&](page|p|pn)=\d+/i;
+// "chapters-2" = หน้า 2 ของสารบัญ แต่ "chapter-2" = ตอนที่ 2 (wuxiaworld, wtr-lab) จึงนับเฉพาะรูปพหูพจน์
+const TOC_PAGINATION_URL = /(index|list|catalog|chapters|page)[_-]\d+(\.html?)?\/?$|[?&](page|p|pn)=\d+/i;
 
 function isTocNavLink(link) {
   return TOC_NAV_LABEL.test(normalizeNavText(link.title)) || TOC_PAGINATION_URL.test(link.url);
@@ -540,10 +559,25 @@ function pickChapterLinks(links, tocUrl) {
     if (!groups.has(key.key)) groups.set(key.key, []);
     groups.get(key.key).push(link);
   }
+  // กลุ่มที่อยู่ใต้หน้าเรื่อง (เช่น /novel/ชื่อเรื่อง/chapter-1) มาก่อน ไม่งั้นลิงก์ตัวกรอง/เมนูที่มีมากกว่าจะชนะ
+  const tocPath = tocNorm.replace(/[?#].*$/, '').replace(/\/$/, '');
+  const under = list => list.filter(l => normalizeUrl(l.url).startsWith(tocPath + '/')).length;
   let best = [];
-  groups.forEach(list => { if (list.length > best.length) best = list; });
+  let bestUnder = 0;
+  groups.forEach(list => {
+    const u = under(list);
+    if (u > bestUnder || (u === bestUnder && list.length > best.length)) { best = list; bestUnder = u; }
+  });
   if (best.length < 3) return [];
-  return dedupeKeepLast(best);
+  const picked = dedupeKeepLast(best);
+  // หน้าเรื่องที่โชว์แค่บางตอน (เช่นตอน 1, 20, 28, 51) ไม่ใช่สารบัญเต็ม: ใช้แล้วตอนถัดไปจะกระโดด
+  // ตรวจเฉพาะเลขตอนจริง (เลขน้อย) ไม่ใช่รหัสตอนยาวๆ ที่ไม่ได้เรียงต่อกันอยู่แล้ว (kakuyomu/qidian)
+  const nums = picked.map(e => extractNumberHint(e.url)).filter(n => n !== null);
+  if (nums.length === picked.length && nums.length >= 3 && Math.max(...nums) < 100000) {
+    const span = Math.max(...nums) - Math.min(...nums) + 1;
+    if (span > 10 && nums.length < span * 0.5) return [];
+  }
+  return picked;
 }
 
 function findTocNextPage(links, tocUrl, seen) {

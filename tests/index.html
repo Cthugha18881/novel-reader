@@ -1233,7 +1233,44 @@
         { book: '凡人修仙传', chapter: '第十章 名字' }
       ]) && e.book === 'My Book' && e.chapter === 'Prologue';
     });
-    test('findNextIdInHtml: รหัสตอนถัดไปในข้อมูลของหน้า (webnovel) / ไม่มีรหัส หรือรหัสเดิม = null', () => {
+    test('splitPageTitle: รูปแบบเว็บจีน (ตอน _《เรื่อง》, ตอนประกาศ, ตอน_เรื่อง_ผู้แต่ง, คำโฆษณาท้ายชื่อเรื่อง, ส่วนที่เป็นแค่ขีด)', () => eq([
+      splitPageTitle('第1章 永夜 _《夜无疆》小说在线阅读 - 起点中文网'),
+      splitPageTitle('感谢书友支持 _《夜无疆》小说在线阅读 - 起点中文网'),
+      splitPageTitle('更新说明_星痕之门_伪戒-17K小说网'),
+      splitPageTitle('第38章 决绝_明君小说最新章节,在线阅读,纵横小说'),
+      splitPageTitle('《书名》 - 起点中文网'),
+      splitPageTitle('第一話 出発 - - 小説家になろう')
+    ], [
+      { book: '夜无疆', chapter: '第1章 永夜' },
+      { book: '夜无疆', chapter: '感谢书友支持' },
+      { book: '星痕之门', chapter: '更新说明' },
+      { book: '明君', chapter: '第38章 决绝' },
+      { book: '书名', chapter: '' },
+      { book: '小説家になろう', chapter: '第一話 出発' }
+    ]));
+    test('findNextInHtml: ปุ่มตอนถัดไปเป็น javascript: หรือ /0.html = ตอนล่าสุด (none) / ลิงก์จริง = chapter', () => {
+      const doc = html => new DOMParser().parseFromString(html, 'text/html');
+      const u = 'https://read.x.com/chapter/1/100.html';
+      return isPlaceholderNextUrl('https://www.17k.com/chapter/3583700/0.html') && isPlaceholderNextUrl('javascript:;') && !isPlaceholderNextUrl('https://x.com/chapter/1/101.html') &&
+        eq(findNextInHtml(doc('<a href="/chapter/1/99.html">上一章</a><a href="javascript:;">下一章</a>'), u), { url: null, kind: 'none' }) &&
+        eq(findNextInHtml(doc('<a href="/chapter/1/0.html">下一章</a>'), u), { url: null, kind: 'none' }) &&
+        findNextInHtml(doc('<a href="/chapter/1/101.html">下一章</a>'), u)?.url === 'https://read.x.com/chapter/1/101.html' &&
+        findNextInHtml(doc('<a href="/about">About</a>'), u) === null;
+    });
+    test('pickChapterLinks: ลิงก์ใต้หน้าเรื่องมาก่อนลิงก์ตัวกรอง / หน้าเรื่องที่มีแค่บางตอนกระจาย = ไม่ใช่สารบัญ', () => {
+      const toc = 'https://www.ww.com/novel/my-book';
+      const filters = ['Chinese', 'Action', 'Sci-fi', 'Drama', 'Comedy', 'Romance'].map(g => ({ title: g, url: `https://www.ww.com/novels/?genre=${g}` }));
+      const chaps = [1, 2, 3, 4].map(n => ({ title: `Chapter ${n}`, url: `${toc}/mb-chapter-${n}` }));
+      const sparse = [1, 20, 28, 51].map(n => ({ title: `Chapter ${n}`, url: `${toc}/mb-chapter-${n}` }));
+      return eq(pickChapterLinks([...filters, ...chaps], toc).map(e => e.title), ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4']) &&
+        pickChapterLinks([...sparse], toc).length === 0;
+    });
+    test('privateUseCharRatio: ตัวอักษรเข้ารหัสด้วยฟอนต์ (Private Use) = สูง / ข้อความจีนปกติ = 0', () => {
+      const normal = '他走到悬崖边上看着大海。'.repeat(30);
+      const obf = normal.split('').map((c, i) => i % 3 === 0 ? String.fromCharCode(0xE000 + (i % 400)) : c).join('');
+      return privateUseCharRatio(normal) === 0 && privateUseCharRatio(obf) > 0.3 && privateUseCharRatio(''.repeat(5)) === 0;
+    });
+    test('findNextIdInHtml:รหัสตอนถัดไปในข้อมูลของหน้า (webnovel) / ไม่มีรหัส หรือรหัสเดิม = null', () => {
       const u = 'https://www.webnovel.com/book/36845737800834505/99163779840917757';
       return findNextIdInHtml(`var g={nextChapterId:'99163782256838115',preChapterId:'1'}`, u) === 'https://www.webnovel.com/book/36845737800834505/99163782256838115' &&
         findNextIdInHtml(`"nextcId":"555"`, 'https://x.com/book/name_1/chap-name_444') === 'https://x.com/book/name_1/555' &&

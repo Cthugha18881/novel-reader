@@ -305,9 +305,12 @@ function extractNavLinks(markdown, pageUrl) {
   while ((m = linkRegex.exec(markdown)) !== null) {
     const text = normalizeNavText(m[1]);
     let href;
-    try { href = new URL(m[2], pageUrl).href; } catch (e) { continue; }
+    try { href = new URL(m[2], pageUrl).href; } catch (e) { href = ''; }
+    const isNextLabel = NEXT_CHAPTER_LABEL.test(text);
+    // ปุ่มตอนถัดไปของตอนล่าสุด (javascript: หรือ .../0.html): ยังไม่มีตอนใหม่
+    if (isNextLabel && isPlaceholderNextUrl(href)) { links.noNext = true; continue; }
     if (!/^https?:/.test(href) || href.split('#')[0] === pageUrl.split('#')[0]) continue;
-    if (!links.nextChapter && NEXT_CHAPTER_LABEL.test(text)) links.nextChapter = href;
+    if (!links.nextChapter && isNextLabel) links.nextChapter = href;
     else if (!links.nextPage && NEXT_PAGE_LABEL.test(text)) links.nextPage = href;
   }
   return links;
@@ -321,11 +324,19 @@ const CHAPTER_MARK_REGEX = /(第\s*[0-9零〇一二三四五六七八九十百�
  * "《เรื่อง》 第8章 ชื่อตอน - ชื่อเว็บ", "เรื่อง Chapter 3 - Chapter 3: ชื่อตอน - ชื่อเว็บ", "เรื่อง-ตอน" (แบบเดิม)
  * ส่วนที่มีหัวตอนเป็นชื่อตอน (ส่วนที่ขึ้นต้นด้วยหัวตอนมาก่อน) ส่วนที่เหลือที่ไม่ใช่ชื่อเว็บท้ายสุดเป็นชื่อเรื่อง
  */
+// คำโฆษณาท้ายชื่อเรื่องของเว็บจีน เช่น "明君小说最新章节,在线阅读,纵横小说" -> "明君"
+const BOOK_TITLE_SEO_SUFFIX = /(小说)?(最新章节|在线阅读|免费阅读|全文阅读|无弹窗|txt下载)[\s\S]*$/;
+
+function cleanBookTitle(s) {
+  return (s || '').replace(/[《》]/g, '').replace(BOOK_TITLE_SEO_SUFFIX, '').replace(/^[\s:：,，\-–—]+|[\s:：,，\-–—]+$/g, '').trim();
+}
+
 function splitPageTitle(fullTitle) {
   const title = (fullTitle || '').replace(/-?69书吧/g, '').trim();
-  // ตัวคั่นที่มีช่องว่างรอบ (ไม่ตัดคำที่มีขีดอยู่ในตัว) ไม่มีเลยค่อยใช้แบบเดิม
-  let parts = title.split(/\s+[-–—|_]\s+|\s*[|｜]\s*/).map(s => s.trim()).filter(Boolean);
-  if (parts.length < 2) parts = title.split(/[-_]/).map(s => s.trim()).filter(Boolean);
+  // ตัวคั่น: _ | ｜ หรือขีดที่มีช่องว่างรอบ (ไม่ตัดคำที่มีขีดอยู่ในตัว) ไม่มีเลยค่อยตัดที่ขีดแบบเดิม
+  const clean = list => list.map(s => s.trim()).filter(s => s && !/^[\p{P}\p{S}\s]+$/u.test(s));
+  let parts = clean(title.split(/\s*[_|｜]\s*|\s+[-–—]\s+/));
+  if (parts.length < 2) parts = clean(title.split(/-/));
   const bracket = title.match(/《([^》]+)》/);
   const withMark = parts.map((p, i) => ({ p, i, at: p.search(CHAPTER_MARK_REGEX) })).filter(x => x.at >= 0);
   if (withMark.length) {
@@ -335,10 +346,18 @@ function splitPageTitle(fullTitle) {
     const lead = pick.p.slice(0, pick.at).replace(/[《》]/g, '').trim();
     const others = parts.filter((p, i) => i !== pick.i);
     const book = bracket ? bracket[1].trim()
-      : lead || (others.length ? others[0].replace(CHAPTER_MARK_REGEX, '').replace(/[\s:：-]+$/, '').trim() : '');
+      : lead || (others.length ? cleanBookTitle(others[0].replace(CHAPTER_MARK_REGEX, '')) : '');
     return { book, chapter };
   }
-  if (parts.length >= 2) return { book: parts[0], chapter: parts[1] };
+  // ไม่มีหัวตอน (เช่นตอนประกาศ/ขอบคุณผู้อ่าน)
+  if (bracket) {
+    // ชื่อตอน = ส่วนแรกที่ไม่ใช่《ชื่อเรื่อง》และไม่ใช่ชื่อเว็บท้ายสุด ไม่มีก็ให้หาหัวตอนจากเนื้อหาเอง
+    const chap = parts.find((p, i) => !p.includes('《') && i < parts.length - 1);
+    return { book: bracket[1].trim(), chapter: chap || '' };
+  }
+  // "ตอน_เรื่อง_ผู้แต่ง-เว็บ" (เว็บจีนหลายเว็บ) ส่วน 2 ส่วนใช้แบบเดิม "เรื่อง-ตอน"
+  if (parts.length >= 3 && /[_]/.test(title)) return { book: cleanBookTitle(parts[1]), chapter: parts[0] };
+  if (parts.length >= 2) return { book: cleanBookTitle(parts[0]), chapter: parts[1] };
   return { book: '', chapter: title };
 }
 
@@ -412,9 +431,11 @@ async function findNextViaHtml(url, signal, profile) {
       }
     }
     const nav = findNextInHtml(new DOMParser().parseFromString(html, 'text/html'), url, profile);
-    const found = (nav && (nav.kind === 'chapter' || !isContinuationPage(url, nav.url)) ? nav.url : null) || findNextIdInHtml(html, url);
-    htmlNavMisses.set(host, found ? 0 : (htmlNavMisses.get(host) || 0) + 1);
-    return { url: found, html };
+    const found = (nav?.url && (nav.kind === 'chapter' || !isContinuationPage(url, nav.url)) ? nav.url : null) || findNextIdInHtml(html, url);
+    // ตอนล่าสุด (ปุ่มตอนถัดไปยังไม่มีลิงก์) ไม่นับว่าเว็บนี้ไม่มีลิงก์ตอนถัดไป
+    const none = !found && nav?.kind === 'none';
+    htmlNavMisses.set(host, found || none ? 0 : (htmlNavMisses.get(host) || 0) + 1);
+    return { url: found, html, none };
   } catch (e) {
     if (isAbortError(e)) throw e;
     htmlNavMisses.set(host, (htmlNavMisses.get(host) || 0) + 1);
@@ -439,11 +460,12 @@ async function scrapeWithProfile(url, profile, signal) {
       break;
     }
   }
-  const nextUrl = nav && (nav.kind === 'chapter' || !isContinuationPage(url, nav.url)) ? nav.url : null;
+  const nextUrl = nav?.url && (nav.kind === 'chapter' || !isContinuationPage(url, nav.url)) ? nav.url : null;
   return {
     text: paragraphs.join('\n\n'),
     nextUrl,
     nextUrlSource: nextUrl ? 'profile' : null,
+    nextNone: nav?.kind === 'none',
     pageCount,
     rawChapTitle: first.rawChapTitle,
     rawBookTitle: '',
@@ -497,7 +519,7 @@ async function scrapeGeneric(url, signal, profile = null, { allowAi = true } = {
     }
   }
 
-  return { text, nextUrl, nextUrlSource, pageCount: textParts.length, rawChapTitle, rawBookTitle: first.rawBookTitle, author: first.author, via, rawMarkdown: firstMd };
+  return { text, nextUrl, nextUrlSource, nextNone: !nextUrl && !!nav.noNext, pageCount: textParts.length, rawChapTitle, rawBookTitle: first.rawBookTitle, author: first.author, via, rawMarkdown: firstMd };
 }
 
 const AI_EXTRACT_THRESHOLD = 300;
@@ -521,7 +543,7 @@ async function recoverNextUrl(chapter, signal = null) {
     if (mem && mem !== chapter) mem.nextUrl = url;
     if (mem && currentBookId === chapter.bookId && chapters[chapters.length - 1] === mem) nextUrlCalculated = url;
   }
-  return { url, blocked: !!nav.blocked };
+  return { url, blocked: !!nav.blocked, none: !url && !!nav.none };
 }
 
 /**
@@ -582,6 +604,16 @@ function scrambledTextRatio(text) {
     if (shifted.hits >= 3 && shifted.hits > plain.hits * 3) scrambled += plain.words;
   }
   return total >= 60 ? scrambled / total : 0;
+}
+
+/**
+ * สัดส่วนตัวอักษรในช่วง Private Use (U+E000-U+F8FF) ของข้อความ (0-1)
+ * เว็บจีนบางเว็บเข้ารหัสด้วยฟอนต์: ส่งตัวอักษรรหัสพิเศษมาแล้วให้ฟอนต์ของเว็บวาดเป็นตัวจริง ข้อความที่ดึงมาจึงอ่านไม่ออก
+ */
+function privateUseCharRatio(text) {
+  const chars = (text || '').replace(/\s/g, '');
+  if (chars.length < 200) return 0;
+  return ((chars.match(/[-]/g) || []).length) / chars.length;
 }
 
 /** เลขตอนจาก URL ที่บอกชัดว่าเป็นตอน (chapter-12, /chapter/12, ep-3) ไม่เดาจากตัวเลขอื่นใน URL */
@@ -658,7 +690,7 @@ async function scrapePageInner(url, signal = null, options = {}) {
   if (problemOf(page) === 'mismatch' && new Set(seenNumbers).size > 1) {
     throw new SourceContentError(`ขอตอนที่ ${expected} แต่เว็บส่งเนื้อหาตอนที่ ${numberOf(page)} มา (ลองดึงใหม่แล้ว ${seenNumbers.length} ครั้ง) จึงไม่แปลตอนนี้ เพื่อไม่ให้ลำดับตอนผิด ลองใหม่อีกครั้งภายหลัง`, 'mismatch');
   }
-  if (scrambledTextRatio(page.text) >= 0.2) {
+  if (scrambledTextRatio(page.text) >= 0.2 || privateUseCharRatio(page.text) >= 0.02) {
     throw new SourceContentError('เว็บนี้เข้ารหัสเนื้อหาไว้กันการดึง (ตัวอักษรถูกสลับ อ่านได้เฉพาะในเบราว์เซอร์ของเว็บ) แอพอ่านไม่ได้ จึงไม่ได้ส่งไปแปลและไม่ใช้ token ลองหาเรื่องเดียวกันจากเว็บอื่น', 'scrambled');
   }
   return page;
@@ -717,6 +749,7 @@ async function scrapePageAttempt(url, signal, { bookId = null, allowAi = true } 
     }
     // เว็บบล็อกตอนหาลิงก์ตอนถัดไป: บอกผู้เรียกว่าไม่ใช่ "ไม่มีตอนถัดไป" (แปลล่วงหน้าจะลองหาใหม่ภายหลัง)
     if (htmlNav.blocked) page.nextBlocked = true;
+    if (htmlNav.none) page.nextNone = true;
   }
 
   // ตอนที่ต้องซื้อ/อ่านต่อในแอพ (ตาม lockPattern ของโปรไฟล์): ตรวจจาก HTML เต็มหน้า
@@ -734,7 +767,8 @@ async function scrapePageAttempt(url, signal, { bookId = null, allowAi = true } 
   }
   delete page.rawMarkdown;
   // nextMode 'link' = เว็บที่เลขใน URL ไม่ได้เรียงตามตอน (เช่น webnovel) ไม่เดาจากเลข
-  if (!page.nextUrl && profile?.nextMode !== 'link') {
+  // หน้านี้บอกชัดว่ายังไม่มีตอนถัดไป (ตอนล่าสุด) ก็ไม่เดา
+  if (!page.nextUrl && profile?.nextMode !== 'link' && !page.nextNone) {
     page.nextUrl = computeNextNumericUrl(url);
     page.nextUrlSource = 'guess';
   }
