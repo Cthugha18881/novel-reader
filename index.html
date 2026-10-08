@@ -6,7 +6,7 @@
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/hosted-config.js"></script>
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.22.2</title>
+  <title>Dusktale v3.22.3</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -746,9 +746,19 @@
       <div id="import-panel-url">
         <div class="form-group">
           <label class="form-label">URL หน้านิยาย (จีน ญี่ปุ่น เกาหลี อังกฤษ ฯลฯ)</label>
-          <input type="url" id="import-url" class="form-input" placeholder="https://www.69shuba.com/txt/88724/40717272" oninput="updateImportTargetHint()">
+          <input type="url" id="import-url" class="form-input" placeholder="https://ncode.syosetu.com/n9669bk/1/" oninput="updateImportTargetHint()">
           <div class="hint">เว็บที่ดึงได้ไม่ดี ปรับได้ที่ ตั้งค่า → 🌐 ตั้งค่าเว็บต้นฉบับ</div>
         </div>
+        <details class="import-sites-note">
+          <summary>ℹ️ ดึงได้จากเว็บไหนบ้าง</summary>
+          <ul>
+            <li><b>ดึงได้เฉพาะหน้าที่เปิดอ่านได้ฟรีโดยไม่ต้องล็อกอิน</b> ระบบเปิดหน้าเว็บในฐานะผู้อ่านทั่วไป จึงไม่เห็นตอนที่คุณซื้อหรือปลดล็อกไว้ในบัญชี</li>
+            <li><b>ทดสอบแล้วใช้ได้ดี:</b> syosetu (なろう), kakuyomu, AlphaPolis, Royal Road, Wuxiaworld, Qidian / 17K / Faloo / Zongheng / jjwxc (เฉพาะตอนฟรี)</li>
+            <li><b>ดึงไม่ได้หรือได้ไม่ครบ:</b> ตอนที่ต้องซื้อ/ล็อกอิน, เว็บที่มีระบบตรวจบอท (เช่น Cloudflare "Just a moment..."), เว็บที่เข้ารหัสตัวอักษรกันการคัดลอก และเว็บที่สร้างหน้าด้วยแอพทั้งหมด (เช่น KakaoPage, Naver Series) ระบบจะแจ้งให้รู้ ไม่เสียโควตา AI กับหน้าที่ดึงผิด</li>
+            <li>เว็บดึงไม่ได้ แต่คุณมีสิทธิ์อ่าน: คัดลอกข้อความมาวางที่แท็บ "📄 วางข้อความ / ไฟล์" แทนได้</li>
+            <li>กรุณาใช้กับนิยายที่คุณมีสิทธิ์อ่าน และสนับสนุนผู้เขียนที่เว็บทางการ</li>
+          </ul>
+        </details>
       </div>
       <div id="import-panel-text" style="display: none;">
         <div class="form-group">

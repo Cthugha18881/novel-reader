@@ -70,6 +70,7 @@ async function buildWelcomeHtml() {
         <div>
           <h2>เพิ่มนิยายเรื่องแรก</h2>
           <p>วางลิงก์หน้าตอนจากเว็บนิยาย หรือนำเข้าไฟล์ .txt / .epub ระบบแปลตอนถัดไปให้ล่วงหน้าระหว่างอ่าน</p>
+          <p class="welcome-sub">ดึงได้เฉพาะตอนที่เปิดอ่านฟรีได้โดยไม่ต้องล็อกอิน · ตอนที่ต้องซื้อ เว็บที่มีระบบตรวจบอทหรือเข้ารหัสตัวอักษร ดึงไม่ได้ (ดูรายชื่อเว็บที่ใช้ได้ในหน้าวางลิงก์)</p>
           <div class="welcome-actions">
             <button class="btn${hasKey ? ' btn-primary' : ''}" onclick="openImportModal()">วางลิงก์นิยาย</button>
             <button class="btn" onclick="openImportModal(); switchImportTab('text')">นำเข้าไฟล์หรือข้อความ</button>
