@@ -28,6 +28,22 @@ function scopedSecretName(name) {
   return scope ? `${name}@${scope}` : name;
 }
 
+// การตั้งค่า AI ของแต่ละบัญชี (ผู้ให้บริการ โมเดล Base URL ระดับการคิด ผู้ให้บริการสำรอง รายชื่อโมเดล) แยกเหมือน API Key
+const ACCOUNT_SCOPED_SETTING = /^nov_(llm_provider|llm_model_\w+|llm_aux_model_\w+|llm_baseurl_\w+|llm_reasoning_\w+|llm_fallback_provider|cached_models_\w+)$/;
+
+function scopedSettingName(name) {
+  if (!ACCOUNT_SCOPED_SETTING.test(name)) return name;
+  const scope = currentSecretScope();
+  return scope ? `${name}@${scope}` : name;
+}
+
+/** ใช้แทน localStorage สำหรับการตั้งค่าที่แยกตามบัญชี (ชื่ออื่นทำงานเหมือน localStorage) */
+const userStore = {
+  getItem(name) { try { return localStorage.getItem(scopedSettingName(name)); } catch (e) { return null; } },
+  setItem(name, value) { try { localStorage.setItem(scopedSettingName(name), value); } catch (e) {} },
+  removeItem(name) { try { localStorage.removeItem(scopedSettingName(name)); } catch (e) {} }
+};
+
 /** อัปเดตครั้งแรกหลังมีระบบแยกบัญชี: คีย์เดิม (ไม่มี @) เป็นของบัญชีที่เข้าสู่ระบบอยู่ตอนนั้น */
 function migrateSecretsToAccount(accountId) {
   const scope = accountScopeKey(accountId);
@@ -41,6 +57,13 @@ function migrateSecretsToAccount(accountId) {
       }
     } catch (e) { /* ที่เก็บใช้ไม่ได้ */ }
   });
+  // การตั้งค่า AI เดิม: คัดลอกให้บัญชีนี้ (โหมดไม่เข้าสู่ระบบคงค่าเดิมไว้ ไม่ใช่ข้อมูลลับ)
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && ACCOUNT_SCOPED_SETTING.test(k) && localStorage.getItem(`${k}@${scope}`) === null) localStorage.setItem(`${k}@${scope}`, localStorage.getItem(k));
+    }
+  } catch (e) {}
   // สวิตช์ซิงก์อัตโนมัติเดิมเป็นของบัญชีนี้ด้วย (sync.js อ่านแบบแยกบัญชี)
   try {
     const sync = localStorage.getItem('nov_sync_enabled');
@@ -138,7 +161,7 @@ function getBackupSettingNames() {
 function collectBackupSettings() {
   const settings = {};
   [...getBackupSettingNames(), BACKUP_BASEURL_SETTING, BACKUP_PROXIES_SETTING].forEach(name => {
-    const v = localStorage.getItem(name);
+    const v = userStore.getItem(name);
     if (v !== null) settings[name] = v;
   });
   return settings;
@@ -183,8 +206,8 @@ function splitImportedSettings(settings) {
 }
 
 function applyImportedSettings(safe, { baseUrl = null, proxies = null } = {}) {
-  Object.entries(safe).forEach(([name, value]) => localStorage.setItem(name, value));
-  if (baseUrl) localStorage.setItem(BACKUP_BASEURL_SETTING, baseUrl);
+  Object.entries(safe).forEach(([name, value]) => userStore.setItem(name, value));
+  if (baseUrl) userStore.setItem(BACKUP_BASEURL_SETTING, baseUrl);
   if (proxies) localStorage.setItem(BACKUP_PROXIES_SETTING, JSON.stringify(proxies));
 }
 

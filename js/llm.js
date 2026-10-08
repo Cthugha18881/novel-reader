@@ -107,7 +107,7 @@ function getModelOverride(signal) {
 
 // ---------- Settings ----------
 function migrateLegacyLlmSettings() {
-  if (localStorage.getItem('nov_llm_provider')) return;
+  if (userStore.getItem('nov_llm_provider')) return;
   try {
     const legacyPool = JSON.parse(localStorage.getItem('nov_gemini_keys_pool') || 'null');
     const legacySingle = (localStorage.getItem('nov_gemini_key') || '').trim();
@@ -117,12 +117,12 @@ function migrateLegacyLlmSettings() {
     localStorage.removeItem('nov_gemini_key');
   } catch (e) {}
   const legacyModel = localStorage.getItem('nov_primary_model');
-  if (legacyModel) localStorage.setItem('nov_llm_model_gemini', legacyModel);
-  localStorage.setItem('nov_llm_provider', 'gemini');
+  if (legacyModel) userStore.setItem('nov_llm_model_gemini', legacyModel);
+  userStore.setItem('nov_llm_provider', 'gemini');
 }
 
 function getActiveProvider() {
-  const p = localStorage.getItem('nov_llm_provider');
+  const p = userStore.getItem('nov_llm_provider');
   return LLM_PROVIDERS[p] ? p : 'gemini';
 }
 
@@ -139,23 +139,23 @@ function getProviderKeys(provider) {
 
 function getProviderModel(provider) {
   if (provider === 'dusktale') return 'auto';
-  return (localStorage.getItem(`nov_llm_model_${provider}`) || LLM_PROVIDERS[provider].defaultModel || '').trim();
+  return (userStore.getItem(`nov_llm_model_${provider}`) || LLM_PROVIDERS[provider].defaultModel || '').trim();
 }
 
 function getProviderBaseUrl(provider) {
-  const raw = (localStorage.getItem(`nov_llm_baseurl_${provider}`) || LLM_PROVIDERS[provider].defaultBaseUrl || '').trim();
+  const raw = (userStore.getItem(`nov_llm_baseurl_${provider}`) || LLM_PROVIDERS[provider].defaultBaseUrl || '').trim();
   return raw.replace(/\/+$/, '');
 }
 
 // โมเดลสำหรับงานรอง (สแกนคำศัพท์/ตรวจทาน/ตรวจความหมาย) ว่างไว้ = ใช้โมเดลหลัก
 function getProviderAuxModel(provider) {
   if (provider === 'dusktale') return '';
-  return (localStorage.getItem(`nov_llm_aux_model_${provider}`) || '').trim();
+  return (userStore.getItem(`nov_llm_aux_model_${provider}`) || '').trim();
 }
 
 /** ผู้ให้บริการสำรองเมื่อ AI หลักปฏิเสธเนื้อหา (ว่าง = ไม่ใช้) */
 function getFallbackProvider() {
-  const p = localStorage.getItem('nov_llm_fallback_provider');
+  const p = userStore.getItem('nov_llm_fallback_provider');
   return LLM_PROVIDERS[p] ? p : '';
 }
 
@@ -166,7 +166,7 @@ const REASONING_LEVELS = ['none', 'low', 'medium', 'high', 'default'];
 const REASONING_LABELS = { none: 'ปิด (เร็วและถูกสุด แนะนำสำหรับงานแปล)', low: 'น้อย', medium: 'ปานกลาง', high: 'มาก', default: 'ตามค่าเริ่มต้นของโมเดล' };
 
 function getProviderReasoning(provider) {
-  const v = localStorage.getItem(`nov_llm_reasoning_${provider}`);
+  const v = userStore.getItem(`nov_llm_reasoning_${provider}`);
   return REASONING_LEVELS.includes(v) ? v : 'none';
 }
 

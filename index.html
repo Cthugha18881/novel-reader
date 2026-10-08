@@ -6,7 +6,7 @@
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/hosted-config.js"></script>
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.24.0</title>
+  <title>Dusktale v3.24.1</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -961,7 +961,7 @@
             * เช่น https://openrouter.ai/api/v1, https://api.deepseek.com/v1 หรือ http://localhost:1234/v1 (ต้องรองรับ /chat/completions และอนุญาต CORS จากเบราว์เซอร์)
           </div>
           <label class="form-label" for="llm-reasoning-select" style="margin-top: 10px;">🧠 การคิดก่อนตอบ (reasoning) — ใช้กับ OpenRouter</label>
-          <select id="llm-reasoning-select" class="form-input" onchange="localStorage.setItem('nov_llm_reasoning_openai', this.value)"></select>
+          <select id="llm-reasoning-select" class="form-input" onchange="userStore.setItem('nov_llm_reasoning_openai', this.value)"></select>
           <div class="hint">
             * โมเดลอย่าง MiMo / GPT-6 คิดก่อนตอบ token ที่ใช้คิดคิดเงินเป็นขาออก และช้ามาก งานแปลปิดไว้ได้ (โมเดลที่ปิดไม่ได้ ระบบจะใช้ค่าเริ่มต้นของโมเดลแทนเอง)
           </div>

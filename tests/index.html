@@ -1204,6 +1204,14 @@
         const seenByGuest = getSecret('nov_jina_key');
         activeDbAccount = 'user-a';
         setSecret('nov_jina_key', '');
+        // การตั้งค่า AI (ผู้ให้บริการ/โมเดล) ก็แยกตามบัญชี
+        userStore.setItem('nov_llm_model_openai', 'model-of-a');
+        const modelA = userStore.getItem('nov_llm_model_openai');
+        activeDbAccount = 'user-b';
+        const modelSeenByB = userStore.getItem('nov_llm_model_openai');
+        activeDbAccount = 'user-a';
+        userStore.removeItem('nov_llm_model_openai');
+        if (modelA !== 'model-of-a' || modelSeenByB === 'model-of-a' || scopedSettingName('nov_quality_mode') !== 'nov_quality_mode') return false;
         return names[0] === DB_NAME && new Set(names).size === 3 && jwtSubject(fakeJwt) === 'user-a-uuid' &&
           seenByA === 'jina_secret_of_a' && seenByB === null && seenByGuest !== 'jina_secret_of_a' &&
           scopedSecretName('nov_hosted_session') === 'nov_hosted_session' && isSyncAccountMatched() === false &&

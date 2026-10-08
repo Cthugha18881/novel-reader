@@ -28,7 +28,7 @@ function stashSettingsForm() {
 
 function getCachedModels(provider) {
   try {
-    const cached = JSON.parse(localStorage.getItem(`nov_cached_models_${provider}`) || '[]');
+    const cached = JSON.parse(userStore.getItem(`nov_cached_models_${provider}`) || '[]');
     return Array.isArray(cached) ? cached : [];
   } catch (e) {
     return [];
@@ -192,7 +192,7 @@ async function fetchLiveModels() {
     const availableModels = await listProviderModels(provider, firstKey, baseUrl);
     if (availableModels.length === 0) throw new Error("ไม่พบโมเดลที่พร้อมใช้งานในบัญชีนี้");
 
-    localStorage.setItem(`nov_cached_models_${provider}`, JSON.stringify(availableModels));
+    userStore.setItem(`nov_cached_models_${provider}`, JSON.stringify(availableModels));
     populateModelSuggestions(provider, availableModels);
     const modelInput = document.getElementById('llm-model-input');
     if (!modelInput.value.trim()) modelInput.value = availableModels[0];
@@ -217,13 +217,13 @@ async function saveSettings() {
     if (!LLM_PROVIDERS[provider] || provider === 'dusktale') return;
     const parsedKeys = draft.keys.split('\n').map(k => k.trim()).filter(k => k.length > 5);
     setSecret(`nov_llm_keys_${provider}`, parsedKeys.length ? JSON.stringify(parsedKeys) : '');
-    localStorage.setItem(`nov_llm_model_${provider}`, draft.model);
-    localStorage.setItem(`nov_llm_aux_model_${provider}`, draft.auxModel || '');
-    if (provider === 'openai') localStorage.setItem(`nov_llm_baseurl_${provider}`, draft.baseUrl);
+    userStore.setItem(`nov_llm_model_${provider}`, draft.model);
+    userStore.setItem(`nov_llm_aux_model_${provider}`, draft.auxModel || '');
+    if (provider === 'openai') userStore.setItem(`nov_llm_baseurl_${provider}`, draft.baseUrl);
     keyIndexByProvider[provider] = 0;
   });
   const activeProvider = document.getElementById('llm-provider-select').value;
-  localStorage.setItem('nov_llm_provider', activeProvider);
+  userStore.setItem('nov_llm_provider', activeProvider);
 
   localStorage.setItem('nov_retry_limit', document.getElementById('retry-limit').value || "10");
   localStorage.setItem('nov_enable_deep_ner', document.getElementById('enable-deep-ner-scan').checked ? 'true' : 'false');
@@ -231,7 +231,7 @@ async function saveSettings() {
   // โหมด "ดีที่สุด" ตามแพ็กเกจ: ยังไม่เปิดให้ก็ไม่บันทึกทับค่าเดิม แล้วบอกในข้อความด้านล่าง
   const bestBlocked = qualityValue === 'best' && typeof planAllows === 'function' && !planAllows('bestMode');
   if (!bestBlocked) localStorage.setItem('nov_quality_mode', qualityValue);
-  localStorage.setItem('nov_llm_fallback_provider', document.getElementById('llm-fallback-provider').value);
+  userStore.setItem('nov_llm_fallback_provider', document.getElementById('llm-fallback-provider').value);
   localStorage.setItem('nov_enable_infinite', document.getElementById('enable-infinite-scroll').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_prefetch', document.getElementById('enable-live-prefetch').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_auto_glossary', document.getElementById('enable-auto-glossary').checked ? 'true' : 'false');

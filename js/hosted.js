@@ -328,7 +328,7 @@ async function hostedVerifyFromUi() {
 /** เข้าสู่ระบบสำเร็จ: ใช้ Dusktale เป็นผู้ให้บริการหลักทันที (ไม่ต้องกดบันทึกอีกครั้ง) */
 function onHostedSignedIn() {
   hostedPendingEmail = '';
-  localStorage.setItem('nov_llm_provider', 'dusktale');
+  userStore.setItem('nov_llm_provider', 'dusktale');
   const sel = document.getElementById('llm-provider-select');
   if (sel) sel.value = 'dusktale';
   renderHostedAccountBox(true);

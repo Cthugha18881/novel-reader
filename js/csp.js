@@ -19,12 +19,14 @@
     }
   }
 
-  const custom = [];
+  const custom = ['https://api.openai.com'];
   try {
-    custom.push(originOf(localStorage.getItem('nov_llm_baseurl_openai') || 'https://api.openai.com/v1'));
-  } catch (e) {
-    custom.push('https://api.openai.com');
-  }
+    // Base URL แยกตามบัญชี (nov_llm_baseurl_openai@รหัสบัญชี) ไฟล์นี้ทำงานก่อนรู้ว่าเป็นบัญชีไหน จึงอนุญาตทุกค่าที่ตั้งไว้ในเครื่องนี้
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && /^nov_llm_baseurl_openai(@[a-z0-9]+)?$/.test(k)) custom.push(originOf(localStorage.getItem(k) || ''));
+    }
+  } catch (e) {}
   // บริการแปลของ Dusktale (js/hosted-config.js โหลดก่อนไฟล์นี้)
   const hosted = window.DUSKTALE_HOSTED || {};
   custom.push(originOf(hosted.apiBase || ''), originOf(hosted.supabaseUrl || ''));
