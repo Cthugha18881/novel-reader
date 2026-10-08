@@ -5,11 +5,50 @@
 // ---------- API Key ----------
 // โหมด "ไม่จำ key": เก็บใน sessionStorage (หายเมื่อปิดแท็บ และแต่ละแท็บต้องใส่เอง)
 // nov_hosted_session = การเข้าสู่ระบบบริการแปลของ Dusktale (ดูแลเหมือน API Key: ไม่อยู่ในไฟล์สำรอง ลบพร้อม "ลบ API Key ทั้งหมด")
-const SECRET_NAME_PATTERN = /^nov_(llm_keys_[a-z0-9]+|jina_key|proxy_key|hosted_session)$/;
+// API Key ผูกกับบัญชีที่เข้าสู่ระบบ (ชื่อ@รหัสบัญชี) คนที่เข้าบัญชีอื่นในเครื่องเดียวกันจะไม่เห็น/ไม่ใช้คีย์ของคุณ
+// ไม่เข้าสู่ระบบใช้ชื่อเดิม (ไม่มี @) ส่วน nov_hosted_session เป็นของเครื่อง (ใช้บอกว่าตอนนี้เป็นบัญชีไหน)
+const SECRET_NAME_PATTERN = /^nov_(llm_keys_[a-z0-9]+|jina_key|proxy_key|hosted_session)(@[a-z0-9]+)?$/;
+const ACCOUNT_SCOPED_SECRET = /^nov_(llm_keys_[a-z0-9]+|jina_key|proxy_key)$/;
 const SECRETS_SESSION_FLAG = 'nov_secrets_session_only';
 
 function isSecretName(name) {
   return SECRET_NAME_PATTERN.test(name);
+}
+
+/** บัญชีของข้อมูลที่เปิดอยู่ (ฐานข้อมูลเปิดแล้วใช้บัญชีของฐานนั้น กันคีย์สลับบัญชีก่อนรีโหลด) */
+function currentSecretScope() {
+  if (typeof db !== 'undefined' && db && typeof activeDbAccount === 'string') return activeDbAccount ? accountScopeKey(activeDbAccount) : '';
+  const acct = typeof sessionAccountId === 'function' ? sessionAccountId() : '';
+  return acct && typeof accountScopeKey === 'function' ? accountScopeKey(acct) : '';
+}
+
+function scopedSecretName(name) {
+  if (!ACCOUNT_SCOPED_SECRET.test(name)) return name;
+  const scope = currentSecretScope();
+  return scope ? `${name}@${scope}` : name;
+}
+
+/** อัปเดตครั้งแรกหลังมีระบบแยกบัญชี: คีย์เดิม (ไม่มี @) เป็นของบัญชีที่เข้าสู่ระบบอยู่ตอนนั้น */
+function migrateSecretsToAccount(accountId) {
+  const scope = accountScopeKey(accountId);
+  if (!scope) return;
+  [localStorage, sessionStorage].forEach(storage => {
+    try {
+      for (const name of listSecretNames(storage)) {
+        if (!ACCOUNT_SCOPED_SECRET.test(name)) continue;
+        if (storage.getItem(`${name}@${scope}`) === null) storage.setItem(`${name}@${scope}`, storage.getItem(name));
+        storage.removeItem(name);
+      }
+    } catch (e) { /* ที่เก็บใช้ไม่ได้ */ }
+  });
+  // สวิตช์ซิงก์อัตโนมัติเดิมเป็นของบัญชีนี้ด้วย (sync.js อ่านแบบแยกบัญชี)
+  try {
+    const sync = localStorage.getItem('nov_sync_enabled');
+    if (sync !== null) {
+      localStorage.setItem(`nov_sync_enabled@${scope}`, sync);
+      localStorage.removeItem('nov_sync_enabled');
+    }
+  } catch (e) {}
 }
 
 function isSessionOnlySecrets() {
@@ -22,18 +61,19 @@ function secretStorage() {
 
 function getSecret(name) {
   try {
-    return secretStorage().getItem(name);
+    return secretStorage().getItem(scopedSecretName(name));
   } catch (e) {
     return null;
   }
 }
 
 function setSecret(name, value) {
+  const key = scopedSecretName(name);
   const active = secretStorage();
   const other = active === localStorage ? sessionStorage : localStorage;
-  try { other.removeItem(name); } catch (e) {}
-  if (value === null || value === undefined || value === '') active.removeItem(name);
-  else active.setItem(name, value);
+  try { other.removeItem(key); } catch (e) {}
+  if (value === null || value === undefined || value === '') active.removeItem(key);
+  else active.setItem(key, value);
 }
 
 function listSecretNames(storage) {
@@ -61,8 +101,12 @@ function clearAllSecrets() {
   [localStorage, sessionStorage].forEach(storage => listSecretNames(storage).forEach(name => storage.removeItem(name)));
 }
 
+// นับเฉพาะคีย์ของบัญชีที่เปิดอยู่ (หรือของโหมดไม่เข้าสู่ระบบ) ไม่นับของบัญชีอื่นในเครื่อง
 function countStoredSecrets() {
+  const scope = currentSecretScope();
   return listSecretNames(secretStorage()).filter(name => {
+    const at = name.indexOf('@');
+    if (ACCOUNT_SCOPED_SECRET.test(at === -1 ? name : name.slice(0, at)) && (at === -1 ? scope !== '' : name.slice(at + 1) !== scope)) return false;
     const v = secretStorage().getItem(name) || '';
     return v && v !== '[]';
   }).length;

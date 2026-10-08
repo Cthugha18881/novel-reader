@@ -49,9 +49,113 @@ function jsArg(value) {
   return escapeHtml(JSON.stringify(String(value ?? '')));
 }
 
-function initDB() {
+// ---------- แยกข้อมูลตามบัญชี ----------
+// แต่ละบัญชี Dusktale มีฐานข้อมูลในเครื่องของตัวเอง (ชื่อ DB_NAME + รหัสบัญชีแบบ hash) ไม่เข้าสู่ระบบใช้ DB_NAME เดิม
+// เปลี่ยนบัญชี = เปลี่ยนฐานข้อมูล (รีโหลดหน้า) ข้อมูลของบัญชีอื่นไม่แสดงและไม่ถูกซิงก์ข้ามบัญชี
+const DB_ACCOUNT_SPLIT_FLAG = 'nov_db_split_v1';
+let activeDbAccount = '';
+
+function jwtSubject(token) {
+  try {
+    const part = String(token || '').split('.')[1] || '';
+    const b64 = part.replace(/-/g, '+').replace(/_/g, '/');
+    return String(JSON.parse(atob(b64 + '='.repeat((4 - b64.length % 4) % 4))).sub || '');
+  } catch (e) {
+    return '';
+  }
+}
+
+/** รหัสบัญชีที่เข้าสู่ระบบอยู่ในเครื่องนี้ ('' = ไม่ได้เข้าสู่ระบบ) */
+function sessionAccountId() {
+  try {
+    if (typeof isHostedConfigured === 'function' && !isHostedConfigured()) return '';
+    const s = JSON.parse((typeof getSecret === 'function' ? getSecret('nov_hosted_session') : null) || 'null');
+    if (!s?.refresh_token) return '';
+    return jwtSubject(s.access_token) || (s.email ? `email:${String(s.email).toLowerCase()}` : '');
+  } catch (e) {
+    return '';
+  }
+}
+
+function accountScopeKey(accountId) {
+  return accountId ? hashString(`dusktale-account|${accountId}`) : '';
+}
+
+function dbNameForAccount(accountId) {
+  return accountId ? `${DB_NAME}__acct_${accountScopeKey(accountId)}` : DB_NAME;
+}
+
+function isAccountDbActive() {
+  return !!activeDbAccount;
+}
+
+/** ย้ายข้อมูลทั้งหมดจากฐานข้อมูลหนึ่งไปอีกฐาน (ใช้ตอนอัปเดตครั้งแรก และตอนย้ายนิยายจากโหมดไม่เข้าสู่ระบบ) */
+// onlyMissing: ใส่เฉพาะเรคคอร์ดที่ปลายทางยังไม่มี (ไม่ทับข้อมูลของบัญชีด้วยฉบับเก่า)
+function copyAllStores(fromDb, toDb, { clearSource = false, skipMetaKeys = [], onlyMissing = false, skipStores = [] } = {}) {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    const stores = [...fromDb.objectStoreNames].filter(n => toDb.objectStoreNames.contains(n) && !skipStores.includes(n));
+    const readTx = fromDb.transaction(stores, 'readonly');
+    const data = {};
+    stores.forEach(name => {
+      const req = readTx.objectStore(name).getAll();
+      req.onsuccess = () => { data[name] = req.result || []; };
+    });
+    readTx.onerror = () => reject(readTx.error || new Error('อ่านข้อมูลเดิมไม่สำเร็จ'));
+    readTx.oncomplete = () => {
+      const writeTx = toDb.transaction(stores, 'readwrite');
+      stores.forEach(name => (data[name] || []).forEach(rec => {
+        if (name === 'meta' && skipMetaKeys.includes(rec.key)) return;
+        if (!onlyMissing) return writeTx.objectStore(name).put(rec);
+        const req = writeTx.objectStore(name).add(rec);
+        // มีอยู่แล้ว: ข้าม ไม่ให้ทั้ง transaction ล้ม
+        req.onerror = (e) => { e.preventDefault(); e.stopPropagation(); };
+      }));
+      writeTx.onerror = () => reject(writeTx.error || new Error('ย้ายข้อมูลไม่สำเร็จ'));
+      writeTx.oncomplete = () => {
+        if (!clearSource) return resolve(data);
+        const clearTx = fromDb.transaction(stores, 'readwrite');
+        stores.forEach(name => clearTx.objectStore(name).clear());
+        clearTx.oncomplete = () => resolve(data);
+        clearTx.onerror = () => reject(clearTx.error || new Error('ล้างข้อมูลเดิมไม่สำเร็จ'));
+      };
+    };
+  });
+}
+
+/**
+ * เปิดฐานข้อมูลของบัญชีที่เข้าสู่ระบบอยู่ (ไม่เข้าสู่ระบบ = ฐานข้อมูลเดิม)
+ * อัปเดตครั้งแรกหลังมีระบบแยกบัญชี: ข้อมูลเดิมเป็นของบัญชีที่เข้าสู่ระบบอยู่ตอนนั้น จึงย้ายเข้าฐานของบัญชีนั้น
+ */
+async function initDB() {
+  activeDbAccount = sessionAccountId();
+  let splitDone = true;
+  try { splitDone = localStorage.getItem(DB_ACCOUNT_SPLIT_FLAG) === '1'; } catch (e) {}
+  if (!splitDone) {
+    if (activeDbAccount) {
+      try {
+        const legacy = await openNamedDB(DB_NAME);
+        const target = await openNamedDB(dbNameForAccount(activeDbAccount));
+        await copyAllStores(legacy, target, { clearSource: true });
+        legacy.close();
+        target.close();
+        if (typeof migrateSecretsToAccount === 'function') migrateSecretsToAccount(activeDbAccount);
+      } catch (err) {
+        // ย้ายไม่สำเร็จ: ใช้ฐานเดิมไปก่อน (ข้อมูลไม่หาย) ลองใหม่ตอนเปิดครั้งหน้า
+        console.error('Account data split failed:', err);
+        activeDbAccount = '';
+        db = await openNamedDB(DB_NAME);
+        return db;
+      }
+    }
+    try { localStorage.setItem(DB_ACCOUNT_SPLIT_FLAG, '1'); } catch (e) {}
+  }
+  db = await openNamedDB(dbNameForAccount(activeDbAccount));
+  return db;
+}
+
+function openNamedDB(name) {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(name, DB_VERSION);
     req.onupgradeneeded = (e) => {
       const d = e.target.result;
       if (!d.objectStoreNames.contains('books')) {
@@ -88,13 +192,13 @@ function initDB() {
       }
     };
     req.onsuccess = (e) => {
-      db = e.target.result;
+      const opened = e.target.result;
       // แท็บที่เปิดแอพรุ่นใหม่กว่าต้องการอัปเกรดฐานข้อมูล: ปิดของแท็บนี้แล้วบอกผู้ใช้ให้รีโหลด
-      db.onversionchange = () => {
-        db.close();
-        if (typeof onDatabaseVersionChange === 'function') onDatabaseVersionChange();
+      opened.onversionchange = () => {
+        opened.close();
+        if (opened === db && typeof onDatabaseVersionChange === 'function') onDatabaseVersionChange();
       };
-      resolve(db);
+      resolve(opened);
     };
     req.onerror = () => reject(req.error || new Error('เปิดฐานข้อมูลไม่สำเร็จ'));
     req.onblocked = () => reject(new Error('ฐานข้อมูลถูกเปิดค้างในแท็บอื่น กรุณาปิดแท็บเดิมแล้วลองใหม่'));

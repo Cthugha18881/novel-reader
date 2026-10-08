@@ -84,7 +84,27 @@ function readHostedSession() {
 
 function saveHostedSession(session) {
   setSecret(HOSTED_SESSION_KEY, session ? JSON.stringify(session) : '');
+  // เปลี่ยนบัญชี (เข้าสู่ระบบ/ออกจากระบบ/บัญชีอื่น): ข้อมูลในเครื่องแยกตามบัญชี ต้องเปิดฐานข้อมูลของบัญชีใหม่
+  reloadIfAccountChanged();
 }
+
+let accountReloadScheduled = false;
+
+/** บัญชีที่เข้าสู่ระบบไม่ตรงกับฐานข้อมูลที่เปิดอยู่: รีโหลดหน้าเพื่อเปิดข้อมูลของบัญชีนั้น (ต่ออายุ token บัญชีเดิมไม่รีโหลด) */
+function reloadIfAccountChanged() {
+  if (accountReloadScheduled || typeof db === 'undefined' || !db || typeof sessionAccountId !== 'function') return;
+  if (sessionAccountId() === activeDbAccount) return;
+  accountReloadScheduled = true;
+  // หยุดงานทั้งหมดก่อน (แปล/ซิงก์) ไม่ให้เขียนข้อมูลของบัญชีเดิมด้วย token ของบัญชีใหม่
+  if (typeof abortAllTasks === 'function') abortAllTasks();
+  if (typeof showGlobalToast === 'function') showGlobalToast('เปลี่ยนบัญชีแล้ว กำลังเปิดข้อมูลของบัญชีนี้...');
+  setTimeout(() => location.reload(), 400);
+}
+
+// แท็บอื่นเข้าสู่ระบบ/ออกจากระบบ: แท็บนี้ต้องเปลี่ยนตาม
+window.addEventListener('storage', (e) => {
+  if (e.key === null || e.key === HOSTED_SESSION_KEY) reloadIfAccountChanged();
+});
 
 function isHostedSignedIn() {
   return isHostedConfigured() && !!readHostedSession();
@@ -158,8 +178,8 @@ async function fetchHostedMe() {
   hostedMe = data;
   // จำแพ็กเกจและสิทธิ์ไว้ใช้ตอนออฟไลน์ (plans.js)
   if (typeof savePlanCache === 'function') savePlanCache(data);
-  // เพิ่งเข้าสู่ระบบด้วยบัญชีที่ไม่ใช่เจ้าของข้อมูลในเครื่องนี้: ถามก่อนซิงก์ (sync.js)
-  if (typeof promptDataOwnerIfNeeded === 'function') promptDataOwnerIfNeeded().catch(() => {});
+  // มีนิยายจากโหมดไม่เข้าสู่ระบบในเครื่องนี้: ถามครั้งเดียวว่าจะย้ายเข้าบัญชีไหม (sync.js)
+  if (typeof offerGuestLibraryImport === 'function') offerGuestLibraryImport().catch(() => {});
   return data;
 }
 
@@ -318,10 +338,11 @@ function onHostedSignedIn() {
 
 async function hostedSignOutFromUi() {
   const choice = await appChoose(
-    'นิยายและคลังศัพท์เก็บอยู่ในเบราว์เซอร์นี้ ไม่ได้แยกตามบัญชี ถ้าออกจากระบบอย่างเดียว คนที่ใช้เครื่องนี้ต่อจะยังเห็นนิยายของคุณ\nเครื่องที่ใช้ร่วมกับคนอื่น ควรเลือก "ออกจากระบบและลบข้อมูลในเครื่อง" (ข้อมูลที่ซิงก์ไว้บนคลาวด์ยังอยู่)',
+    'นิยาย คลังศัพท์ และ API Key ของบัญชีนี้จะถูกซ่อน คนที่เข้าบัญชีอื่นหรือใช้แบบไม่เข้าสู่ระบบในเครื่องนี้จะไม่เห็น เข้าสู่ระบบอีกครั้งแล้วกลับมาครบ\n' +
+    'ข้อมูลยังเก็บอยู่ในเบราว์เซอร์นี้แบบไม่เข้ารหัส เครื่องที่ใช้ร่วมกับคนอื่น ควรเลือก "ออกจากระบบและลบข้อมูลของบัญชีนี้ในเครื่อง" (ข้อมูลที่ซิงก์ไว้บนคลาวด์ยังอยู่)',
     [
       { label: 'ออกจากระบบ', value: 'keep', variant: 'primary' },
-      { label: 'ออกจากระบบและลบข้อมูลในเครื่อง', value: 'clear', variant: 'danger' }
+      { label: 'ออกจากระบบและลบข้อมูลของบัญชีนี้ในเครื่อง', value: 'clear', variant: 'danger' }
     ],
     { title: 'ออกจากระบบ' });
   if (!choice) return;
