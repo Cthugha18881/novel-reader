@@ -14,6 +14,7 @@ const SYNC_STORES = [
   { store: 'bookData', prefix: 'd', idOf: r => r?.bookId }
 ];
 const SYNC_STATE_KEY = 'sync_state';
+const SYNC_STATE_VERSION = 2;
 const SYNC_ENABLED_KEY = 'nov_sync_enabled';
 const SYNC_BATCH_CHARS = 2500000;   // ต่อคำขอ (เซิร์ฟเวอร์รับไม่เกิน 4MB)
 const SYNC_BATCH_RECORDS = 200;
@@ -438,7 +439,7 @@ async function doCloudSync({ pullOnly = false, onProgress = null, restoring = fa
   state.account = account || state.account;
   const firstSync = !state.firstDone;
   const touched = { stores: new Set(), bookIds: new Set(), chapIds: new Set(), deletedChapters: false };
-  let pulled = 0, pushed = 0;
+  let pulled = 0, pushed = 0, skipped = 0;
   // รายการที่คลาวด์สั่งลบ: เก็บไว้ลบทีเดียวตอนดึงครบ เพื่อตรวจก่อนว่าเป็นการลบยกชุดหรือไม่
   const pendingDeletes = [];
 
@@ -463,8 +464,22 @@ async function doCloudSync({ pullOnly = false, onProgress = null, restoring = fa
 
   // 1) ดึงของใหม่จากคลาวด์
   report('กำลังดึงข้อมูลจากคลาวด์...');
-  for (let page = 0; page < 1000; page++) {
-    const res = await syncApi('GET', `pull?since=${encodeURIComponent(state.cursor || 0)}&limit=100`);
+  // รุ่นสถานะซิงก์: v3.24.3 แก้กรณีดึงแล้วข้ามรายการไปเงียบๆ เครื่องที่ซิงก์ไว้ก่อนหน้านี้ต้องดึงใหม่ตั้งแต่ต้นหนึ่งครั้ง
+  // (รายการที่ตรงกับในเครื่องอยู่แล้วไม่ถูกเขียนซ้ำ)
+  if (state.v !== SYNC_STATE_VERSION) { state.cursor = 0; state.v = SYNC_STATE_VERSION; }
+  if (typeof DecompressionStream === 'undefined') {
+    throw new Error('เบราว์เซอร์นี้แตกไฟล์ข้อมูลซิงก์ไม่ได้ กรุณาอัปเดตเบราว์เซอร์ (iPhone/iPad ต้องเป็น iOS 16.4 ขึ้นไป)');
+  }
+  let pageLimit = 50;
+  for (let page = 0; page < 5000; page++) {
+    let res;
+    try {
+      res = await syncApi('GET', `pull?since=${encodeURIComponent(state.cursor || 0)}&limit=${pageLimit}`);
+    } catch (err) {
+      // หน้าใหญ่เกิน (เช่นมีปกรูปภาพหลายเรื่อง) เซิร์ฟเวอร์ตอบไม่ไหว: ลดจำนวนต่อหน้าแล้วลองใหม่
+      if ((!err.status || err.status >= 500 || err.status === 413) && pageLimit > 1) { pageLimit = Math.max(1, Math.floor(pageLimit / 3)); page--; continue; }
+      throw err;
+    }
     const records = Array.isArray(res.records) ? res.records : [];
     if (records.length) {
       const ops = [];
@@ -477,9 +492,10 @@ async function doCloudSync({ pullOnly = false, onProgress = null, restoring = fa
             rec = BACKUP_SANITIZERS[def.store](await decodeSyncData(r.data));
           } catch (e) {
             console.warn('sync: skip bad record', r.key, e.message);
+            skipped++;
             continue;
           }
-          if (!rec || def.idOf(rec) !== def.id) continue;
+          if (!rec || def.idOf(rec) !== def.id) { console.warn('sync: skip invalid record', r.key); skipped++; continue; }
         }
         ops.push({ key: r.key, store: def.store, id: def.id, deleted: !!r.deleted, rec });
       }
@@ -590,8 +606,8 @@ async function doCloudSync({ pullOnly = false, onProgress = null, restoring = fa
     return doCloudSync({ pullOnly: true, onProgress, restoring: true });
   }
   cloudSyncLast = {
-    at: state.lastAt, ok: !pushError, pulled, pushed,
-    message: pushError ? pushError.message : ''
+    at: state.lastAt, ok: !pushError, pulled, pushed, skipped,
+    message: pushError ? pushError.message : (skipped ? `ข้าม ${skipped} รายการที่อ่านไม่ได้` : '')
   };
   if (typeof renderCloudSyncBox === 'function') renderCloudSyncBox();
   if (pushError) throw pushError;
@@ -666,13 +682,13 @@ async function renderCloudSyncBox(refreshStatus = false) {
   }
   const st = cloudSyncStatus;
   const usage = st && st.limit ? `ใช้พื้นที่ ${formatSyncBytes(st.used)} จาก ${formatSyncBytes(st.limit)} · ${st.count} รายการ` : (st && st.count ? `บนคลาวด์มี ${st.count} รายการ (${formatSyncBytes(st.used)})` : '');
-  const last = cloudSyncLast.at ? `ซิงก์ล่าสุด ${new Date(cloudSyncLast.at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}${cloudSyncLast.ok === false ? ` · ไม่สำเร็จ: ${cloudSyncLast.message}` : ` · รับ ${cloudSyncLast.pulled} ส่ง ${cloudSyncLast.pushed} รายการ`}` : '';
+  const last = cloudSyncLast.at ? `ซิงก์ล่าสุด ${new Date(cloudSyncLast.at).toLocaleString('th-TH', { dateStyle: 'short', timeStyle: 'short' })}${cloudSyncLast.ok === false ? ` · ไม่สำเร็จ: ${cloudSyncLast.message}` : ` · รับ ${cloudSyncLast.pulled} ส่ง ${cloudSyncLast.pushed} รายการ${cloudSyncLast.skipped ? ` · ข้าม ${cloudSyncLast.skipped} รายการที่อ่านไม่ได้` : ''}`}` : '';
   if (!allowed) {
     const hasCloud = st && st.count > 0;
     box.innerHTML = `<div class="plan-card">${head}
       <div class="hint">${describePlanLimit('cloudSync')}${hasCloud ? ` · ${usage} ดาวน์โหลดลงเครื่องนี้ได้เสมอ` : ''}</div>
       <div class="plan-sub-actions"><button class="btn btn-sm btn-primary" onclick="openPlansModal()">ดูแพ็กเกจ</button>
-        ${hasCloud ? '<button class="btn btn-sm" onclick="cloudSyncFromUi(true)">ดาวน์โหลดข้อมูลจากคลาวด์</button>' : ''}</div>
+        ${hasCloud ? '<button class="btn btn-sm" onclick="cloudRepullAllFromUi()">ดาวน์โหลดข้อมูลจากคลาวด์</button>' : ''}</div>
       <div id="cloud-sync-msg" class="hint" aria-live="polite">${escapeHtml(last)}</div></div>`;
     return;
   }
@@ -684,7 +700,8 @@ async function renderCloudSyncBox(refreshStatus = false) {
     ${usage ? `<div class="hint">${escapeHtml(usage)}</div>` : ''}
     ${st && !st.count ? '<div class="hint text-warning">บนคลาวด์ยังไม่มีข้อมูลของบัญชีนี้ ถ้าอีกเครื่องมีนิยายอยู่ ให้เปิด "ซิงก์อัตโนมัติในเครื่องนี้" ที่เครื่องนั้นก่อน แล้วค่อยกดซิงก์ที่เครื่องนี้</div>' : ''}
     ${!enabled ? '<div class="hint">ยังไม่ได้เปิดซิงก์อัตโนมัติในเครื่องนี้ ข้อมูลขึ้นคลาวด์เฉพาะตอนกด "ซิงก์ตอนนี้"</div>' : ''}
-    <div class="plan-sub-actions"><button class="btn btn-sm" id="cloud-sync-now-btn" onclick="cloudSyncFromUi(false)">ซิงก์ตอนนี้</button></div>
+    <div class="plan-sub-actions"><button class="btn btn-sm" id="cloud-sync-now-btn" onclick="cloudSyncFromUi(false)">ซิงก์ตอนนี้</button>
+      ${st && st.count ? '<button class="btn btn-sm" onclick="cloudRepullAllFromUi()" title="ข้อมูลบนคลาวด์ไม่ขึ้นในเครื่องนี้: ดึงทุกรายการใหม่ตั้งแต่ต้น (ไม่ลบอะไรในเครื่อง)">ดึงข้อมูลทั้งหมดจากคลาวด์ใหม่</button>' : ''}</div>
     <div id="cloud-sync-msg" class="hint" aria-live="polite">${escapeHtml(last)}</div></div>`;
 }
 
@@ -696,6 +713,16 @@ async function toggleCloudSync(on, chk) {
   try { localStorage.setItem(syncEnabledKey(), on ? 'true' : 'false'); } catch (e) {}
   if (on) cloudSyncFromUi(false);
   else renderCloudSyncBox();
+}
+
+/** ดึงทุกรายการบนคลาวด์ใหม่ตั้งแต่ต้น (รายการที่ตรงกับในเครื่องอยู่แล้วข้ามไป ไม่ลบอะไรในเครื่อง) */
+async function cloudRepullAllFromUi() {
+  try {
+    const state = await readSyncState();
+    state.cursor = 0;
+    await dbSetMeta(SYNC_STATE_KEY, state);
+  } catch (e) {}
+  return cloudSyncFromUi(true);
 }
 
 async function cloudSyncFromUi(pullOnly) {
