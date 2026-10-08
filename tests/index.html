@@ -1189,6 +1189,25 @@
       setModelOverride(b.signal, { provider: 'openai' });
       return getModelOverride(a.signal).model === 'xiaomi/mimo-v2.6-flash' && getModelOverride(b.signal) === null && getModelOverride(null) === null;
     });
+    test('checkDataOwner: ข้อมูลในเครื่องเป็นของบัญชีอื่น = mismatch (ไม่ซิงก์) / บัญชีเดียวกัน = ไม่ mismatch', async () => {
+      const origMe = hostedMe, origOwner = localStorage.getItem('nov_data_owner');
+      const bookId = 'book_owner_probe';
+      try {
+        if (!db) await initDB();
+        await dbSaveBook({ bookId, title: 'owner probe', updatedAt: Date.now() });
+        localStorage.setItem('nov_data_owner', 'max@example.com');
+        hostedMe = { email: 'free@example.com' };
+        const other = await checkDataOwner();
+        hostedMe = { email: 'MAX@example.com' };
+        const same = await checkDataOwner();
+        return other.mismatch === true && other.owner === 'max@example.com' && same.mismatch === false &&
+          maskEmail('max@example.com') === 'ma•@example.com' && maskEmail('abcdefghij@x.com') === 'ab••••••@x.com';
+      } finally {
+        hostedMe = origMe;
+        if (origOwner === null) localStorage.removeItem('nov_data_owner'); else localStorage.setItem('nov_data_owner', origOwner);
+        await dbDeleteBook(bookId).catch(() => {});
+      }
+    });
     test('redactSecrets: ตัด API Key, token การเข้าสู่ระบบ (JWT) และคีย์ Stripe/Supabase ออกจากข้อความ', () => {
       const out = redactSecrets('a AIzaSyABCDEFGHIJKLMNOP b eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijk c sk_live_abcdefghijkl d whsec_abcdefghijkl e sb_secret_abcdefghijkl f refresh_token=abcdefghijklmn');
       return !/AIza|eyJ|sk_live|whsec_|sb_secret|abcdefghijklmn/.test(out) && (out.match(/\[KEY\]/g) || []).length === 6;

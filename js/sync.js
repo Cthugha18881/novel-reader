@@ -129,6 +129,101 @@ function syncAccountId() {
   return String((typeof hostedMe !== 'undefined' && hostedMe?.email) || s?.email || '').toLowerCase();
 }
 
+// ---------- ข้อมูลในเครื่องเป็นของบัญชีไหน ----------
+// ข้อมูลอยู่ในเบราว์เซอร์ ไม่ได้แยกตามบัญชี: เปลี่ยนบัญชีแล้วต้องถามก่อน ไม่งั้นซิงก์รอบแรกจะส่งนิยายของบัญชีเดิมขึ้นบัญชีใหม่
+const DATA_OWNER_KEY = 'nov_data_owner';
+let dataOwnerPromptedFor = '';
+
+function getDataOwner() {
+  try { return (localStorage.getItem(DATA_OWNER_KEY) || '').toLowerCase(); } catch (e) { return ''; }
+}
+
+function setDataOwner(account) {
+  try {
+    if (account) localStorage.setItem(DATA_OWNER_KEY, String(account).toLowerCase());
+    else localStorage.removeItem(DATA_OWNER_KEY);
+  } catch (e) { /* โหมดส่วนตัว */ }
+}
+
+function maskEmail(email) {
+  const [name, domain] = String(email || '').split('@');
+  if (!domain) return email || '';
+  return `${name.slice(0, 2)}${'•'.repeat(Math.max(1, Math.min(6, name.length - 2)))}@${domain}`;
+}
+
+async function localLibraryCount() {
+  return (await dbGetAllBooks()).filter(b => b.bookId !== 'default_novel').length;
+}
+
+/** { owner, account, mismatch } เจ้าของเดิมยังไม่รู้ (ข้อมูลก่อนมีระบบนี้) = ใช้บัญชีที่ซิงก์ล่าสุด ไม่มีก็ถือว่าเป็นของบัญชีนี้ */
+async function checkDataOwner() {
+  const account = syncAccountId();
+  if (!account) return { owner: getDataOwner(), account: '', mismatch: false };
+  let owner = getDataOwner();
+  if (!owner) owner = (await readSyncState()).account || '';
+  if (!owner || owner === account || !(await localLibraryCount())) {
+    setDataOwner(account);
+    return { owner: account, account, mismatch: false };
+  }
+  return { owner, account, mismatch: true };
+}
+
+/** เรียกหลังเข้าสู่ระบบ: ข้อมูลในเครื่องเป็นของบัญชีอื่น = ถามว่าจะใช้ต่อหรือล้าง (ถามครั้งเดียวต่อบัญชีต่อการเปิดแอพ) */
+async function promptDataOwnerIfNeeded() {
+  const c = await checkDataOwner().catch(() => null);
+  if (!c?.mismatch || dataOwnerPromptedFor === c.account) return;
+  dataOwnerPromptedFor = c.account;
+  const n = await localLibraryCount();
+  const choice = await appChoose(
+    `นิยาย ${n} เรื่องในเครื่องนี้เป็นของบัญชี ${maskEmail(c.owner)} แต่ตอนนี้เข้าสู่ระบบด้วย ${maskEmail(c.account)}\n\n` +
+    'ระบบหยุดซิงก์คลาวด์ไว้ก่อน เพื่อไม่ให้ข้อมูลของบัญชีเดิมถูกส่งขึ้นบัญชีนี้\n' +
+    '• เครื่องที่ใช้ร่วมกับคนอื่น: เลือก "ล้างข้อมูลในเครื่อง" (สำรองไฟล์ให้ก่อนได้)\n' +
+    '• เป็นข้อมูลของคุณเองทั้งหมด: เลือก "ใช้ข้อมูลในเครื่องต่อ" แล้วข้อมูลจะซิงก์เข้าบัญชีนี้',
+    [
+      { label: 'ล้างข้อมูลในเครื่อง แล้วใช้ของบัญชีนี้', value: 'clear', variant: 'primary' },
+      { label: 'ใช้ข้อมูลในเครื่องต่อกับบัญชีนี้', value: 'keep' }
+    ],
+    { title: 'ข้อมูลในเครื่องเป็นของบัญชีอื่น', cancelLabel: 'ตัดสินใจทีหลัง' });
+  if (choice === 'keep') {
+    setDataOwner(c.account);
+    scheduleCloudSync();
+    renderCloudSyncBox?.();
+  } else if (choice === 'clear') {
+    await clearLocalLibraryFromUi({ afterAccount: c.account });
+  }
+}
+
+/** ล้างนิยาย/ตอน/คลังศัพท์ในเครื่องนี้ (สำรองไฟล์ก่อนได้) afterAccount = บัญชีที่จะเป็นเจ้าของข้อมูลต่อจากนี้ */
+async function clearLocalLibraryFromUi({ afterAccount = '' } = {}) {
+  const pick = await appChoose(
+    'ลบนิยาย ตอน คลังศัพท์ คู่มือเรื่อง บุ๊กมาร์ก และประวัติคำแปลทั้งหมดในเครื่องนี้\nการตั้งค่าและ API Key ยังอยู่ · ข้อมูลบนคลาวด์ของบัญชีเดิมไม่ถูกลบ\nลบแล้วกู้คืนในเครื่องนี้ไม่ได้ ถ้ายังไม่ได้สำรอง กด "สำรองไฟล์แล้วลบ"',
+    [
+      { label: '⬇️ สำรองไฟล์แล้วลบ', value: 'backup', variant: 'primary' },
+      { label: 'ลบเลย', value: 'delete', variant: 'danger' }
+    ],
+    { title: 'ล้างข้อมูลในเครื่องนี้' });
+  if (!pick) return false;
+  if (pick === 'backup') {
+    try {
+      await downloadBackupFile();
+    } catch (err) {
+      appAlert(`สำรองไฟล์ไม่สำเร็จ จึงยังไม่ลบข้อมูล: ${err.message}`);
+      return false;
+    }
+  }
+  await dbClearLibrary();
+  setDataOwner(afterAccount);
+  if (typeof resetToGuideBook === 'function') resetToGuideBook();
+  if (typeof homeOpen !== 'undefined' && homeOpen && typeof refreshHome === 'function') await refreshHome();
+  // บัญชีใหม่มีข้อมูลบนคลาวด์: ดึงลงมาเลย
+  if (afterAccount && isCloudSyncActive()) {
+    runCloudSync({ pullOnly: true }).then(() => refreshAfterCloudPull?.()).catch(() => {});
+  }
+  showGlobalToast('ล้างข้อมูลในเครื่องนี้แล้ว');
+  setTimeout(hideGlobalToast, 2000);
+  return true;
+}
+
 async function syncApi(method, path, body) {
   const token = await getHostedAccessToken();
   const res = await fetch(`${HOSTED.apiBase}/sync/${path}`, {
@@ -225,6 +320,12 @@ async function doCloudSync({ pullOnly = false, onProgress = null } = {}) {
   const report = (msg) => { if (onProgress) onProgress(msg); };
   if (!db) throw new Error('ฐานข้อมูลยังไม่พร้อม');
   if (!isHostedSignedIn()) throw new Error('กรุณาเข้าสู่ระบบ Dusktale ก่อน');
+  // ข้อมูลในเครื่องเป็นของบัญชีอื่น: ไม่ซิงก์จนกว่าผู้ใช้จะเลือก (promptDataOwnerIfNeeded)
+  const ownerCheck = await checkDataOwner();
+  if (ownerCheck.mismatch) {
+    promptDataOwnerIfNeeded();
+    throw new Error(`ข้อมูลในเครื่องนี้เป็นของบัญชี ${maskEmail(ownerCheck.owner)} จึงยังไม่ซิงก์เข้าบัญชีนี้ (เลือก "ใช้ข้อมูลในเครื่องต่อ" หรือ "ล้างข้อมูลในเครื่อง" ก่อน)`);
+  }
   let state = await readSyncState();
   // เปลี่ยนบัญชี: เริ่มนับใหม่ (ไม่เอาลายนิ้วมือของบัญชีอื่นมาเทียบ)
   const account = syncAccountId();

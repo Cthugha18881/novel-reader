@@ -705,6 +705,36 @@ function dbImportAll(rawData, { mode = 'merge' } = {}) {
   });
 }
 
+/** ลบนิยาย ตอน คลังศัพท์ ข้อมูลเสริม สถิติ และประวัติคำแปลทั้งหมดในเครื่องนี้ (การตั้งค่า/API Key ไม่ถูกลบ) */
+function dbClearLibrary() {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));
+    const stores = [...BACKUP_STORES, 'meta'].filter(name => db.objectStoreNames.contains(name));
+    const tx = db.transaction(stores, 'readwrite');
+    stores.filter(name => name !== 'meta').forEach(name => tx.objectStore(name).clear());
+    // meta: ลบสถานะซิงก์และข้อมูลของเรื่อง แต่คงตัวนับการใช้งานรายวันของแพ็กเกจ (ล้างข้อมูลแล้วโควตาวันนี้ไม่รีเซ็ต)
+    // และโฟลเดอร์สำรองอัตโนมัติ (เป็นค่าของเครื่อง ไม่ใช่ข้อมูลของบัญชี)
+    if (stores.includes('meta')) {
+      const req = tx.objectStore('meta').openCursor();
+      req.onsuccess = (e) => {
+        const cursor = e.target.result;
+        if (!cursor) return;
+        const key = String(cursor.key);
+        if (!key.startsWith('plan_day_') && key !== 'autoBackupDir') cursor.delete();
+        cursor.continue();
+      };
+    }
+    tx.oncomplete = () => {
+      bookLangCache.clear();
+      if (Array.isArray(inMemoryGlossaryCache)) inMemoryGlossaryCache.length = 0;
+      markDataChanged('replaced');
+      resolve();
+    };
+    tx.onerror = () => reject(tx.error || new Error('ลบข้อมูลไม่สำเร็จ'));
+    tx.onabort = () => reject(tx.error || new Error('ยกเลิกการลบข้อมูล'));
+  });
+}
+
 function dbCountAll() {
   return new Promise((resolve, reject) => {
     if (!db) return reject(new Error('ฐานข้อมูลยังไม่พร้อม'));

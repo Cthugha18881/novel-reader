@@ -158,6 +158,8 @@ async function fetchHostedMe() {
   hostedMe = data;
   // จำแพ็กเกจและสิทธิ์ไว้ใช้ตอนออฟไลน์ (plans.js)
   if (typeof savePlanCache === 'function') savePlanCache(data);
+  // เพิ่งเข้าสู่ระบบด้วยบัญชีที่ไม่ใช่เจ้าของข้อมูลในเครื่องนี้: ถามก่อนซิงก์ (sync.js)
+  if (typeof promptDataOwnerIfNeeded === 'function') promptDataOwnerIfNeeded().catch(() => {});
   return data;
 }
 
@@ -315,7 +317,15 @@ function onHostedSignedIn() {
 }
 
 async function hostedSignOutFromUi() {
-  if (!(await appConfirm('ออกจากระบบ Dusktale ในเครื่องนี้ นิยายและคลังศัพท์ยังอยู่ครบ', { title: 'ออกจากระบบ', confirmLabel: 'ออกจากระบบ' }))) return;
+  const choice = await appChoose(
+    'นิยายและคลังศัพท์เก็บอยู่ในเบราว์เซอร์นี้ ไม่ได้แยกตามบัญชี ถ้าออกจากระบบอย่างเดียว คนที่ใช้เครื่องนี้ต่อจะยังเห็นนิยายของคุณ\nเครื่องที่ใช้ร่วมกับคนอื่น ควรเลือก "ออกจากระบบและลบข้อมูลในเครื่อง" (ข้อมูลที่ซิงก์ไว้บนคลาวด์ยังอยู่)',
+    [
+      { label: 'ออกจากระบบ', value: 'keep', variant: 'primary' },
+      { label: 'ออกจากระบบและลบข้อมูลในเครื่อง', value: 'clear', variant: 'danger' }
+    ],
+    { title: 'ออกจากระบบ' });
+  if (!choice) return;
+  if (choice === 'clear' && typeof clearLocalLibraryFromUi === 'function' && !(await clearLocalLibraryFromUi())) return;
   await hostedSignOut();
   renderHostedAccountBox();
   if (typeof renderPlanBox === 'function') renderPlanBox();
