@@ -1239,14 +1239,16 @@
       splitPageTitle('更新说明_星痕之门_伪戒-17K小说网'),
       splitPageTitle('第38章 决绝_明君小说最新章节,在线阅读,纵横小说'),
       splitPageTitle('《书名》 - 起点中文网'),
-      splitPageTitle('第一話 出発 - - 小説家になろう')
+      splitPageTitle('第一話 出発 - - 小説家になろう'),
+      splitPageTitle('书名_01_天降_免费小说阅读_飞卢小说网')
     ], [
       { book: '夜无疆', chapter: '第1章 永夜' },
       { book: '夜无疆', chapter: '感谢书友支持' },
       { book: '星痕之门', chapter: '更新说明' },
       { book: '明君', chapter: '第38章 决绝' },
       { book: '书名', chapter: '' },
-      { book: '小説家になろう', chapter: '第一話 出発' }
+      { book: '小説家になろう', chapter: '第一話 出発' },
+      { book: '书名', chapter: '01 天降' }
     ]));
     test('findNextInHtml: ปุ่มตอนถัดไปเป็น javascript: หรือ /0.html = ตอนล่าสุด (none) / ลิงก์จริง = chapter', () => {
       const doc = html => new DOMParser().parseFromString(html, 'text/html');
@@ -1264,6 +1266,18 @@
       const sparse = [1, 20, 28, 51].map(n => ({ title: `Chapter ${n}`, url: `${toc}/mb-chapter-${n}` }));
       return eq(pickChapterLinks([...filters, ...chaps], toc).map(e => e.title), ['Chapter 1', 'Chapter 2', 'Chapter 3', 'Chapter 4']) &&
         pickChapterLinks([...sparse], toc).length === 0;
+    });
+    test('tocGroupKey: รหัสเรื่อง_เลขตอน.html (faloo) จัดเป็นเรื่องเดียวกัน ไม่รวม v_ / bookId บนชั้นหนังสือไม่เปลี่ยน', () => {
+      const a = tocGroupKey('https://b.faloo.com/1484744_26.html'), b = tocGroupKey('https://b.faloo.com/v_1484744_1.html'), c = tocGroupKey('https://b.faloo.com/Author/2.html');
+      return a.reliable && a.key !== b.key && a.key !== c.key && deriveBookKey('https://b.faloo.com/1484744_26.html').reliable === false &&
+        tocGroupKey('https://ncode.syosetu.com/n9669bk/1/').key === deriveBookKey('https://ncode.syosetu.com/n9669bk/1/').key;
+    });
+    test('pickChapterLinks: ลิงก์ตอนแนะนำหลุดมาก่อนรายการเต็ม = เรียงตามเลขตอน / ปุ่มตอนถัดไปที่เป็นรูป = ใช้ลิงก์ด้านนอก ไม่ใช่ไฟล์รูป', () => {
+      const toc = 'https://b.faloo.com/1484744.html';
+      const links = [35, ...Array.from({ length: 30 }, (_, i) => i + 1)].map(n => ({ title: `第${n}章`, url: `https://b.faloo.com/1484744_${n}.html` }));
+      const nav = extractNavLinks('[![下一章](https://s.faloo.com/next.png)](https://b.faloo.com/1484744_27.html) [![](https://s.faloo.com/x.png)](https://b.faloo.com/)', 'https://b.faloo.com/1484744_26.html');
+      return eq(pickChapterLinks(links, toc).map(e => e.title).slice(0, 3), ['第1章', '第2章', '第3章']) && pickChapterLinks(links, toc).length === 31 && pickChapterLinks(links, toc)[30].title === '第35章' &&
+        nav.nextChapter === 'https://b.faloo.com/1484744_27.html';
     });
     test('privateUseCharRatio: ตัวอักษรเข้ารหัสด้วยฟอนต์ (Private Use) = สูง / ข้อความจีนปกติ = 0', () => {
       const normal = '他走到悬崖边上看着大海。'.repeat(30);

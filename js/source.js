@@ -397,8 +397,10 @@ function findNextInHtml(doc, pageUrl, profile = null) {
   let pageCandidate = null;
   let placeholderNext = false;
   for (const a of doc.querySelectorAll('a[href]')) {
-    const text = normalizeNavText(a.textContent);
+    // ปุ่มที่เป็นรูปภาพไม่มีข้อความ: ใช้ alt/title ของรูปหรือของลิงก์แทน
+    const text = normalizeNavText(a.textContent || a.querySelector('img')?.getAttribute('alt') || a.getAttribute('title') || '');
     const url = pick(a);
+    if (url && IMAGE_URL.test(url)) continue;
     const isNextLabel = NEXT_CHAPTER_LABEL.test(text);
     if (isNextLabel && (!url || isPlaceholderNextUrl(url))) { placeholderNext = true; continue; }
     if (!url || sameSourceUrl(url, pageUrl)) continue;
@@ -533,10 +535,26 @@ function isTocNavLink(link) {
   return TOC_NAV_LABEL.test(normalizeNavText(link.title)) || TOC_PAGINATION_URL.test(link.url);
 }
 
+/**
+ * กลุ่มเรื่องของลิงก์ในสารบัญ: ตาม deriveBookKey และรู้จัก "รหัสเรื่อง_เลขตอน.html" (เช่น faloo 1484744_26.html)
+ * แยกจาก deriveBookKey เพราะตัวนั้นใช้สร้าง bookId ของเรื่องบนชั้นหนังสือ (เปลี่ยนแล้วเรื่องเดิมจะแยกเป็นเรื่องใหม่)
+ */
+function tocGroupKey(url) {
+  const key = deriveBookKey(url);
+  if (key.reliable) return key;
+  try {
+    const u = new URL(url);
+    // เฉพาะ "เลข_เลข.html" ล้วน (faloo มี v_เลข_เลข.html เป็นหน้าอีกแบบของตอนเดียวกัน ไม่นับรวม กันตอนซ้ำ)
+    const m = u.pathname.match(/\/(\d{3,})_\d+\.html?$/i);
+    if (m) return { key: `${hostOf(url)}/${m[1]}`, reliable: true, legacyId: null };
+  } catch (e) { /* URL ผิดรูปแบบ */ }
+  return key;
+}
+
 /** ลิงก์ตอนทั้งหมดในหน้าที่อยู่ในกลุ่มเรื่องเดียวกัน (ใช้กับหน้าสารบัญหน้า 2 เป็นต้นไป) */
 function chapterLinksInGroup(links, groupKey, tocUrl) {
   return links.filter(l => !isTocNavLink(l) && hostOf(l.url) === hostOf(tocUrl) &&
-    normalizeUrl(l.url) !== normalizeUrl(tocUrl) && deriveBookKey(l.url).key === groupKey);
+    normalizeUrl(l.url) !== normalizeUrl(tocUrl) && tocGroupKey(l.url).key === groupKey);
 }
 
 function dedupeKeepLast(list) {
@@ -552,7 +570,7 @@ function pickChapterLinks(links, tocUrl) {
   for (const link of links) {
     if (isTocNavLink(link)) continue;
     if (hostOf(link.url) !== tocHost || normalizeUrl(link.url) === tocNorm) continue;
-    const key = deriveBookKey(link.url);
+    const key = tocGroupKey(link.url);
     if (!key.reliable) continue;
     // ลิงก์ที่ชี้ไปหน้าสารบัญ/หน้าเรื่องเอง ไม่ใช่ตอน
     if (normalizeUrl(link.url).replace(/\/$/, '') === key.key.replace(/\/$/, '')) continue;
@@ -576,6 +594,12 @@ function pickChapterLinks(links, tocUrl) {
   if (nums.length === picked.length && nums.length >= 3 && Math.max(...nums) < 100000) {
     const span = Math.max(...nums) - Math.min(...nums) + 1;
     if (span > 10 && nums.length < span * 0.5) return [];
+    // เรียงขึ้นเกือบทั้งหมด แต่มีบางลิงก์หลุดมาก่อน (กล่อง "ตอนแนะนำ/ล่าสุด" บนหัวหน้า เช่น faloo): เรียงตามเลขตอน
+    let up = 0;
+    for (let i = 1; i < nums.length; i++) if (nums[i] > nums[i - 1]) up++;
+    if (up >= (nums.length - 1) * 0.8 && up < nums.length - 1) {
+      return picked.map((e, i) => ({ e, n: nums[i], i })).sort((a, b) => a.n - b.n || a.i - b.i).map(x => x.e);
+    }
   }
   return picked;
 }
@@ -613,7 +637,7 @@ async function fetchTocEntries(tocUrl, { signal = null, onProgress = null } = {}
     if (!groupKey) {
       // หน้าแรกกำหนดว่า "กลุ่มลิงก์ตอน" ของเรื่องนี้คือกลุ่มไหน หน้าถัดไปใช้กลุ่มเดียวกัน (แม้จะมีไม่กี่ตอน)
       const firstPick = pickChapterLinks(links, pageUrl);
-      if (firstPick.length) groupKey = deriveBookKey(firstPick[0].url).key;
+      if (firstPick.length) groupKey = tocGroupKey(firstPick[0].url).key;
     }
     if (groupKey) all = all.concat(chapterLinksInGroup(links, groupKey, tocUrl));
     const next = findTocNextPage(links, pageUrl, seen);

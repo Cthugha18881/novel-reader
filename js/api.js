@@ -298,14 +298,20 @@ function isContinuationPage(currentUrl, candidateUrl) {
 }
 
 // ---------- Scraper ----------
+// ลิงก์ไปไฟล์รูป ไม่ใช่หน้าตอน (ปุ่มที่เป็นรูปภาพ เช่น [![下一章](next.png)](ลิงก์จริง))
+const IMAGE_URL = /\.(png|jpe?g|gif|webp|svg|ico)(\?|#|$)/i;
+
 function extractNavLinks(markdown, pageUrl) {
   const links = { nextChapter: null, nextPage: null };
+  // ปุ่มรูปภาพ: ใช้ข้อความ alt ของรูปเป็นชื่อลิงก์ และลิงก์ด้านนอกเป็นปลายทาง
+  const imageLinks = (markdown || '').replace(/\[!\[([^\]]{0,80})\]\([^)]*\)\]\((\S+?)(?:\s+"[^"]*")?\)/g, '[$1]($2)');
   const linkRegex = /\[([^\]]{0,80})\]\((\S+?)(?:\s+"[^"]*")?\)/g;
   let m;
-  while ((m = linkRegex.exec(markdown)) !== null) {
+  while ((m = linkRegex.exec(imageLinks)) !== null) {
     const text = normalizeNavText(m[1]);
     let href;
     try { href = new URL(m[2], pageUrl).href; } catch (e) { href = ''; }
+    if (IMAGE_URL.test(href)) continue;
     const isNextLabel = NEXT_CHAPTER_LABEL.test(text);
     // ปุ่มตอนถัดไปของตอนล่าสุด (javascript: หรือ .../0.html): ยังไม่มีตอนใหม่
     if (isNextLabel && isPlaceholderNextUrl(href)) { links.noNext = true; continue; }
@@ -355,6 +361,12 @@ function splitPageTitle(fullTitle) {
     const chap = parts.find((p, i) => !p.includes('《') && i < parts.length - 1);
     return { book: bracket[1].trim(), chapter: chap || '' };
   }
+  // "เรื่อง_01_ชื่อตอน_คำโฆษณา_เว็บ" (faloo): ส่วนที่เป็นเลขล้วนคือเลขตอน ต่อด้วยชื่อตอน
+  const numIdx = parts.findIndex((p, i) => i > 0 && /^\d{1,5}$/.test(p));
+  if (numIdx > 0) {
+    const name = parts[numIdx + 1] && numIdx + 1 < parts.length - 1 && !BOOK_TITLE_SEO_SUFFIX.test(parts[numIdx + 1]) ? parts[numIdx + 1] : '';
+    return { book: cleanBookTitle(parts[0]), chapter: [parts[numIdx], name].filter(Boolean).join(' ') };
+  }
   // "ตอน_เรื่อง_ผู้แต่ง-เว็บ" (เว็บจีนหลายเว็บ) ส่วน 2 ส่วนใช้แบบเดิม "เรื่อง-ตอน"
   if (parts.length >= 3 && /[_]/.test(title)) return { book: cleanBookTitle(parts[1]), chapter: parts[0] };
   if (parts.length >= 2) return { book: cleanBookTitle(parts[0]), chapter: parts[1] };
@@ -401,7 +413,8 @@ function parseJinaMarkdown(md, pageUrl) {
 /** ดึงหน้าเว็บเป็น markdown (r.jina.ai หรือ proxy สำรอง ดู fetchSourcePage ใน source.js) */
 async function fetchJinaMarkdown(url, signal, profile = null) {
   const { body: md } = await fetchSourcePage(url, { format: 'markdown', signal, profile });
-  if (md.includes('404 Not Found') || md.includes('页面不存在')) {
+  // หน้า "ไม่พบหน้า" ของเว็บต่างๆ (สั้นๆ) ไม่ใช่เนื้อหา: ถือเป็นไม่มีหน้านี้
+  if (md.includes('404 Not Found') || md.includes('页面不存在') || (md.length < 1500 && /找不到文件或目录|页面未找到|Page Not Found|ページが見つかりません|페이지를 찾을 수 없/i.test(md))) {
     throw new Error('404');
   }
   return md;
