@@ -6,7 +6,7 @@
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/hosted-config.js"></script>
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.20.1</title>
+  <title>Dusktale v3.20.2</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -613,7 +613,7 @@
         <div class="modal-title">แพ็กเกจของ Dusktale</div>
         <button class="modal-close" onclick="closeModal('plans-modal')" aria-label="ปิด">✕</button>
       </div>
-      <div id="plans-modal-body"></div>
+      <div id="plans-modal-body" class="modal-scrollable-body" style="flex: 1; min-height: 0;"></div>
     </div>
   </div>
 
