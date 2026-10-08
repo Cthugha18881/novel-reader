@@ -75,7 +75,7 @@
     }
 
     // ---------- URL / scraper ----------
-    test('computeNextNumericUrl: เลขท้าย URL +1', () => eq(computeNextNumericUrl('https://www.69shuba.com/txt/88724/40717272'), 'https://www.69shuba.com/txt/88724/40717273'));
+    test('computeNextNumericUrl: เลขท้าย URL +1', () => eq(computeNextNumericUrl('https://www.novel-site.test/txt/88724/40717272'), 'https://www.novel-site.test/txt/88724/40717273'));
     test('computeNextNumericUrl: คงเลข 0 นำหน้าและนามสกุล', () => eq(computeNextNumericUrl('https://x.test/b/0099.html'), 'https://x.test/b/0100.html'));
     test('computeNextNumericUrl: ไม่มีตัวเลข', () => eq(computeNextNumericUrl('https://x.test/abc'), null));
 
@@ -192,16 +192,16 @@
 
     // ---------- Phase 1: URL identity ----------
     test('normalizeUrl: ไม่สน https/www/m./slash/hash/utm', () => {
-      const a = normalizeUrl('https://www.69shuba.com/txt/1/2/?utm_source=x#top');
-      const b = normalizeUrl('http://m.69shuba.com/txt/1/2');
-      return eq(a, b) && eq(a, '69shuba.com/txt/1/2');
+      const a = normalizeUrl('https://www.novel-site.test/txt/1/2/?utm_source=x#top');
+      const b = normalizeUrl('http://m.novel-site.test/txt/1/2');
+      return eq(a, b) && eq(a, 'novel-site.test/txt/1/2');
     });
     test('normalizeUrl: query ที่มีความหมายยังต่างกัน', () => normalizeUrl('https://s.test/read.php?bid=1&cid=2') !== normalizeUrl('https://s.test/read.php?bid=1&cid=3'));
     test('normalizeUrl: ลำดับ query ไม่มีผล', () => eq(normalizeUrl('https://s.test/r?b=1&a=2'), normalizeUrl('https://s.test/r?a=2&b=1')));
     test('sameSourceUrl', () => sameSourceUrl('https://x.test/a/1.html', 'http://www.x.test/a/1.html') && !sameSourceUrl('https://x.test/a/1.html', 'https://x.test/a/2.html') && !sameSourceUrl('', ''));
 
-    test('bookId: 69shuba ใช้ id เดิม (เข้ากับข้อมูลเก่า)', () => eq(extractBookIdFromUrl('https://www.69shuba.com/txt/88724/40717272'), 'book_88724'));
-    test('bookId: /book/123/456.html ใช้ id เดิม', () => eq(extractBookIdFromUrl('https://www.biquge.test/book/123/456.html'), 'book_123'));
+    test('bookId: รูปแบบ /txt/เลขเรื่อง/ ใช้ id เดิม (เข้ากับข้อมูลเก่า)', () => eq(extractBookIdFromUrl('https://www.novel-site.test/txt/88724/40717272'), 'book_88724'));
+    test('bookId: /book/123/456.html ใช้ id เดิม', () => eq(extractBookIdFromUrl('https://www.other-site.test/book/123/456.html'), 'book_123'));
     const sameBook = (a, b) => extractBookIdFromUrl(a) === extractBookIdFromUrl(b);
     test('bookId: syosetu ตอนต่างกันเรื่องเดียวกัน', () => sameBook('https://ncode.syosetu.com/n1234ab/5/', 'https://ncode.syosetu.com/n1234ab/6/'));
     test('bookId: syosetu คนละเรื่องได้คนละ id (บั๊กเดิมรวมเป็นเรื่องเดียว)', () => !sameBook('https://ncode.syosetu.com/n1234ab/5/', 'https://ncode.syosetu.com/n9999zz/5/'));
@@ -1189,7 +1189,11 @@
       setModelOverride(b.signal, { provider: 'openai' });
       return getModelOverride(a.signal).model === 'xiaomi/mimo-v2.6-flash' && getModelOverride(b.signal) === null && getModelOverride(null) === null;
     });
-    test('describeProviderBlock: บอกผู้ให้บริการ รหัส และย้ำว่าไม่ใช่ปัญหาของแอพ', () => {
+    test('redactSecrets: ตัด API Key, token การเข้าสู่ระบบ (JWT) และคีย์ Stripe/Supabase ออกจากข้อความ', () => {
+      const out = redactSecrets('a AIzaSyABCDEFGHIJKLMNOP b eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijk c sk_live_abcdefghijkl d whsec_abcdefghijkl e sb_secret_abcdefghijkl f refresh_token=abcdefghijklmn');
+      return !/AIza|eyJ|sk_live|whsec_|sb_secret|abcdefghijklmn/.test(out) && (out.match(/\[KEY\]/g) || []).length === 6;
+    });
+    test('describeProviderBlock:บอกผู้ให้บริการ รหัส และย้ำว่าไม่ใช่ปัญหาของแอพ', () => {
       const msg = describeProviderBlock('gemini', 'PROHIBITED_CONTENT');
       const unknown = describeProviderBlock('', '');
       return msg.includes('Google Gemini') && msg.includes('PROHIBITED_CONTENT') && msg.includes('ไม่ใช่ข้อผิดพลาดของแอพ') && msg.includes('ทางแก้') &&

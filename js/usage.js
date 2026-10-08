@@ -342,7 +342,8 @@ async function getRequestLog() {
 // ---------- บันทึกข้อผิดพลาด ----------
 const DIAG_META_KEY = 'diagLog';
 const DIAG_MAX_ENTRIES = 200;
-const SECRET_LIKE_PATTERN = /(AIza[0-9A-Za-z_-]{10,}|sk-ant-[0-9A-Za-z_-]{6,}|sk-[0-9A-Za-z_-]{10,}|jina_[0-9A-Za-z]{6,}|Bearer\s+[0-9A-Za-z._-]{10,}|key=[0-9A-Za-z_-]{10,})/g;
+// รวม token การเข้าสู่ระบบ (JWT eyJ...), คีย์ฝั่งเซิร์ฟเวอร์ของ Supabase/Stripe เผื่อหลุดมาในข้อความ error
+const SECRET_LIKE_PATTERN = /(AIza[0-9A-Za-z_-]{10,}|sk-ant-[0-9A-Za-z_-]{6,}|sk-[0-9A-Za-z_-]{10,}|sk_(?:live|test)_[0-9A-Za-z]{10,}|rk_(?:live|test)_[0-9A-Za-z]{10,}|whsec_[0-9A-Za-z]{10,}|sb_secret_[0-9A-Za-z_-]{10,}|eyJ[0-9A-Za-z_-]{10,}\.[0-9A-Za-z_-]{10,}\.[0-9A-Za-z_-]{6,}|jina_[0-9A-Za-z]{6,}|Bearer\s+[0-9A-Za-z._-]{10,}|(?:key|token|access_token|refresh_token)=[0-9A-Za-z._-]{10,})/g;
 
 /** ตัดสิ่งที่หน้าตาเหมือน API Key ออก และตัด key ที่ผู้ใช้ตั้งไว้จริงออกด้วย */
 function redactSecrets(text) {
@@ -352,6 +353,11 @@ function redactSecrets(text) {
     Object.keys(LLM_PROVIDERS).forEach(p => known.push(...getProviderKeys(p)));
     const jina = getSecret('nov_jina_key');
     if (jina) known.push(jina);
+    // token การเข้าสู่ระบบ Dusktale ของเครื่องนี้
+    if (typeof readHostedSession === 'function') {
+      const s = readHostedSession();
+      if (s) known.push(s.access_token, s.refresh_token);
+    }
     known.filter(k => k && k.length >= 6).forEach(k => { out = out.split(k).join('[KEY]'); });
   } catch (e) {}
   return out;
