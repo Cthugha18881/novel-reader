@@ -184,6 +184,7 @@ function buildPlaceholderNoticeHtml(chap) {
         ${locked ? `<button class="btn btn-primary" style="padding: 5px 12px; font-size: 12px;" onclick="openPasteChapterModal(${jsArg(chap.id)})">📋 วางเนื้อหาเต็มเอง</button>` : ''}
         ${chap.sourceUrl ? `<button class="btn${locked ? '' : ' btn-primary'}" style="padding: 5px 12px; font-size: 12px;" onclick="refetchChapterFromSource(${jsArg(chap.id)})">🔄 ดึงจากหน้าเว็บใหม่</button>` : ''}
         ${locked && hasSrc ? `<button class="btn" style="padding: 5px 12px; font-size: 12px;" onclick="translateLockedPreview(${jsArg(chap.id)})" title="แปลข้อความตัวอย่างที่ได้มา (เนื้อหาไม่ครบ)">แปลเฉพาะตัวอย่าง</button>` : ''}
+        ${!locked && hasSrc ? `<button class="btn" style="padding: 5px 12px; font-size: 12px;" onclick="translatePlaceholderAnyway(${jsArg(chap.id)})" title="บางตอนเป็นคำอธิบายหรือประกาศสั้นๆ ของผู้เขียน แปลอ่านได้ (ใช้โควตา AI)">📝 แปลข้อความนี้</button>` : ''}
       </div>
       <details style="margin-top: 10px; font-size: 12px;"><summary style="cursor: pointer; opacity: 0.7;">ดูข้อความต้นฉบับที่ดึงมา</summary><div class="para-src" style="display: block;">${srcHtml}</div></details>
     </div>`;
@@ -256,6 +257,30 @@ async function translateLockedPreview(chapId) {
     }
   } catch (err) {
     if (!isAbortError(err)) appAlert(`แปลไม่สำเร็จ: ${err.message}`);
+  } finally {
+    endTask('retranslate', controller);
+    hideGlobalToast();
+  }
+}
+
+/** ตอนที่ระบบตรวจว่าเป็นกันก๊อป แต่ผู้ใช้อยากอ่าน (อาจเป็นคำอธิบาย/ประกาศสั้นๆ): แปลเป็นข้อความผู้เขียน ไม่ใช้เป็นบริบทของเรื่อง */
+async function translatePlaceholderAnyway(chapId) {
+  const chapter = await findChapterAnywhere(chapId);
+  if (!chapter) return appAlert('ไม่พบตอนนี้');
+  if (isTaskRunning('retranslate')) return appAlert('กำลังแปลบทอื่นอยู่ กรุณารอให้เสร็จก่อน');
+  if (!(await appConfirm('แปลข้อความที่ดึงมาของตอนนี้ตามที่เป็น (ใช้โควตา AI)\nถ้าเป็นข้อความหลอกจริง คำแปลก็จะไม่ใช่เนื้อเรื่อง ภายหลังกด "ดึงจากหน้าเว็บใหม่" เพื่อเอาเนื้อหาจริงได้\nตอนนี้จะไม่ถูกใช้เป็นบริบทของตอนถัดไป', { title: 'แปลข้อความนี้', confirmLabel: 'แปล' }))) return;
+  const books = await dbGetAllBooks();
+  const ctx = makeBookContext(books.find(b => b.bookId === chapter.bookId) || getCurrentBookContext());
+  const controller = beginTask('retranslate');
+  showGlobalToast(`กำลังแปล "${chapter.title}"...`);
+  try {
+    const rawText = chapter.paragraphs.map(p => p.src || '').filter(Boolean).join('\n\n');
+    const result = await translateChapter(rawText, ctx, { signal: controller.signal, onStatus: showGlobalToast, rawChapTitle: chapter.title, forceTranslate: true });
+    if (result.chapterType === 'placeholder') result.chapterType = 'author_note';
+    result.summary = '';
+    await applyTranslationToChapter(chapter, result, { updateTitle: false, reason: 'translate' });
+  } catch (err) {
+    if (!isAbortError(err)) appAlert(`แปลไม่สำเร็จ: ${describeScrapeError(err)}`);
   } finally {
     endTask('retranslate', controller);
     hideGlobalToast();

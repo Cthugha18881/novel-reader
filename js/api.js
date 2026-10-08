@@ -1834,7 +1834,8 @@ function buildChapterTail(chapter, maxParas = 4, maxChars = 500) {
  * @param {object} [options.prevChapter] ตอนเนื้อเรื่องก่อนหน้า (ใช้ทั้งสรุปและท้ายตอนเป็นบริบท)
  */
 // benchmark: ใช้ตอนเทียบโมเดล ไม่สแกน/เขียนคลังศัพท์ ไม่ทำบันทึกเหตุการณ์ ไม่นับเข้าค่าเฉลี่ยต่อตอน
-async function translateChapter(rawText, ctx, { onStatus = null, signal = null, rawChapTitle = "", rawBookTitle = "", prevSummary = "", prevChapter = null, lockInfo = null, benchmark = false, qualityMode = '' } = {}) {
+// forceTranslate: ผู้ใช้กดแปลตอนที่ระบบตรวจว่าเป็นตอนกันก๊อปเอง (ข้ามการตรวจนั้น แต่ตอนที่ล็อก/ต้องซื้อยังไม่แปล)
+async function translateChapter(rawText, ctx, { onStatus = null, signal = null, rawChapTitle = "", rawBookTitle = "", prevSummary = "", prevChapter = null, lockInfo = null, benchmark = false, qualityMode = '', forceTranslate = false } = {}) {
   if (!ctx?.bookId) throw new Error('ไม่พบข้อมูลนิยายสำหรับการแปล');
   throwIfAborted(signal);
   // ใช้ signal เป็นตัวผูกสถิติการใช้งานกับเรื่อง/ตอนนี้ (usage.js) จึงต้องมีเสมอ
@@ -1847,7 +1848,9 @@ async function translateChapter(rawText, ctx, { onStatus = null, signal = null, 
     if (onStatus) onStatus('ตอนนี้ต้องซื้อหรืออ่านต่อในแอพของเว็บ ได้มาแค่ตัวอย่าง จึงข้ามการแปลไว้ก่อน');
     return buildPlaceholderResult(sourceParas, rawChapTitle, rawBookTitle, 'locked', lockInfo);
   }
-  const chapterRule = classifyChapterByRules(rawChapTitle, rawText);
+  let chapterRule = classifyChapterByRules(rawChapTitle, rawText);
+  // แปลแบบข้อความผู้เขียน: ไม่สแกนคำศัพท์/ไม่ทำบันทึกเหตุการณ์จากข้อความนี้ (กันคลังศัพท์ปนข้อความหลอก)
+  if (forceTranslate && chapterRule.type === 'placeholder' && chapterRule.reason !== 'locked') chapterRule = { type: 'author_note', confidence: 'high', reason: 'forced' };
   if (chapterRule.type === 'placeholder') {
     if (onStatus) onStatus(chapterRule.reason === 'locked' ? 'ตรวจพบตอนที่ต้องซื้อ/ล็อกอินก่อนอ่าน ข้ามการแปลไว้ก่อน' : 'ตรวจพบตอนกันก๊อป (เนื้อหาหลอก) ข้ามการแปลไว้ก่อน');
     return buildPlaceholderResult(sourceParas, rawChapTitle, rawBookTitle, chapterRule.reason);
