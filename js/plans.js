@@ -246,7 +246,7 @@ function buildPlansTableHtml(currentTier) {
   const rows = [
     // แถวราคาเป็น HTML (ขีดทับราคาปกติ) แถวอื่นเป็นข้อความธรรมดา
     ['ราคา / 30 วัน', t => PAID_PLAN_IDS.includes(t) ? { html: planPriceHtml(t) } : 'ฟรี'],
-    ['แปลด้วย API Key ของคุณ', t => fmt(PLAN_DEFAULTS[t].byokChaptersPerDay, 'ตอน/วัน')],
+    ['แปลด้วย API Key ของคุณ *', t => fmt(PLAN_DEFAULTS[t].byokChaptersPerDay, 'ตอน/วัน'), 'plans-row-byok'],
     ['แปลด้วย AI ของ Dusktale', hostedTokens],
     ['ชั้นหนังสือ', t => fmt(PLAN_DEFAULTS[t].maxBooks, 'เรื่อง')],
     ['แปลล่วงหน้าแบบชุด', t => fmt(PLAN_DEFAULTS[t].batchMax, 'ตอน/ครั้ง')],
@@ -257,8 +257,9 @@ function buildPlansTableHtml(currentTier) {
   ];
   const head = PLAN_ORDER.map(t => `<th scope="col"${t === currentTier ? ' class="plan-current"' : ''}>${escapeHtml(PLAN_DEFAULTS[t].name)}${t === currentTier ? '<br><small>ระดับของคุณ</small>' : ''}</th>`).join('');
   const cellHtml = (v) => (v && typeof v === 'object' ? v.html : escapeHtml(v));
-  const body = rows.map(([label, cell]) => `<tr><th scope="row">${escapeHtml(label)}</th>${PLAN_ORDER.map(t => `<td${t === currentTier ? ' class="plan-current"' : ''}>${cellHtml(cell(t))}</td>`).join('')}</tr>`).join('');
-  return `<div class="plans-table-wrap"><table class="plans-table"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+  const body = rows.map(([label, cell, rowClass]) => `<tr${rowClass ? ` class="${rowClass}"` : ''}><th scope="row">${escapeHtml(label)}</th>${PLAN_ORDER.map(t => `<td${t === currentTier ? ' class="plan-current"' : ''}>${cellHtml(cell(t))}</td>`).join('')}</tr>`).join('');
+  return `<div class="plans-table-wrap"><table class="plans-table"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table></div>
+    <p class="plans-byok-note">* ต้องสมัครและใส่ API Key ของผู้ให้บริการ AI เอง เช่น Google Gemini, OpenRouter หรือ Anthropic Claude (ใส่ที่ ตั้งค่า → 🤖 AI) ค่าใช้งานคิดกับผู้ให้บริการนั้นโดยตรง ไม่รวมในแพ็กเกจ · ถ้าไม่อยากหาคีย์เอง ใช้ "AI ของ Dusktale" ได้เลย</p>`;
 }
 
 function renderPlansModalBody() {
@@ -278,6 +279,13 @@ function openPlansModal() {
   loadBillingInfo().then(() => {
     if (JSON.stringify(billingInfo) !== before && document.getElementById('plans-modal')?.classList.contains('active')) renderPlansModalBody();
   }).catch(() => {});
+  // เพิ่งเปิดแอพ ยังไม่ได้สถานะการสมัคร: โหลดก่อนแล้ววาดใหม่ (ไม่งั้นจะโชว์ปุ่มซื้อให้คนที่สมัครอยู่แล้ว)
+  if (typeof hostedMe !== 'undefined' && !hostedMe && typeof readHostedSession === 'function' && readHostedSession()) {
+    plansMeLoadFailed = false;
+    fetchHostedMe().catch(() => { plansMeLoadFailed = true; }).then(() => {
+      if (document.getElementById('plans-modal')?.classList.contains('active')) renderPlansModalBody();
+    });
+  }
   // เคยชำระเงินแล้ว: ดึงสถานะการสมัครล่าสุดจาก Stripe (เช่นยกเลิก/เปลี่ยนแพ็กเกจจากที่อื่น)
   if (billingAvailable() && typeof hostedMe !== 'undefined' && hostedMe?.billing?.hasCustomer) {
     const beforeMe = JSON.stringify(hostedMe.billing);
@@ -352,6 +360,8 @@ function billingIsTestMode() {
   return billingInfo ? billingInfo.testMode === true : (typeof HOSTED !== 'undefined' && HOSTED.billingTestMode);
 }
 
+let plansMeLoadFailed = false;
+
 /** ส่วนสมัครแพ็กเกจใต้ตาราง: ผู้เยี่ยมชมต้องเข้าสู่ระบบก่อน / สมัครรายเดือนอยู่แล้วมีปุ่มจัดการการสมัคร */
 function buildPurchaseHtml(ent) {
   if (ent.tier === 'unlimited') return '';
@@ -404,6 +414,17 @@ function buildPurchaseHtml(ent) {
       <div id="billing-msg" class="hint" aria-live="polite"></div>
     </div>`;
   }
+  // ระดับที่จ่ายเงินอยู่แล้วแต่ไม่ได้มาจากบัตร/PromptPay
+  const paidTier = PAID_PLAN_IDS.includes(ent.tier);
+  if (paidTier && !b.source) {
+    // ยังโหลดสถานะจากเซิร์ฟเวอร์ไม่เสร็จ (เช่นเพิ่งรีเฟรชหน้า): ไม่โชว์ปุ่มซื้อก่อน กันซื้อซ้อน
+    return `<div class="plan-buy"><div class="plan-buy-head"><b>สิทธิ์ของคุณ</b>${testBadge}</div>
+      <div class="plan-sub-status">${plansMeLoadFailed
+        ? `${escapeHtml(PLAN_DEFAULTS[ent.tier].name)} · โหลดสถานะการสมัครไม่ได้ (ต่ออินเทอร์เน็ตไม่ได้หรือเซิร์ฟเวอร์ไม่ตอบ) ปิดแล้วเปิดหน้านี้ใหม่อีกครั้ง`
+        : '<span class="spinner-icon"></span> กำลังโหลดสถานะการสมัคร...'}</div></div>`;
+  }
+  // ผู้ดูแลระบบให้สิทธิ์ (ตั้งในฐานข้อมูล): บอกสถานะ ซื้อได้เฉพาะระดับที่สูงกว่า
+  const higherOnly = paidTier && b.source === 'manual' ? PAID_PLAN_IDS.slice(PAID_PLAN_IDS.indexOf(ent.tier) + 1) : null;
   const card = (plan) => {
     const name = PLAN_DEFAULTS[plan].name;
     const monthly = planPrice(plan);
@@ -418,6 +439,14 @@ function buildPurchaseHtml(ent) {
       <button class="btn btn-sm" onclick="startCheckout('${plan}', 'card')">สมัครรายเดือนด้วยบัตร</button>
     </div>`;
   };
+  if (higherOnly) {
+    return `<div class="plan-buy">
+      <div class="plan-buy-head"><b>สิทธิ์ของคุณ</b>${testBadge}</div>
+      <div class="plan-sub-status">${escapeHtml(PLAN_DEFAULTS[ent.tier].name)} · ได้รับสิทธิ์จากผู้ดูแลระบบ ไม่ต้องต่ออายุ</div>
+      ${higherOnly.length ? `<div class="plan-buy-grid">${higherOnly.map(card).join('')}</div>` : '<p class="hint">เป็นระดับสูงสุดแล้ว ไม่ต้องสมัครเพิ่ม</p>'}
+      <div id="billing-msg" class="hint" aria-live="polite"></div>
+    </div>`;
+  }
   return `<div class="plan-buy">
     <div class="plan-buy-head"><b>สมัครแพ็กเกจ</b>${testBadge}</div>
     ${status ? `<div class="hint">${status}</div>` : ''}

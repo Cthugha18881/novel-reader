@@ -1156,7 +1156,28 @@
         HOSTED.listPrices = orig;
       }
     });
-    test('errorFromStatus: dusktaleใช้ข้อความของเซิร์ฟเวอร์ ไม่พูดถึง API Key/เติมเครดิต', () => {
+    test('buildPurchaseHtml: สิทธิ์จากผู้ดูแล = ไม่มีปุ่มซื้อระดับเดิม/ต่ำกว่า / ยังไม่ได้สถานะ = กำลังโหลด / สมาชิกฟรี = ซื้อได้ทุกระดับ', () => {
+      const origMe = hostedMe, origInfo = billingInfo;
+      if (typeof isHostedConfigured !== 'function' || !isHostedConfigured()) return true;
+      try {
+        billingInfo = { enabled: true, testMode: true, plans: {}, at: Date.now() };
+        hostedMe = { billing: { source: 'manual' } };
+        const max = buildPurchaseHtml({ tier: 'max' });
+        const pro = buildPurchaseHtml({ tier: 'pro' });
+        hostedMe = null;
+        const loading = buildPurchaseHtml({ tier: 'max' });
+        hostedMe = { billing: { source: 'free' } };
+        const free = buildPurchaseHtml({ tier: 'free' });
+        const buys = (h) => (h.match(/startCheckout\('(\w+)', 'promptpay'\)/g) || []).length;
+        return buys(max) === 0 && max.includes('ผู้ดูแลระบบ') && max.includes('ระดับสูงสุด') &&
+          buys(pro) === 1 && pro.includes("startCheckout('max', 'promptpay')") &&
+          buys(loading) === 0 && loading.includes('กำลังโหลดสถานะ') && buys(free) === 3;
+      } finally {
+        hostedMe = origMe;
+        billingInfo = origInfo;
+      }
+    });
+    test('errorFromStatus: dusktale ใช้ข้อความของเซิร์ฟเวอร์ ไม่พูดถึง API Key/เติมเครดิต', () => {
       const q = errorFromStatus(402, 'โควตาแปลของเดือนนี้หมดแล้ว', 'dusktale');
       const a = errorFromStatus(401, 'x', 'dusktale');
       const byok = errorFromStatus(402, 'x');

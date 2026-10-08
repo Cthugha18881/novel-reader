@@ -1190,6 +1190,9 @@ input.chap-chk, input.gloss-item-chk { width: 24px; height: 24px; }
 .plan-buy-card .btn { width: 100%; min-height: 38px; }
 .plan-buy-name { font-weight: 600; }
 .plan-buy-price { font-size: 18px; color: var(--accent-text); margin-left: 4px; }
+.plans-table tr.plans-row-byok th { color: var(--warning); font-weight: 600; }
+.plans-table tr.plans-row-byok td, .plans-table tr.plans-row-byok th { background-image: linear-gradient(var(--warning-soft), var(--warning-soft)); }
+.plans-byok-note { font-size: 12px; line-height: 1.6; color: var(--warning); background: var(--warning-soft); border-radius: var(--radius-sm); padding: 6px 10px; margin: 0 0 12px; }
 .plan-price-old { color: var(--text-muted); font-weight: 400; font-size: 0.82em; text-decoration-thickness: 1.5px; }
 .plan-price-now { font-weight: 700; color: var(--accent-text); white-space: nowrap; }
 .plan-off-badge { display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 999px; background: var(--danger-soft); color: var(--danger); vertical-align: middle; white-space: nowrap; }
