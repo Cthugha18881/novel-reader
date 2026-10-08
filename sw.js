@@ -1,6 +1,6 @@
-// Service worker: เธ—เธณเนเธซเนเน€เธเธดเธ”เนเธญเธเนเธฅเธฐเธญเนเธฒเธเธ•เธญเธเธ—เธตเนเธเธฑเธเธ—เธถเธเนเธงเนเนเธ”เนเนเธกเนเธญเธญเธเนเธฅเธเน
-// เนเธเธฅเนเธเธญเธเนเธญเธเนเธเน network-first (เธญเธญเธเนเธฅเธเนเนเธ”เนเน€เธงเธญเธฃเนเธเธฑเธเธฅเนเธฒเธชเธธเธ”เน€เธชเธกเธญ) เธชเนเธงเธเธเธญเธเธ•เน/เนเธฅเธเธฃเธฒเธฃเธตเธเธฒเธ CDN เนเธเน cache-first
-// เธเธณเธเธญเนเธเธขเธฑเธ AI เนเธฅเธฐ r.jina.ai เธเธฐเนเธกเนเธ–เธนเธเนเธ•เธฐเธ•เนเธญเธเน€เธฅเธข
+// Service worker: ทำให้เปิดแอพและอ่านตอนที่บันทึกไว้ได้แม้ออฟไลน์
+// ไฟล์ของแอพใช้ network-first (ออนไลน์ได้เวอร์ชันล่าสุดเสมอ) ส่วนฟอนต์/ไลบรารีจาก CDN ใช้ cache-first
+// คำขอไปยัง AI และ r.jina.ai จะไม่ถูกแตะต้องเลย
 const CACHE_NAME = 'noveltranslate-v3.22.1';
 const APP_SHELL = [
   './',
@@ -55,7 +55,7 @@ const APP_SHELL = [
 const CACHEABLE_CDN_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', (event) => {
-  // cache: 'reload' = เนเธซเธฅเธ”เธเธฒเธเน€เธเธดเธฃเนเธเน€เธงเธญเธฃเนเธเธฃเธดเธ เนเธกเนเน€เธญเธฒเนเธเธฅเนเธฃเธธเนเธเน€เธเนเธฒเธเธฒเธ HTTP cache เธกเธฒเนเธชเน cache เธฃเธธเนเธเนเธซเธกเน
+  // cache: 'reload' = โหลดจากเซิร์ฟเวอร์จริง ไม่เอาไฟล์รุ่นเก่าจาก HTTP cache มาใส่ cache รุ่นใหม่
   event.waitUntil(caches.open(CACHE_NAME)
     .then(cache => cache.addAll(APP_SHELL.map(url => new Request(url, { cache: 'reload' }))))
     .then(() => self.skipWaiting()));
@@ -72,8 +72,8 @@ self.addEventListener('activate', (event) => {
 async function networkFirst(request) {
   const cache = await caches.open(CACHE_NAME);
   try {
-    // cache: 'no-cache' = เธ–เธฒเธกเน€เธเธดเธฃเนเธเน€เธงเธญเธฃเนเธ—เธธเธเธเธฃเธฑเนเธเธงเนเธฒเนเธเธฅเนเน€เธเธฅเธตเนเธขเธเนเธซเธก (เธ–เนเธฒเนเธกเนเน€เธเธฅเธตเนเธขเธเนเธ”เน 304 เน€เธฃเนเธง)
-    // เนเธกเนเธเธฑเนเธเน€เธเธฃเธฒเธงเนเน€เธเธญเธฃเนเธญเธฒเธเนเธเนเนเธเธฅเนเน€เธเนเธฒเธเธฒเธ HTTP cache (GitHub Pages เนเธซเนเน€เธเนเธ 10 เธเธฒเธ—เธต) เธ—เธณเนเธซเนเนเธเธฅเนเน€เธเนเธฒ/เนเธซเธกเนเธเธเธเธฑเธเธซเธฅเธฑเธเธญเธฑเธเน€เธ”เธ•
+    // cache: 'no-cache' = ถามเซิร์ฟเวอร์ทุกครั้งว่าไฟล์เปลี่ยนไหม (ถ้าไม่เปลี่ยนได้ 304 เร็ว)
+    // ไม่งั้นเบราว์เซอร์อาจใช้ไฟล์เก่าจาก HTTP cache (GitHub Pages ให้เก็บ 10 นาที) ทำให้ไฟล์เก่า/ใหม่ปนกันหลังอัปเดต
     const response = request.mode === 'navigate'
       ? await fetch(request.url, { cache: 'no-cache', credentials: 'same-origin' })
       : await fetch(request, { cache: 'no-cache' });
@@ -95,7 +95,7 @@ async function cacheFirst(request) {
   const cached = await cache.match(request);
   if (cached) return cached;
   const response = await fetch(request);
-  // เน€เธเนเธเน€เธเธเธฒเธฐเธเธณเธ•เธญเธเธ—เธตเนเธชเธณเน€เธฃเนเธ เนเธกเนเน€เธเนเธเนเธเธ opaque (Chrome เธเธดเธ”เธเธทเนเธเธ—เธตเนเธเธญเธ opaque เน€เธเธดเธเธเธฃเธดเธเธกเธฒเธ เนเธฅเธฐเธญเธฒเธเน€เธเนเธเธซเธเนเธฒเธ—เธตเนเธเธดเธ”เธเธฅเธฒเธ”)
+  // เก็บเฉพาะคำตอบที่สำเร็จ ไม่เก็บแบบ opaque (Chrome คิดพื้นที่ของ opaque เกินจริงมาก และอาจเป็นหน้าที่ผิดพลาด)
   if (response.ok) cache.put(request, response.clone());
   return response;
 }
@@ -106,7 +106,7 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin === self.location.origin) {
     if (url.pathname.includes('/tests/')) return;
-    // เนเธเธฅเนเน€เธเธฅเธเธเธฃเธฐเธเธญเธ: เน€เธเธฃเธฒเธงเนเน€เธเธญเธฃเนเธเธญเน€เธเนเธเธเนเธงเธ (Range/206) เธเธถเนเธเน€เธเนเธเธฅเธ cache เนเธกเนเนเธ”เน เนเธซเนเน€เธเธฃเธฒเธงเนเน€เธเธญเธฃเนเธเธฑเธ”เธเธฒเธฃเน€เธญเธ
+    // ไฟล์เพลงประกอบ: เบราว์เซอร์ขอเป็นช่วง (Range/206) ซึ่งเก็บลง cache ไม่ได้ ให้เบราว์เซอร์จัดการเอง
     if (url.pathname.includes('/audio/')) return;
     event.respondWith(networkFirst(request));
   } else if (CACHEABLE_CDN_HOSTS.includes(url.hostname)) {
