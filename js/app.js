@@ -467,12 +467,33 @@ function scrollToParagraph(chapIdx, paraIdx) {
   return true;
 }
 
+/** ย่อหน้าบนสุดที่เห็นอยู่ + ระยะจากขอบบนจอ (ใช้กลับมาที่เดิมหลังวาดหน้าใหม่) */
+function captureReadingAnchor() {
+  const pos = findTopVisibleParagraph();
+  const el = pos ? document.getElementById(`para-box-${pos.chapIdx}-${pos.paraIdx}`) : null;
+  return el ? { ...pos, top: el.getBoundingClientRect().top } : null;
+}
+
+function restoreReadingAnchor(pos) {
+  const el = document.getElementById(`para-box-${pos.chapIdx}-${pos.paraIdx}`);
+  if (!el) return false;
+  const diff = el.getBoundingClientRect().top - pos.top;
+  if (Math.abs(diff) > 1) window.scrollBy(0, diff);
+  return true;
+}
+
 // targetParaIdx: กลับไปย่อหน้าที่อ่านค้างไว้ (ใช้ตอนเปิดเรื่องเดิมต่อ)
 async function renderVirtualWindow(targetIdx, scrollToTop = false, targetParaIdx = null) {
   const requestVersion = ++renderRequestVersion;
   const isInfinite = localStorage.getItem('nov_enable_infinite') !== 'false';
   const container = document.getElementById('reading-content');
   container.style.fontSize = currentFontSize + 'px';
+
+  // วาดใหม่ในที่เดิม (เช่นแปลล่วงหน้าเสร็จ ซิงก์ แก้คำศัพท์): จำย่อหน้าที่อ่านอยู่และตำแหน่งบนจอ แล้วกลับมาที่เดิมหลังวาด
+  // ไม่อย่างนั้นถ้าชุดตอนที่แสดงเปลี่ยน (เช่นตอนบนสุดถูกเอาออก) หน้าจะกระโดดไปตอนอื่น
+  const keepPos = !scrollToTop && targetParaIdx == null && renderedWindowIndices.length && currentBookId !== 'default_novel'
+    ? captureReadingAnchor() : null;
+  if (keepPos && targetIdx === currentChapterIndex && chapters[keepPos.chapIdx]) targetIdx = keepPos.chapIdx;
 
   currentChapterIndex = Math.max(0, Math.min(targetIdx, chapters.length - 1));
   const curChap = chapters[currentChapterIndex];
@@ -504,7 +525,8 @@ async function renderVirtualWindow(targetIdx, scrollToTop = false, targetParaIdx
     container.innerHTML = buildChapterBlockHtml(curChap, currentChapterIndex, activeTerms);
     document.getElementById('manual-chap-nav').style.display = 'flex';
     updateInfiniteStatusBanner('', false);
-    if (!(targetParaIdx > 0 && scrollToParagraph(currentChapterIndex, targetParaIdx)) && scrollToTop) {
+    if (keepPos) restoreReadingAnchor(keepPos);
+    else if (!(targetParaIdx > 0 && scrollToParagraph(currentChapterIndex, targetParaIdx)) && scrollToTop) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
     saveReadingPointer(currentChapterIndex);
@@ -529,7 +551,9 @@ async function renderVirtualWindow(targetIdx, scrollToTop = false, targetParaIdx
   lastWindowRenderAt = Date.now();
   setupChapterIntersectionObserver();
 
-  if (targetParaIdx > 0 && scrollToParagraph(currentChapterIndex, targetParaIdx)) {
+  if (keepPos) {
+    restoreReadingAnchor(keepPos);
+  } else if (targetParaIdx > 0 && scrollToParagraph(currentChapterIndex, targetParaIdx)) {
     // อยู่ที่ย่อหน้าที่อ่านค้างแล้ว
   } else if (scrollToTop) {
     const targetEl = document.getElementById(`chapter-block-${currentChapterIndex}`);
