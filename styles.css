@@ -1231,4 +1231,6 @@ body.no-book .toc-btn { display: none !important; }
 .toc-empty { padding: 24px 8px; text-align: center; color: var(--text-muted); font-size: 13px; }.chaplist-actions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
 .chaplist-actions:empty { display: none; }
 .chaplist-batch { margin: 0 0 10px; }
-.chaplist-batch:empty { display: none; }
+.chaplist-batch:empty { display: none; }.toc-row { display: flex; align-items: center; gap: 4px; }
+.toc-row .toc-item { flex: 1; min-width: 0; }
+.toc-more { flex-shrink: 0; width: 40px; min-height: 40px; padding: 0; justify-content: center; }

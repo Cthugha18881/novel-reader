@@ -944,8 +944,9 @@ function renderChapterListModal() {
       isPendingChapter(c) ? '<span class="toc-tag">รอแปล</span>' : '',
       c.blockInfo ? '<span class="toc-tag toc-tag-warn">ถูกบล็อก</span>' : ''
     ].join('');
-    return `<button type="button" role="listitem" class="toc-item${isCur ? ' current' : ''}${isPendingChapter(c) ? ' pending' : ''}" onclick="jumpToChapterFromToc(${idx})"${isCur ? ' aria-current="true"' : ''}>
-      <span class="toc-num">${idx + 1}</span><span class="toc-title">${escapeHtml(c.title || `ตอนที่ ${idx + 1}`)}</span>${tags}</button>`;
+    return `<div class="toc-row" role="listitem"><button type="button" class="toc-item${isCur ? ' current' : ''}${isPendingChapter(c) ? ' pending' : ''}" onclick="jumpToChapterFromToc(${idx})"${isCur ? ' aria-current="true"' : ''}>
+      <span class="toc-num">${idx + 1}</span><span class="toc-title">${escapeHtml(c.title || `ตอนที่ ${idx + 1}`)}</span>${tags}</button>
+      <button type="button" class="btn toc-more" onclick="openTocChapterMenu(this, ${idx})" title="เมนูของตอนนี้: อ่าน แปลใหม่ เปลี่ยนประเภทตอน" aria-label="เมนูของตอนนี้">⋯</button></div>`;
   }).join('');
 }
 
@@ -1010,4 +1011,19 @@ function refreshChapterListModalIfOpen(bookId) {
   renderChapterListModal();
   if (list) list.scrollTop = keep;
   renderChapterListActions();
+}
+
+/** ⋯ ท้ายแต่ละตอนในหน้าต่างสารบัญ (เหมือนเมนูตอนในหน้ารายละเอียดเรื่อง) */
+function openTocChapterMenu(anchor, idx) {
+  const chap = chapters[idx];
+  if (!chap) return;
+  const bookId = currentBookId;
+  const pending = isPendingChapter(chap);
+  const refresh = () => refreshChapterListModalIfOpen(bookId);
+  openActionMenu(anchor, [
+    { icon: '📖', label: 'อ่านตอนนี้', onSelect: () => jumpToChapterFromToc(idx) },
+    { icon: '🔄', label: pending ? 'แปลตอนนี้' : 'แปลตอนนี้ใหม่', hint: 'ใช้โควตา AI · ถามก่อนเริ่ม', onSelect: async () => { await retranslateSpecificChapterDirect(chap.id); refresh(); } },
+    { icon: '🏷️', label: 'เปลี่ยนประเภทตอน', hint: CHAPTER_TYPE_LABELS[chap.chapterType || 'story'], hidden: pending, onSelect: async () => { await chooseChapterType(bookId, chap); refresh(); } },
+    { icon: '🕘', label: 'ประวัติคำแปล', hidden: !chap.hasVersions, onSelect: () => { closeModal('chaplist-modal'); openVersionHistory(chap.id); } }
+  ], { title: chap.title });
 }
