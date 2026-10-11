@@ -93,6 +93,7 @@ function renderBatchProgress(bookId) {
     el.innerHTML = batchProgressHtml(bookId, { compact: el.dataset.compact === '1' });
     el.closest('.home-card')?.classList.toggle('is-batching', !!getBatchStatus(bookId) && ['running', 'queued'].includes(getBatchStatus(bookId).kind));
   });
+  if (typeof refreshChapterListModalIfOpen === 'function') refreshChapterListModalIfOpen(bookId);
 }
 
 // ---------- Token estimate ----------

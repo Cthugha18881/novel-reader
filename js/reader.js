@@ -892,6 +892,13 @@ function openChapterListModal() {
   const search = document.getElementById('chaplist-search');
   if (search) search.value = '';
   document.getElementById('chaplist-book-title').textContent = currentBookTitle ? `· ${currentBookTitle}` : '';
+  // กล่องความคืบหน้าแปลล่วงหน้า (อัปเดตเองจาก renderBatchProgress ใน shelf.js เหมือนหน้ารายละเอียดเรื่อง)
+  const batchBox = document.getElementById('chaplist-batch');
+  if (batchBox) {
+    batchBox.dataset.batchFor = currentBookId;
+    batchBox.innerHTML = typeof batchProgressHtml === 'function' ? batchProgressHtml(currentBookId) : '';
+  }
+  renderChapterListActions();
   renderChapterListModal();
   openModal('chaplist-modal');
   // เลื่อนรายการให้ตอนที่อ่านอยู่อยู่กลางกล่อง
@@ -953,4 +960,54 @@ async function jumpToChapterFromToc(idx) {
   if (!chapters[idx]) return;
   document.getElementById('prefetch-badge').style.display = 'none';
   await renderVirtualWindow(idx, true);
+}
+
+// ---------- คำสั่งของเรื่องในหน้าต่างสารบัญ (เหมือนหน้ารายละเอียดเรื่อง ยกเว้นปก/ลบเรื่อง) ----------
+async function renderChapterListActions() {
+  const box = document.getElementById('chaplist-actions');
+  if (!box || typeof currentBookId === 'undefined') return;
+  const bookId = currentBookId;
+  const book = (await dbGetAllBooks()).find(b => b.bookId === bookId);
+  if (!book || bookId !== currentBookId) return;
+  const id = jsArg(bookId);
+  const status = typeof getBatchStatus === 'function' ? getBatchStatus(bookId) : null;
+  const running = status && ['running', 'queued'].includes(status.kind);
+  const followed = typeof isBookFollowed === 'function' && isBookFollowed(book);
+  box.innerHTML = `
+    ${running ? '' : `<button class="btn btn-sm" onclick="chooseBatchCount(${id})" title="แปลล่วงหน้าหลายตอน (ใช้โควตา AI บอกจำนวน token ก่อนเริ่ม)">⚡ แปลล่วงหน้า</button>`}
+    <button class="btn btn-sm" onclick="checkNewChaptersForBook(${id})" title="เช็กว่าเว็บต้นฉบับมีตอนใหม่หรือยัง (ไม่ใช้โควตา AI)">🔎 เช็กตอนใหม่</button>
+    <button class="btn btn-sm${followed ? ' btn-primary' : ''}" onclick="chapterListToggleFollow(${id}, ${!followed})" aria-pressed="${followed}" title="เช็กตอนใหม่ให้เองทุก 30 นาทีระหว่างเปิดแอพ (Pro ขึ้นไป)">${followed ? '🔔 ติดตามอยู่' : '🔔 ติดตาม'}</button>
+    <button class="btn btn-sm" onclick="openChapterListBookMenu(this, ${id})" title="คำสั่งอื่นของเรื่องนี้" aria-label="คำสั่งอื่นของเรื่องนี้">⋯ เพิ่มเติม</button>`;
+}
+
+async function chapterListToggleFollow(bookId, on) {
+  await setBookFollow(bookId, on);
+  renderChapterListActions();
+}
+
+/** คำสั่งที่เปิดหน้าต่างอื่น: ปิดสารบัญก่อน (หน้าต่างพวกนั้นอยู่ชั้นล่างกว่า) */
+function openChapterListBookMenu(anchor, bookId) {
+  const fakeEvent = { stopPropagation() {} };
+  const thenClose = (fn) => () => { closeModal('chaplist-modal'); fn(); };
+  openActionMenu(anchor, [
+    { icon: '✎', label: 'แก้ชื่อเรื่อง', onSelect: thenClose(() => renameBook(bookId)) },
+    { icon: '🏷️', label: 'แนวเรื่อง / ภาษาต้นฉบับ', onSelect: thenClose(() => openGenrePickerModal(fakeEvent, bookId)) },
+    { icon: '🔗', label: 'แก้ URL ตอนถัดไป', onSelect: thenClose(() => fixBookNextUrl(bookId)) },
+    { icon: '🧭', label: 'ตั้งลิงก์หน้าสารบัญของเว็บ', hint: 'หาตอนถัดไปแม่นขึ้น เรียงตอน เติมตอนที่ขาด', onSelect: thenClose(() => openTocModal(fakeEvent, bookId)) },
+    { icon: '📋', label: 'รายงานคุณภาพ', hint: 'ไม่ใช้โควตา AI', onSelect: thenClose(() => openQualityReport(bookId)) },
+    { icon: '📚', label: 'หน้ารายละเอียดเรื่อง', hint: 'ย้าย/ลบตอน เปลี่ยนปก', onSelect: thenClose(() => openHome({ bookId })) },
+    { icon: '📄', label: 'ส่งออกทั้งเรื่องเป็น TXT', onSelect: () => exportBookTxt(bookId) },
+    { icon: '📘', label: 'ส่งออกทั้งเรื่องเป็น EPUB', onSelect: () => exportBookEpub(bookId) }
+  ], { title: currentBookTitle || 'นิยาย' });
+}
+
+/** แปลล่วงหน้าคืบหน้า/ได้ตอนใหม่: อัปเดตรายการตอนและปุ่มในหน้าต่างสารบัญที่เปิดอยู่ (คงตำแหน่งเลื่อน) */
+function refreshChapterListModalIfOpen(bookId) {
+  const modal = document.getElementById('chaplist-modal');
+  if (!modal?.classList.contains('active') || bookId !== currentBookId) return;
+  const list = document.getElementById('chaplist-list');
+  const keep = list ? list.scrollTop : 0;
+  renderChapterListModal();
+  if (list) list.scrollTop = keep;
+  renderChapterListActions();
 }
