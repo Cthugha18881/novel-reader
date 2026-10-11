@@ -1091,6 +1091,15 @@
         decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: true }) === 'apply' &&
         decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: false }) === 'keep';
     });
+    test('สารบัญลอย: ค้นเลขตอน เลขตรงพอดีขึ้นก่อน ค้นชื่อตอนได้', () => {
+      const list = Array.from({ length: 30 }, (_, i) => ({ title: `ตอนที่ ${i + 1} ทดสอบ` }));
+      const r5 = filterTocChapters(list, '5').map(x => x.c.title);
+      const named = filterTocChapters([{ title: 'บทนำ' }, { title: 'ตอนพิเศษ: วันหยุด' }], 'พิเศษ');
+      const noNum = filterTocChapters([{ title: 'บทนำ' }, { title: 'ปฐมบท' }], '2');
+      return r5[0] === 'ตอนที่ 5 ทดสอบ' && r5.includes('ตอนที่ 15 ทดสอบ') && r5.length === 3 &&
+        named.length === 1 && named[0].idx === 1 &&
+        noNum.length === 1 && noNum[0].idx === 1 && filterTocChapters(list, '').length === 30;
+    });
     test('sync: ลบยกชุดต้องถาม (ลบเรื่องเดียว/คำศัพท์ไม่กี่คำไม่ถาม)', () => {
       const all = ['b:default_novel', 'b:1', 'b:2', 'b:3', 'b:4', 'c:1', ...Array.from({ length: 30 }, (_, i) => `g:t${i}`)];
       const wipe = countSyncDeletions(all, all);

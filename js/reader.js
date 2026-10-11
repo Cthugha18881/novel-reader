@@ -880,3 +880,77 @@ function setupReader() {
     if (panel?.classList.contains('open') && !path.includes(panel) && !path.some(n => n.hasAttribute?.('data-reader-panel-toggle'))) toggleReaderPanel(false);
   });
 }
+
+
+// ==================== สารบัญแบบลอย (กระโดดไปตอนไหนก็ได้จากหน้าอ่าน) ====================
+function openChapterListModal() {
+  if (typeof currentBookId === 'undefined' || currentBookId === 'default_novel' || !chapters.length) {
+    appAlert('ยังไม่ได้เปิดนิยาย เปิดเรื่องจากชั้นหนังสือก่อน แล้วกด 📑 สารบัญ เพื่อเลือกตอน', { title: 'สารบัญ' });
+    return;
+  }
+  if (typeof homeOpen !== 'undefined' && homeOpen && typeof closeHome === 'function') closeHome();
+  const search = document.getElementById('chaplist-search');
+  if (search) search.value = '';
+  document.getElementById('chaplist-book-title').textContent = currentBookTitle ? `· ${currentBookTitle}` : '';
+  renderChapterListModal();
+  openModal('chaplist-modal');
+  // เลื่อนรายการให้ตอนที่อ่านอยู่อยู่กลางกล่อง
+  requestAnimationFrame(() => {
+    const cur = document.querySelector('#chaplist-list .toc-item.current');
+    const list = document.getElementById('chaplist-list');
+    if (cur && list) list.scrollTop = cur.offsetTop - list.clientHeight / 2 + cur.offsetHeight / 2;
+  });
+}
+
+/** รายการตอนที่ตรงกับคำค้น: ชื่อตอนมีคำนั้น หรือเลขตอนในชื่อ/ลำดับในแอพตรงกับตัวเลขที่พิมพ์ */
+function filterTocChapters(list, query) {
+  const q = String(query || '').trim().toLowerCase();
+  const all = list.map((c, idx) => ({ c, idx }));
+  if (!q) return all;
+  const num = /^\d+$/.test(q) ? Number(q) : null;
+  if (num === null) return all.filter(({ c }) => String(c.title || '').toLowerCase().includes(q));
+  // พิมพ์เลข: ตอนที่เลขตรงพอดีขึ้นก่อน (กด Enter ไปตอนนั้นเลย) ตามด้วยตอนที่ชื่อมีตัวเลขนั้นอยู่
+  const exactRe = new RegExp(`(^|\\D)${num}(\\D|$)`);
+  const exact = all.filter(({ c }) => exactRe.test(String(c.title || '')));
+  const byOrder = exact.length ? [] : all.filter(({ idx }) => idx + 1 === num);
+  const seen = new Set([...exact, ...byOrder].map(x => x.idx));
+  const partial = all.filter(({ c, idx }) => !seen.has(idx) && String(c.title || '').toLowerCase().includes(q));
+  return [...exact, ...byOrder, ...partial];
+}
+
+function renderChapterListModal() {
+  const box = document.getElementById('chaplist-list');
+  if (!box) return;
+  const query = document.getElementById('chaplist-search')?.value || '';
+  const items = filterTocChapters(chapters, query);
+  // ตอนที่อ่านอยู่จริง = ตอนของย่อหน้าบนสุดที่เห็นบนจอ (อ่านต่อเนื่องมีหลายตอนบนหน้าเดียว)
+  const seen = typeof findTopVisibleParagraph === 'function' ? findTopVisibleParagraph() : null;
+  const readingIdx = seen && chapters[seen.chapIdx] ? seen.chapIdx : currentChapterIndex;
+  if (!items.length) {
+    box.innerHTML = '<div class="toc-empty">ไม่พบตอนที่ตรงกับคำค้น</div>';
+    return;
+  }
+  box.innerHTML = items.map(({ c, idx }) => {
+    const isCur = idx === readingIdx;
+    const tags = [
+      isCur ? '<span class="toc-tag toc-tag-current">กำลังอ่าน</span>' : '',
+      isPendingChapter(c) ? '<span class="toc-tag">รอแปล</span>' : '',
+      c.blockInfo ? '<span class="toc-tag toc-tag-warn">ถูกบล็อก</span>' : ''
+    ].join('');
+    return `<button type="button" role="listitem" class="toc-item${isCur ? ' current' : ''}${isPendingChapter(c) ? ' pending' : ''}" onclick="jumpToChapterFromToc(${idx})"${isCur ? ' aria-current="true"' : ''}>
+      <span class="toc-num">${idx + 1}</span><span class="toc-title">${escapeHtml(c.title || `ตอนที่ ${idx + 1}`)}</span>${tags}</button>`;
+  }).join('');
+}
+
+function onTocSearchKey(e) {
+  if (e.key !== 'Enter') return;
+  const first = document.querySelector('#chaplist-list .toc-item');
+  if (first) { e.preventDefault(); first.click(); }
+}
+
+async function jumpToChapterFromToc(idx) {
+  closeModal('chaplist-modal');
+  if (!chapters[idx]) return;
+  document.getElementById('prefetch-badge').style.display = 'none';
+  await renderVirtualWindow(idx, true);
+}

@@ -6,7 +6,7 @@
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/hosted-config.js"></script>
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.24.5</title>
+  <title>Dusktale v3.25.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -46,6 +46,7 @@
       <div id="prefetch-badge">ตอนถัดไปพร้อม</div>
       <button class="btn hdr-secondary" id="install-app-btn" style="display: none;" onclick="promptInstallApp()" title="ติดตั้งเป็นแอพบนเครื่อง ใช้อ่านแบบออฟไลน์ได้">📲 ติดตั้งแอพ</button>
       <button class="btn hdr-secondary" data-home-toggle onclick="toggleHome()">📚 ชั้นหนังสือ</button>
+      <button class="btn hdr-secondary toc-btn" onclick="openChapterListModal()" title="สารบัญของเรื่องนี้: กระโดดไปตอนไหนก็ได้">📑 สารบัญ</button>
       <button class="btn hdr-secondary" onclick="openGlossaryModal()">คลังศัพท์</button>
       <button class="btn hdr-secondary" onclick="openBibleModal()" title="ตัวละคร สรรพนาม แนวทางสำนวน กฎแทนคำ และตัวอย่างสำนวนของเรื่องนี้">คู่มือเรื่อง</button>
       <button class="btn hdr-secondary" onclick="openSettingsModal()">ตั้งค่า</button>
@@ -142,7 +143,8 @@
 
   <!-- MOBILE BOTTOM DOCK -->
   <nav class="mobile-dock">
-    <button class="btn" data-home-toggle onclick="toggleHome()">📚 ชั้นหนังสือ</button>
+    <button class="btn" data-home-toggle onclick="toggleHome()" title="ชั้นหนังสือ" aria-label="ชั้นหนังสือ">📚</button>
+    <button class="btn dock-reading-only toc-btn" onclick="openChapterListModal()" title="สารบัญของเรื่องนี้" aria-label="สารบัญ">📑</button>
     <button class="btn dock-home-only" onclick="closeHome()">📖 กลับไปอ่าน</button>
     <button class="btn dock-reading-only" data-reader-panel-toggle onclick="toggleReaderPanel()" title="ตั้งค่าการอ่าน (ธีม ขนาด ฟอนต์)">Aa</button>
     <button class="btn dock-reading-only" onclick="openReaderTools('search')" title="ค้นหา / บุ๊กมาร์ก">🔎</button>
@@ -574,6 +576,18 @@
         <button class="btn" onclick="closeModal('site-profiles-modal')">ยกเลิก</button>
         <button class="btn btn-primary" onclick="saveSiteProfilesModal()">บันทึก</button>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL: สารบัญของเรื่องที่อ่านอยู่ (กระโดดไปตอนไหนก็ได้จากหน้าอ่าน) -->
+  <div class="modal-overlay" id="chaplist-modal" style="z-index: 70;">
+    <div class="modal-box toc-box">
+      <div class="modal-head">
+        <div class="modal-title">📑 สารบัญ <span id="chaplist-book-title" class="toc-book-title"></span></div>
+        <button class="modal-close" onclick="closeModal('chaplist-modal')" aria-label="ปิด">✕</button>
+      </div>
+      <input type="search" id="chaplist-search" class="form-input toc-search" placeholder="ค้นชื่อตอน หรือพิมพ์เลขตอน" aria-label="ค้นหาตอน" oninput="renderChapterListModal()" onkeydown="onTocSearchKey(event)">
+      <div id="chaplist-list" class="toc-list" role="list"></div>
     </div>
   </div>
 
