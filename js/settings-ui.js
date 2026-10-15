@@ -242,7 +242,8 @@ async function saveSettings() {
 
   lastPrefetchError = '';
   closeModal('settings-modal');
-  renderVirtualWindow(currentChapterIndex, true);
+  // วาดหน้าอ่านใหม่ตามค่าที่เปลี่ยน (เช่นอ่านต่อเนื่อง/ข้อความที่ซ่อน) แต่คงย่อหน้าที่อ่านอยู่ ไม่กระโดดไปต้นตอน
+  renderVirtualWindow(currentChapterIndex);
 
   renderSafetyBanner();
   const cfg = getActiveLlmConfig();
