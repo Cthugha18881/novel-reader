@@ -427,20 +427,21 @@ const HTML_NAV_MAX_MISSES = 2;
 /** หาตอนถัดไปจาก HTML ของหน้า คืน { url, html } (html ใช้ตรวจตอนที่ต้องซื้อต่อได้ ไม่ต้องดึงซ้ำ) */
 async function findNextViaHtml(url, signal, profile) {
   const host = hostOf(url);
-  if ((htmlNavMisses.get(host) || 0) >= HTML_NAV_MAX_MISSES) return { url: null, html: null };
+  // เว็บที่หาตอนถัดไปได้จากลิงก์ในหน้าเท่านั้น (nextMode 'link' เช่น webnovel) ไม่มีทางเดาอื่น: ไม่เลิกลองเมื่อพลาดหลายครั้ง
+  const linkOnly = profile?.nextMode === 'link';
+  if (!linkOnly && (htmlNavMisses.get(host) || 0) >= HTML_NAV_MAX_MISSES) return { url: null, html: null };
   try {
     let html;
-    try {
-      html = await fetchJinaHtml(url, signal, profile);
-    } catch (e) {
-      // เว็บขอตรวจบอทชั่วคราว: รอสักพักแล้วลองอีกครั้งเดียว (ไม่นับว่าเว็บนี้ไม่มีลิงก์ตอนถัดไป)
-      if (!isBotChallengeError(e)) throw e;
-      await sleepAbortable(5000, signal);
+    // เว็บขอตรวจบอทชั่วคราว: รอแล้วลองใหม่ (ไม่นับว่าเว็บนี้ไม่มีลิงก์ตอนถัดไป) เว็บแบบ link ลองได้มากกว่า
+    const waits = linkOnly ? [5000, 12000] : [5000];
+    for (let attempt = 0; ; attempt++) {
       try {
         html = await fetchJinaHtml(url, signal, profile);
-      } catch (e2) {
-        if (isBotChallengeError(e2)) return { url: null, html: null, blocked: true };
-        throw e2;
+        break;
+      } catch (e) {
+        if (!isBotChallengeError(e)) throw e;
+        if (attempt >= waits.length) return { url: null, html: null, blocked: true };
+        await sleepAbortable(waits[attempt], signal);
       }
     }
     const nav = findNextInHtml(new DOMParser().parseFromString(html, 'text/html'), url, profile);
@@ -746,6 +747,19 @@ async function scrapePageAttempt(url, signal, { bookId = null, allowAi = true } 
   if (tocNext) {
     page.nextUrl = tocNext;
     page.nextUrlSource = 'toc';
+  }
+  // เว็บที่ตั้งให้ใช้หน้าสารบัญหาตอนถัดไป (เช่น webnovel): ดึงสารบัญให้เอง ล้มเหลวก็หาจากหน้าตอนตามปกติ
+  if (!page.nextUrl && profile?.autoToc && typeof autoTocNextUrl === 'function') {
+    try {
+      const autoNext = await autoTocNextUrl(bookId, url, profile, signal);
+      if (autoNext) {
+        page.nextUrl = autoNext;
+        page.nextUrlSource = 'toc';
+      }
+    } catch (err) {
+      if (isAbortError(err)) throw err;
+      console.warn('auto toc failed:', err.message);
+    }
   }
   // เว็บที่เลขตอนเรียงใน URL (ตั้งในโปรไฟล์): เพิ่มเลขเลย ไม่ต้องเสียคำขอหาลิงก์จาก HTML
   if (!page.nextUrl && profile?.nextMode === 'increment') {

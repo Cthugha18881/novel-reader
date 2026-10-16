@@ -1091,6 +1091,26 @@
         decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: true }) === 'apply' &&
         decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: false }) === 'keep';
     });
+    test('webnovel: URL ตอนเดียวกันสองรูปแบบเทียบกันได้ + ลิงก์สารบัญจากลิงก์ตอน', () => {
+      const short = 'https://www.webnovel.com/book/36845737800834505/99163782659499199';
+      const long = 'https://www.webnovel.com/book/i-can-equip-infinitely_36845737800834505/chapter-9-misfortune-and-fortune_99163782659499199';
+      const entries = [{ url: long }, { url: 'https://www.webnovel.com/book/x_36845737800834505/chapter-10-y_99163780646224550' }];
+      const prof = { autoToc: 'https://www.webnovel.com/book/{book}/catalog' };
+      return tocUrlKey(short) === tocUrlKey(long) &&
+        tocUrlKey('https://www.webnovel.com/book/36845737800834505') !== tocUrlKey(short) &&
+        tocUrlKey('https://novel-site.test/a/1.html') === normalizeUrl('https://novel-site.test/a/1.html') &&
+        tocNextFromEntries(entries, short) === entries[1].url &&
+        autoTocUrlFor(prof, long) === 'https://www.webnovel.com/book/36845737800834505/catalog' &&
+        autoTocUrlFor(prof, short) === 'https://www.webnovel.com/book/36845737800834505/catalog' &&
+        autoTocUrlFor({}, short) === '';
+    });
+    test('สารบัญ: ล้างชื่อตอน และตัดกล่อง "ตอนล่าสุด" ที่ค้างหัวรายการ', () => {
+      const cleaned = cleanTocTitle('_10_**Chapter 9: Misfortune and Fortune**16 days ago');
+      const list = [{ title: 'Chapter 118: Latest' }, { title: 'Chapter 1: A' }, { title: 'Chapter 2: B' }, { title: 'Chapter 3: C' }];
+      const kept = [{ title: 'Chapter 1' }, { title: 'Chapter 2' }, { title: 'Chapter 3' }, { title: 'Chapter 4' }];
+      return cleaned === 'Chapter 9: Misfortune and Fortune' && cleanTocTitle('第5章 风起') === '第5章 风起' &&
+        dropStrayLeadingTocEntries(list)[0].title === 'Chapter 1: A' && dropStrayLeadingTocEntries(kept).length === 4;
+    });
     test('สารบัญลอย: ค้นเลขตอน เลขตรงพอดีขึ้นก่อน ค้นชื่อตอนได้', () => {
       const list = Array.from({ length: 30 }, (_, i) => ({ title: `ตอนที่ ${i + 1} ทดสอบ` }));
       const r5 = filterTocChapters(list, '5').map(x => x.c.title);

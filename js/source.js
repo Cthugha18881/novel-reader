@@ -30,7 +30,8 @@ const BUILTIN_SITE_PROFILES = [
   // webnovel: ให้ r.jina.ai อ่านเฉพาะเนื้อหา (ไม่งั้นได้ชื่อเรื่อง/ผู้แต่ง/กล่องของขวัญปนมา)
   // ลิงก์ตอนถัดไปไม่อยู่ในเนื้อหา แต่อยู่ใน <link rel="next"> ของ HTML ซึ่งระบบหาให้เอง (ใช้คำขอเพิ่ม 1 ครั้งต่อตอน)
   // ตอนที่ต้องซื้อ/อ่านต่อในแอพ: HTML มี "vipStatus":2 "price":15 และ "download Webnovel app to continue" ส่วน "isAuth":1 = ผู้อ่านมีสิทธิ์แล้ว
-  { host: 'webnovel.com', contentSelector: '', titleSelector: '', removeSelector: '', nextSelector: '', jinaTarget: '.cha-words', nextMode: 'link', lockPattern: '"vipStatus"\\s*:\\s*[1-9]|download Webnovel app to continue', unlockPattern: '"isAuth"\\s*:\\s*1' },
+  // รหัสตอนไม่เรียงกัน และหน้าเต็มมักติดระบบตรวจบอท จึงหาตอนถัดไปจากหน้าสารบัญ (catalog) ของเรื่องแทน (autoToc)
+  { host: 'webnovel.com', contentSelector: '', titleSelector: '', removeSelector: '', nextSelector: '', jinaTarget: '.cha-words', nextMode: 'link', autoToc: 'https://www.webnovel.com/book/{book}/catalog', lockPattern: '"vipStatus"\\s*:\\s*[1-9]|download Webnovel app to continue', unlockPattern: '"isAuth"\\s*:\\s*1' },
   // wtr-lab: เนื้อหาโหลดด้วย JavaScript และหน้าเว็บมี iframe โฆษณาที่ทำให้ r.jina.ai อ่านผิดหน้า จึงต้องระบุส่วนที่จะอ่าน
   { host: 'wtr-lab.com', contentSelector: '', titleSelector: '', removeSelector: '', nextSelector: '', jinaTarget: '.reader-container', jinaWait: '.chapter-wrap p', noCache: true, nextMode: 'increment' },
   // jjwxc (晋江): markdown ของ r.jina.ai ได้กรอบโฆษณาแทนหน้านิยาย เนื้อหาจริงอยู่ใน #paragraph_comment_content (ไม่มีปุ่ม/โน้ตผู้เขียนปน)
@@ -648,7 +649,37 @@ async function fetchTocEntries(tocUrl, { signal = null, onProgress = null } = {}
   // ลิงก์ซ้ำ (เช่นกล่อง "ตอนล่าสุด" ด้านบนหน้าแรก) เก็บตำแหน่งสุดท้าย ซึ่งเป็นรายการเต็มที่เรียงถูก
   let entries = dedupeKeepLast(all);
   if (looksDescending(entries)) entries.reverse();
-  return entries.map(e => ({ url: e.url, title: e.title }));
+  entries = dropStrayLeadingTocEntries(entries);
+  return entries.map(e => ({ url: e.url, title: cleanTocTitle(e.title) }));
+}
+
+/** ชื่อตอนจากหน้าสารบัญ: ตัดเลขลำดับ ตัวหนา markdown และ "16 days ago" ที่ติดมากับรายการ */
+function cleanTocTitle(title) {
+  const t = String(title || '')
+    .replace(/^_?\d+_\s*/, '')
+    .replace(/\*\*/g, '')
+    .replace(/\s*\d+\s+(?:seconds?|minutes?|mins?|hours?|days?|weeks?|months?|years?)\s+ago\s*$/i, '')
+    .trim();
+  return t || String(title || '').trim();
+}
+
+function tocTitleNumber(title) {
+  const m = /(?:chapter|ch\.?|ตอนที่|บทที่)\s*(\d+)|第\s*(\d+)\s*[章话話回]/i.exec(String(title || ''));
+  return m ? Number(m[1] || m[2]) : null;
+}
+
+/**
+ * กล่อง "ตอนล่าสุด" ด้านบนหน้าสารบัญที่ไม่ซ้ำกับรายการหลัก (เช่นสารบัญแสดงไม่ครบ) ค้างอยู่หัวรายการ
+ * ทำให้ตอนล่าสุดกลายเป็น "ก่อนตอนที่ 1" จึงตัดรายการหัวที่เลขตอนมากกว่ารายการถัดไปผิดปกติ
+ */
+function dropStrayLeadingTocEntries(entries) {
+  let out = entries;
+  for (let i = 0; i < 3 && out.length > 3; i++) {
+    const a = tocTitleNumber(out[0].title), b = tocTitleNumber(out[1].title);
+    if (a === null || b === null || a <= b + 5) break;
+    out = out.slice(1);
+  }
+  return out;
 }
 
 async function getBookToc(bookId) {
@@ -671,9 +702,51 @@ async function getTocNextUrl(bookId, currentUrl) {
   if (!bookId || !currentUrl) return null;
   const toc = await getBookToc(bookId);
   if (!toc?.entries?.length) return null;
-  const norm = normalizeUrl(currentUrl);
-  const idx = toc.entries.findIndex(e => normalizeUrl(e.url) === norm);
-  return idx >= 0 && idx + 1 < toc.entries.length ? toc.entries[idx + 1].url : null;
+  return tocNextFromEntries(toc.entries, currentUrl);
+}
+
+function tocNextFromEntries(entries, currentUrl) {
+  const key = tocUrlKey(currentUrl);
+  const idx = (entries || []).findIndex(e => tocUrlKey(e.url) === key);
+  return idx >= 0 && idx + 1 < entries.length ? entries[idx + 1].url : null;
+}
+
+/**
+ * กุญแจเทียบว่าเป็นตอนเดียวกันไหม: ปกติคือ URL ที่ทำให้เป็นมาตรฐานแล้ว
+ * webnovel ใช้รหัสตอน (ตัวเลขยาวท้าย URL) เพราะตอนเดียวกันมีทั้ง /book/123/456 และ /book/ชื่อเรื่อง_123/ชื่อตอน_456
+ */
+function tocUrlKey(url) {
+  const s = String(url || '');
+  const wn = /webnovel\.com\/book\/[^?#]*?(\d{15,})\/?(?:[?#]|$)/i.exec(s);
+  if (wn && /\/book\/[^/]+\/[^/?#]+/i.test(s)) return `webnovel:${wn[1]}`;
+  return normalizeUrl(s);
+}
+
+/** URL หน้าสารบัญของเรื่อง จากแม่แบบในโปรไฟล์เว็บ ({book} = รหัสเรื่องในลิงก์ตอน) */
+function autoTocUrlFor(profile, chapterUrl) {
+  if (!profile?.autoToc) return '';
+  const m = /\/book\/(?:[^/?#]*_)?(\d{10,})(?:[/?#]|$)/i.exec(String(chapterUrl || ''));
+  return m ? profile.autoToc.replace('{book}', m[1]) : '';
+}
+
+/**
+ * เว็บที่หาลิงก์ตอนถัดไปจากหน้าตอนไม่ได้ (เช่น webnovel: หน้าเต็มติดระบบตรวจบอท และรหัสตอนไม่เรียงกัน)
+ * แต่หน้าสารบัญเปิดได้: ดึงสารบัญให้เองแล้วหาตอนถัดไปจากสารบัญ
+ * มีสารบัญที่ผู้ใช้ตั้งเองอยู่แล้วไม่ทับ / ดึงใหม่ได้เมื่อหาตอนนี้ในสารบัญไม่เจอ (มีตอนใหม่) แต่ไม่ถี่กว่า 10 นาที
+ */
+async function autoTocNextUrl(bookId, chapterUrl, profile, signal = null) {
+  const tocUrl = autoTocUrlFor(profile, chapterUrl);
+  if (!tocUrl) return null;
+  const saved = bookId ? await getBookToc(bookId) : null;
+  if (saved && !saved.auto) return null;
+  if (saved?.entries?.length) {
+    const hit = tocNextFromEntries(saved.entries, chapterUrl);
+    if (hit || Date.now() - (saved.fetchedAt || 0) < 10 * 60000) return hit;
+  }
+  const entries = await fetchTocEntries(tocUrl, { signal });
+  if (entries.length < 3) return null;
+  if (bookId) await saveBookToc(bookId, { url: tocUrl, entries, fetchedAt: Date.now(), auto: true });
+  return tocNextFromEntries(entries, chapterUrl);
 }
 
 // ---------- Text / file import ----------

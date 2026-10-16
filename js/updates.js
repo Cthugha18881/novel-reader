@@ -34,10 +34,11 @@ async function checkBookForNewChapters(bookId, signal = null) {
     let entries = await fetchTocEntries(toc.url, { signal });
     if (toc.manualReverse) entries = entries.slice().reverse();
     if (entries.length < 3) throw new Error('ดึงสารบัญใหม่ไม่ได้ (หน้าสารบัญอาจเปลี่ยนไป)');
-    const have = new Set(chaps.map(c => normalizeUrl(c.sourceUrl)).filter(Boolean));
+    // เทียบด้วย tocUrlKey: ตอนเดียวกันอาจมีหลายรูปแบบ URL (เช่น webnovel มี/ไม่มีชื่อตอนใน URL)
+    const have = new Set(chaps.map(c => c.sourceUrl && tocUrlKey(c.sourceUrl)).filter(Boolean));
     // ตอนใหม่ = ตอนที่อยู่หลังตอนสุดท้ายในสารบัญที่มีในชั้นหนังสือแล้ว (ตอนเก่าที่ข้ามไปไม่นับเป็นตอนใหม่)
     let lastHave = -1;
-    entries.forEach((e, i) => { if (have.has(normalizeUrl(e.url))) lastHave = i; });
+    entries.forEach((e, i) => { if (have.has(tocUrlKey(e.url))) lastHave = i; });
     const fresh = entries.slice(lastHave + 1);
     await saveBookToc(bookId, { ...toc, entries, fetchedAt: Date.now() });
     return { mode: 'toc', count: fresh.length, fresh };
