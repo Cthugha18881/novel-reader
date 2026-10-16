@@ -1091,6 +1091,15 @@
         decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: true }) === 'apply' &&
         decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: false }) === 'keep';
     });
+    test('ตรวจเนื้อหา: หน้าโฆษณาคั่น/รอโหลด และเลขตอนของตอนที่บันทึกไว้', () => {
+      const real = 'He walked into the hall. '.repeat(80);
+      return looksLikeInterstitial('Loading... please wait') && looksLikeInterstitial('') &&
+        !looksLikeInterstitial(real) && isAdWallPage('Advertisement. Continue to site') &&
+        !isAdWallPage('สั้นแต่เป็นข้อความผู้เขียน ขอบคุณที่ติดตามครับ') && !isAdWallPage(real + ' advertisement') &&
+        storedChapterNumber({ paragraphs: [{ src: 'Chapter 41: Rain' }], title: 'ตอนที่ 99' }) === 41 &&
+        storedChapterNumber({ paragraphs: [{ src: 'He ran.' }], title: 'ตอนที่ 12 ฝนตก' }) === 12 &&
+        storedChapterNumber({ paragraphs: [{ src: 'Please vote!' }], title: 'ขอคะแนนโหวต' }) === null;
+    });
     test('webnovel: URL ตอนเดียวกันสองรูปแบบเทียบกันได้ + ลิงก์สารบัญจากลิงก์ตอน', () => {
       const short = 'https://www.webnovel.com/book/36845737800834505/99163782659499199';
       const long = 'https://www.webnovel.com/book/i-can-equip-infinitely_36845737800834505/chapter-9-misfortune-and-fortune_99163782659499199';

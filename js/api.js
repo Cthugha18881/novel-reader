@@ -580,7 +580,7 @@ async function scrapePage(url, signal = null, options = {}) {
 }
 
 // ---------- ตรวจเนื้อหาที่ดึงมาก่อนส่งไปแปล (ไม่เสีย token กับหน้าที่ผิด) ----------
-/** ปัญหาของเนื้อหาจากเว็บ (ไม่ใช่ของ AI): kind 'scrambled' | 'mismatch' | 'duplicate' */
+/** ปัญหาของเนื้อหาจากเว็บ (ไม่ใช่ของ AI): kind 'scrambled' | 'mismatch' | 'duplicate' | 'interstitial' */
 class SourceContentError extends Error {
   constructor(message, kind) {
     super(message);
@@ -651,6 +651,45 @@ function chapterNumberFromContent(text, title = '') {
   return null;
 }
 
+/** เลขตอนของตอนที่บันทึกไว้แล้ว: หัวตอนในต้นฉบับก่อน แล้วค่อยชื่อตอน (ชื่อที่แปลแล้วอาจเป็น "ตอนที่ 12") */
+function storedChapterNumber(chap) {
+  const src = (chap?.paragraphs || []).slice(0, 5).map(p => p.src || '').join('\n');
+  const fromSrc = chapterNumberFromContent(src, '');
+  if (fromSrc !== null) return fromSrc;
+  const m = String(chap?.title || '').match(/(?:ตอนที่|บทที่|chapter)\s*(\d+)/i);
+  return m ? parseInt(m[1], 10) : chapterNumberFromContent('', chap?.title || '');
+}
+
+/**
+ * เลขตอนที่ควรได้ จากตอนก่อนหน้าที่ชี้มาที่ URL นี้ (ใช้กับเว็บที่ URL ไม่มีเลขตอน เช่นรหัสสุ่ม)
+ * null = ไม่รู้ (ไม่มีตอนก่อนหน้าที่ชี้มา หรือตอนก่อนหน้าไม่มีเลข เช่นประกาศ)
+ */
+async function expectedNumberFromPrevious(bookId, url) {
+  if (!bookId || typeof tocUrlKey !== 'function') return null;
+  const key = tocUrlKey(url);
+  const prev = (await dbGetChaptersByBook(bookId)).find(c => c.nextUrl && !isPendingChapter(c) && tocUrlKey(c.nextUrl) === key);
+  const n = prev ? storedChapterNumber(prev) : null;
+  return n !== null ? n + 1 : null;
+}
+
+/**
+ * หน้าที่ไม่ใช่เนื้อหาตอน: หน้าโฆษณาคั่น / หน้าที่ยังโหลดไม่เสร็จ / หน้า "กำลังโหลด"
+ * ดูเฉพาะหน้าที่สั้น เพื่อไม่ให้ตอนปกติที่บังเอิญมีคำพวกนี้ถูกนับผิด
+ */
+const INTERSTITIAL_PATTERN = /\b(advertisement|skip ad|close ad|continue to (the )?(site|chapter)|click here to continue|loading\.\.\.|please wait|enable javascript)\b|โฆษณา|กำลังโหลด|广告|加载中|请稍候|広告|読み込み中|광고|로딩/i;
+
+function looksLikeInterstitial(text) {
+  const t = String(text || '').trim();
+  if (t.length >= 1200) return false;
+  return t.length < 150 || INTERSTITIAL_PATTERN.test(t);
+}
+
+/** หน้าสั้นมากที่มีข้อความแบบหน้าโฆษณา/หน้ารอโหลดชัดเจน (ไม่ใช่แค่ตอนสั้น: ข้อความผู้เขียนสั้นๆ ยาวกว่านี้) */
+function isAdWallPage(text) {
+  const t = String(text || '').trim();
+  return t.length < 500 && INTERSTITIAL_PATTERN.test(t);
+}
+
 /** ความยาวต้นฉบับปกติของตอนในเรื่องนี้ (มัธยฐานของ 5 ตอนล่าสุด) 0 = ยังไม่มีข้อมูลพอ */
 async function typicalChapterLength(bookId) {
   if (!bookId) return 0;
@@ -685,13 +724,17 @@ function duplicateChapterError(dup) {
  * เว็บที่โหลดเนื้อหาด้วย JavaScript (เช่น wtr-lab) บางครั้ง r.jina.ai ส่งเนื้อหาของตอนอื่นหรือหน้าที่ยังโหลดไม่เสร็จมา
  */
 async function scrapePageInner(url, signal = null, options = {}) {
-  const expected = chapterNumberFromUrl(url);
+  // เลขตอนที่ควรได้: จาก URL ก่อน ไม่มีเลขใน URL (เช่นรหัสสุ่ม) ใช้ตอนก่อนหน้า + 1
+  const fromUrl = chapterNumberFromUrl(url);
+  const expected = fromUrl !== null ? fromUrl : await expectedNumberFromPrevious(options.bookId, url).catch(() => null);
   const typical = await typicalChapterLength(options.bookId).catch(() => 0);
   const numberOf = p => chapterNumberFromContent(p.text, p.rawChapTitle);
   const problemOf = (p) => {
     const got = numberOf(p);
     if (expected !== null && got !== null && got !== expected) return 'mismatch';
     if (typical >= 1500 && p.text.length < typical * 0.25) return 'short';
+    // หน้าโฆษณาคั่น / ยังโหลดไม่เสร็จ (ตรวจได้แม้ยังไม่มีตอนอื่นให้เทียบความยาว)
+    if (!p.lockInfo && looksLikeInterstitial(p.text)) return 'short';
     return null;
   };
   let page = await scrapePageAttempt(url, signal, options, false);
@@ -703,6 +746,10 @@ async function scrapePageInner(url, signal = null, options = {}) {
   // ดึงกี่ครั้งก็ได้เลขตอนเดิม = เว็บนี้ตั้งเลขใน URL ต่างจากเลขตอนเอง (เช่นนับบทนำเป็นตอนที่ 1) ใช้ได้ตามปกติ
   if (problemOf(page) === 'mismatch' && new Set(seenNumbers).size > 1) {
     throw new SourceContentError(`ขอตอนที่ ${expected} แต่เว็บส่งเนื้อหาตอนที่ ${numberOf(page)} มา (ลองดึงใหม่แล้ว ${seenNumbers.length} ครั้ง) จึงไม่แปลตอนนี้ เพื่อไม่ให้ลำดับตอนผิด ลองใหม่อีกครั้งภายหลัง`, 'mismatch');
+  }
+  // ลองใหม่แล้วยังได้หน้าโฆษณาคั่น/หน้ารอโหลด: ไม่ส่งไปแปล (ไม่เสีย token และไม่บันทึกหน้าโฆษณาเป็นตอน)
+  if (!page.lockInfo && isAdWallPage(page.text)) {
+    throw new SourceContentError('เว็บส่งหน้าโฆษณาหรือหน้าที่ยังโหลดไม่เสร็จมาแทนเนื้อหาตอน (ลองดึงใหม่แล้ว) จึงไม่แปลตอนนี้ ลองใหม่อีกครั้งภายหลัง หรือคัดลอกเนื้อหามาวางเอง', 'interstitial');
   }
   if (scrambledTextRatio(page.text) >= 0.2 || privateUseCharRatio(page.text) >= 0.02) {
     throw new SourceContentError('เว็บนี้เข้ารหัสเนื้อหาไว้กันการดึง (ตัวอักษรถูกสลับ อ่านได้เฉพาะในเบราว์เซอร์ของเว็บ) แอพอ่านไม่ได้ จึงไม่ได้ส่งไปแปลและไม่ใช้ token ลองหาเรื่องเดียวกันจากเว็บอื่น', 'scrambled');
