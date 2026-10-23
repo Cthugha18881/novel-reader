@@ -157,7 +157,7 @@ function setVersionKeep(value) {
 async function afterChapterRestored(chap) {
   await dbSaveChapter(chap);
   const mem = chapters.find(c => c.id === chap.id);
-  if (mem && mem !== chap) Object.assign(mem, chap);
+  if (mem && mem !== chap) replaceChapterContents(mem, { ...chap });
   if (currentBookId === chap.bookId) await renderVirtualWindow(currentChapterIndex);
 }
 

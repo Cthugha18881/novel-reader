@@ -1084,7 +1084,8 @@ async function applyTranslationToChapter(chapter, result, { updateTitle = false,
   await dbSaveChapter(chapter);
 
   const activeCopy = chapters.find(item => item.id === chapter.id);
-  if (activeCopy && activeCopy !== chapter) Object.assign(activeCopy, chapter);
+  // replaceChapterContents (ไม่ใช่ Object.assign): ค่าที่ลบออกแล้ว เช่น status "รอแปล" ต้องหายจากสำเนาในหน้าอ่านด้วย
+  if (activeCopy && activeCopy !== chapter) replaceChapterContents(activeCopy, { ...chapter });
   if (currentBookId === chapter.bookId) {
     if (nextUrl && chapters[chapters.length - 1]?.id === chapter.id) nextUrlCalculated = nextUrl;
     await renderVirtualWindow(currentChapterIndex);
