@@ -668,12 +668,18 @@ function sanitizeTagColor(color) {
   return /^#[0-9a-f]{6}$/i.test(String(color || '')) ? String(color).toLowerCase() : '#64748b';
 }
 
-function sanitizeBookTags(list) {
+// text: สีตัวอักษร 'auto' (ตามความสว่างของสีแท็ก) | 'light' (ขาว) | 'dark' (ดำ)
+// pin (เฉพาะรายการแท็กของเครื่อง ไม่เก็บกับหนังสือ): ตำแหน่งบนชั้นหนังสือ 'normal' | 'top' | 'bottom'
+function sanitizeBookTags(list, { keepPin = false } = {}) {
   if (!Array.isArray(list)) return [];
   const seen = new Set();
   return list.filter(t => isPlainRecord(t) && /^[a-z0-9_-]{1,40}$/i.test(String(t.id || '')) && !seen.has(t.id) && seen.add(t.id))
     .slice(0, 20)
-    .map(t => ({ id: String(t.id), label: asText(t.label).slice(0, 40), color: sanitizeTagColor(t.color) }));
+    .map(t => {
+      const out = { id: String(t.id), label: asText(t.label).slice(0, 40), color: sanitizeTagColor(t.color), text: ['light', 'dark'].includes(t.text) ? t.text : 'auto' };
+      if (keepPin) out.pin = ['top', 'bottom'].includes(t.pin) ? t.pin : 'normal';
+      return out;
+    });
 }
 
 function sanitizeChapterRecord(raw) {

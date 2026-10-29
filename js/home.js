@@ -245,7 +245,8 @@ function renderHomeCards() {
     return;
   }
   if (typeof renderTagFilterBar === 'function') renderTagFilterBar();
-  const byText = sortHomeEntries(homeBooksCache, readPref('nov_home_sort', 'recent'))
+  const sorted = sortHomeEntries(homeBooksCache, readPref('nov_home_sort', 'recent'));
+  const byText = (typeof applyTagShelfOrder === 'function' ? applyTagShelfOrder(sorted) : sorted)
     .filter(x => !query || String(x.b.title || '').toLowerCase().includes(query) || String(x.b.author || '').toLowerCase().includes(query));
   const tagFilter = typeof getTagFilter === 'function' ? getTagFilter() : new Set();
   const list = typeof filterEntriesByTags === 'function' ? filterEntriesByTags(byText, tagFilter) : byText;

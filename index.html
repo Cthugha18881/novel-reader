@@ -6,7 +6,7 @@
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/hosted-config.js"></script>
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.27.0</title>
+  <title>Dusktale v3.27.1</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -614,7 +614,7 @@
         <div class="modal-title">🏷️ แท็กทั้งหมด</div>
         <button class="modal-close" onclick="closeModal('tag-manager-modal')" aria-label="ปิด">✕</button>
       </div>
-      <div class="hint" style="margin-bottom: 8px;">แก้คำหรือสีของแท็ก ทุกเรื่องที่ติดแท็กนั้นจะเปลี่ยนตาม · ลำดับนี้ใช้เรียงแท็กบนปกและแถบกรอง</div>
+      <div class="hint" style="margin-bottom: 8px;">แก้คำหรือสีของแท็ก ทุกเรื่องที่ติดแท็กนั้นจะเปลี่ยนตาม · ลำดับนี้ใช้เรียงแท็กบนปกและแถบกรอง และใช้ตัดสินว่าแท็ก "บนสุดเสมอ/ล่างสุดเสมอ" อันไหนมาก่อน</div>
       <div id="tag-manager-list" class="book-tags-list"></div>
       <div class="modal-actions">
         <button class="btn" onclick="openTagEditor()">+ เพิ่มแท็กใหม่</button>
@@ -635,6 +635,19 @@
         <input type="color" id="tag-edit-color" value="#2563eb" oninput="updateTagEditPreview()" aria-label="เลือกสีเอง">
         <div id="tag-edit-presets" class="tag-presets"></div>
       </div>
+      <div class="form-label" style="margin-top: 10px;">สีตัวอักษร</div>
+      <div class="tag-choice-row" role="radiogroup" aria-label="สีตัวอักษร">
+        <label><input type="radio" name="tag-edit-text" value="auto" checked onchange="updateTagEditPreview()"> อัตโนมัติ</label>
+        <label><input type="radio" name="tag-edit-text" value="light" onchange="updateTagEditPreview()"> ขาว</label>
+        <label><input type="radio" name="tag-edit-text" value="dark" onchange="updateTagEditPreview()"> ดำ</label>
+      </div>
+      <div class="form-label" style="margin-top: 10px;">ตำแหน่งบนชั้นหนังสือ</div>
+      <div class="tag-choice-row" role="radiogroup" aria-label="ตำแหน่งบนชั้นหนังสือ">
+        <label><input type="radio" name="tag-edit-pin" value="normal" checked> ปกติ</label>
+        <label><input type="radio" name="tag-edit-pin" value="top"> บนสุดเสมอ</label>
+        <label><input type="radio" name="tag-edit-pin" value="bottom"> ล่างสุดเสมอ</label>
+      </div>
+      <div class="hint">เรื่องที่ติดแท็ก "บนสุดเสมอ" ขึ้นก่อนเรื่องอื่น ถ้ามีหลายแท็กแบบนี้ แท็กที่อยู่ก่อนในรายการแท็กขึ้นก่อน (เรียงได้ที่ ✎ แก้แท็ก) · ติดทั้งแท็กบนสุดและล่างสุด ถือตามบนสุด</div>
       <div class="form-label" style="margin-top: 10px;">ตัวอย่าง</div>
       <div id="tag-edit-preview" class="tag-edit-preview"></div>
       <div id="tag-edit-hint" class="hint"></div>

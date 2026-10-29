@@ -1100,6 +1100,19 @@
         filterEntriesByTags(entries, new Set(['a'])).length === 1 && filterEntriesByTags(entries, new Set(['a', 'b'])).length === 2 &&
         filterEntriesByTags(entries, new Set()).length === 3 && style.includes('0.8)') && style.includes('#1e293b') && tagPillStyle('#1d4ed8').includes('#fff');
     });
+    test('แท็ก: สีตัวอักษรขาว/ดำ และลำดับบนชั้น (บนสุดเสมอ/ล่างสุดเสมอ ค่าเริ่มต้นไม่เปลี่ยนลำดับ)', () => {
+      const defs = [{ id: 'red', pin: 'top' }, { id: 'purple', pin: 'top' }, { id: 'teal', pin: 'normal' }, { id: 'orange', pin: 'bottom' }];
+      const e = (n, ...tags) => ({ n, b: { tags: tags.map(id => ({ id })) } });
+      const list = [e('orange'), e('plain1'), e('purple'), e('red+orange', 'red', 'orange'), e('teal', 'teal'), e('red', 'red'), e('plain2')];
+      list[0].b.tags = [{ id: 'orange' }]; list[2].b.tags = [{ id: 'purple' }];
+      const order = applyTagShelfOrder(list, defs).map(x => x.n).join(',');
+      const normal = applyTagShelfOrder(list, defs.map(d => ({ ...d, pin: 'normal' }))).map(x => x.n).join(',');
+      return order === 'red+orange,red,purple,plain1,teal,plain2,orange' &&
+        normal === list.map(x => x.n).join(',') &&
+        tagPillStyle('#ffffff', 'light').includes('#fff;') && tagPillStyle('#1d4ed8', 'dark').includes('#1e293b') &&
+        sanitizeBookTags([{ id: 'a', label: 'x', color: '#111111', text: 'neon', pin: 'top' }])[0].text === 'auto' &&
+        !('pin' in sanitizeBookTags([{ id: 'a', pin: 'top' }])[0]) && sanitizeBookTags([{ id: 'a', pin: 'top' }], { keepPin: true })[0].pin === 'top';
+    });
     test('ตรวจเนื้อหา: หน้าโฆษณาคั่น/รอโหลด และเลขตอนของตอนที่บันทึกไว้', () => {
       const real = 'He walked into the hall. '.repeat(80);
       return looksLikeInterstitial('Loading... please wait') && looksLikeInterstitial('') &&

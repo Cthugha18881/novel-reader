@@ -18,7 +18,7 @@ let tagDefs = null;
 async function loadTagDefs() {
   if (tagDefs) return tagDefs;
   const saved = await dbGetMeta(TAG_DEFS_META).catch(() => undefined);
-  tagDefs = Array.isArray(saved) ? sanitizeBookTags(saved) : TAG_DEFAULTS.map(t => ({ ...t }));
+  tagDefs = Array.isArray(saved) ? sanitizeBookTags(saved, { keepPin: true }) : sanitizeBookTags(TAG_DEFAULTS, { keepPin: true });
   if (!Array.isArray(saved)) await saveTagDefs();
   return tagDefs;
 }
@@ -35,7 +35,7 @@ async function mergeTagDefsFromBooks(books) {
   books.forEach(b => sanitizeBookTags(b.tags).forEach(t => {
     if (known.has(t.id)) return;
     known.add(t.id);
-    tagDefs.push(t);
+    tagDefs.push({ ...t, pin: 'normal' });
     added = true;
   }));
   if (added) await saveTagDefs();
@@ -55,17 +55,17 @@ function hexToRgb(hex) {
   return [0, 2, 4].map(i => parseInt(h.slice(i, i + 2), 16));
 }
 
-/** ไล่สีจากสีที่เลือกไปเฉดเข้มขึ้นเล็กน้อย ทึบ 80% ตัวอักษรขาวหรือเข้มตามความสว่างของสี */
-function tagPillStyle(color) {
+/** ไล่สีจากสีที่เลือกไปเฉดเข้มขึ้นเล็กน้อย ทึบ 80% ตัวอักษร: ขาว / ดำ / อัตโนมัติตามความสว่างของสี */
+function tagPillStyle(color, text = 'auto') {
   const [r, g, b] = hexToRgb(color);
   const dark = [r, g, b].map(v => Math.round(v * 0.72));
-  const light = (0.299 * r + 0.587 * g + 0.114 * b) > 170;
-  return `background: linear-gradient(135deg, rgba(${r},${g},${b},0.8), rgba(${dark.join(',')},0.8)); color: ${light ? '#1e293b' : '#fff'};`;
+  const darkText = text === 'dark' || (text !== 'light' && (0.299 * r + 0.587 * g + 0.114 * b) > 170);
+  return `background: linear-gradient(135deg, rgba(${r},${g},${b},0.8), rgba(${dark.join(',')},0.8)); color: ${darkText ? '#1e293b' : '#fff'};`;
 }
 
 function tagPillHtml(tag, extraClass = '') {
   const def = getTagDef(tag.id) || tag;
-  return `<span class="tag-pill${extraClass ? ` ${extraClass}` : ''}" style="${tagPillStyle(def.color)}" title="${escapeHtml(def.label)}">${escapeHtml(def.label)}</span>`;
+  return `<span class="tag-pill${extraClass ? ` ${extraClass}` : ''}" style="${tagPillStyle(def.color, def.text)}" title="${escapeHtml(def.label)}">${escapeHtml(def.label)}</span>`;
 }
 
 /** แท็กมุมขวาบนของปก + ปุ่ม + ใส่แท็ก (อยู่นอกปุ่มปก เพราะปุ่มซ้อนปุ่มไม่ได้) */
@@ -90,6 +90,27 @@ function setTagFilter(set) {
   try { localStorage.setItem(TAG_FILTER_PREF, JSON.stringify([...set])); } catch (e) {}
 }
 
+/**
+ * ลำดับบนชั้นหนังสือตามแท็กที่ตั้ง "บนสุดเสมอ" / "ล่างสุดเสมอ" (ค่าเริ่มต้น = ปกติ ไม่มีผล)
+ * มีแท็กบนสุด = กลุ่มบน (แท็กที่อยู่ก่อนในรายการแท็กขึ้นก่อน) / ไม่มีแท็กบนสุดแต่มีแท็กล่างสุด = กลุ่มล่าง (แท็กที่อยู่หลังในรายการลงล่างกว่า)
+ * ในกลุ่มเดียวกันคงลำดับตามที่เลือกเรียงไว้ (อ่านล่าสุด / ชื่อเรื่อง / ตอนมากสุด)
+ */
+function tagShelfRank(book, defs = tagDefs || []) {
+  const ids = new Set(bookTagIds(book));
+  const top = defs.findIndex(t => t.pin === 'top' && ids.has(t.id));
+  if (top >= 0) return [0, top];
+  let bottom = -1;
+  defs.forEach((t, i) => { if (t.pin === 'bottom' && ids.has(t.id)) bottom = i; });
+  return bottom >= 0 ? [2, bottom] : [1, 0];
+}
+
+function applyTagShelfOrder(entries, defs = tagDefs || []) {
+  if (!defs.some(t => t.pin === 'top' || t.pin === 'bottom')) return entries;
+  return entries.map((x, pos) => ({ x, pos, r: tagShelfRank(x.b, defs) }))
+    .sort((a, b) => a.r[0] - b.r[0] || a.r[1] - b.r[1] || a.pos - b.pos)
+    .map(e => e.x);
+}
+
 /** เลือกหลายสี = แสดงเรื่องที่มีแท็กใดแท็กหนึ่งในสีที่เลือก */
 function filterEntriesByTags(entries, filter = getTagFilter()) {
   if (!filter.size) return entries;
@@ -104,7 +125,7 @@ function renderTagFilterBar() {
   (typeof homeBooksCache !== 'undefined' ? homeBooksCache : []).forEach(x => bookTagIds(x.b).forEach(id => counts.set(id, (counts.get(id) || 0) + 1)));
   bar.innerHTML = (tagDefs || []).map(t => {
     const on = filter.has(t.id);
-    return `<button type="button" class="tag-dot${on ? ' on' : ''}" style="${tagPillStyle(t.color)}" onclick="toggleTagFilter(${jsArg(t.id)})" aria-pressed="${on}" title="${escapeHtml(t.label)} (${counts.get(t.id) || 0} เรื่อง)" aria-label="กรอง: ${escapeHtml(t.label)}"></button>`;
+    return `<button type="button" class="tag-dot${on ? ' on' : ''}" style="${tagPillStyle(t.color, t.text)}" onclick="toggleTagFilter(${jsArg(t.id)})" aria-pressed="${on}" title="${escapeHtml(t.label)} (${counts.get(t.id) || 0} เรื่อง)" aria-label="กรอง: ${escapeHtml(t.label)}"></button>`;
   }).join('') +
     `<button type="button" class="tag-dot-add" onclick="openTagEditor()" title="เพิ่มแท็กสีใหม่" aria-label="เพิ่มแท็กสีใหม่">+</button>` +
     ((tagDefs || []).length ? `<button type="button" class="btn btn-sm tag-manage-btn" onclick="openTagManager()" title="แก้คำ สี หรือลบแท็ก">✎ แก้แท็ก</button>` : '') +
@@ -155,7 +176,7 @@ async function setBookTags(bookId, ids) {
   if (!book) return null;
   const want = new Set(ids);
   // ไม่แก้ updatedAt: ใช้เรียง "อ่านล่าสุด" การติดแท็กไม่ใช่การอ่าน
-  const tags = (tagDefs || []).filter(t => want.has(t.id)).map(t => ({ ...t }));
+  const tags = sanitizeBookTags((tagDefs || []).filter(t => want.has(t.id)));
   const next = { ...book, tags };
   await dbSaveBook(next);
   return next;
@@ -191,6 +212,8 @@ async function openTagEditor(id = null) {
   document.getElementById('tag-edit-heading').textContent = def ? 'แก้แท็ก' : 'เพิ่มแท็กใหม่';
   document.getElementById('tag-edit-label').value = def?.label || '';
   document.getElementById('tag-edit-color').value = color;
+  setTagEditChoice('tag-edit-text', def?.text || 'auto');
+  setTagEditChoice('tag-edit-pin', def?.pin || 'normal');
   document.getElementById('tag-edit-delete').hidden = !def;
   document.getElementById('tag-edit-hint').textContent = def ? 'แก้คำหรือสีแล้ว ทุกเรื่องที่ติดแท็กนี้จะเปลี่ยนตาม' : '';
   document.getElementById('tag-edit-presets').innerHTML = TAG_COLOR_PRESETS.map(c =>
@@ -198,6 +221,14 @@ async function openTagEditor(id = null) {
   updateTagEditPreview();
   openModal('tag-edit-modal');
   setTimeout(() => document.getElementById('tag-edit-label')?.focus(), 60);
+}
+
+function setTagEditChoice(name, value) {
+  document.querySelectorAll(`input[name="${name}"]`).forEach(r => { r.checked = r.value === value; });
+}
+
+function getTagEditChoice(name, fallback) {
+  return document.querySelector(`input[name="${name}"]:checked`)?.value || fallback;
 }
 
 function pickTagColor(c) {
@@ -208,21 +239,24 @@ function pickTagColor(c) {
 function updateTagEditPreview() {
   const label = document.getElementById('tag-edit-label').value.trim() || 'ตัวอย่างแท็ก';
   const color = document.getElementById('tag-edit-color').value;
-  document.getElementById('tag-edit-preview').innerHTML = tagPillHtml({ id: '__preview', label, color }, 'tag-pill-lg');
+  const text = getTagEditChoice('tag-edit-text', 'auto');
+  document.getElementById('tag-edit-preview').innerHTML = tagPillHtml({ id: '__preview', label, color, text }, 'tag-pill-lg');
 }
 
 async function saveTagFromEditor() {
   const label = document.getElementById('tag-edit-label').value.trim().slice(0, 40);
   const color = sanitizeTagColor(document.getElementById('tag-edit-color').value);
+  const text = getTagEditChoice('tag-edit-text', 'auto');
+  const pin = getTagEditChoice('tag-edit-pin', 'normal');
   if (!label) { document.getElementById('tag-edit-label').focus(); return; }
   await loadTagDefs();
   if (tagEditingId) {
     const def = getTagDef(tagEditingId);
-    if (def) { def.label = label; def.color = color; }
+    if (def) Object.assign(def, { label, color, text, pin });
     await saveTagDefs();
     await updateTagOnAllBooks(tagEditingId);
   } else {
-    tagDefs.push({ id: `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, label, color });
+    tagDefs.push({ id: `t${Date.now().toString(36)}${Math.random().toString(36).slice(2, 5)}`, label, color, text, pin });
     await saveTagDefs();
   }
   closeModal('tag-edit-modal');
@@ -234,7 +268,7 @@ async function updateTagOnAllBooks(tagId) {
   const def = getTagDef(tagId);
   for (const book of await dbGetAllBooks()) {
     if (!bookTagIds(book).includes(tagId)) continue;
-    const tags = sanitizeBookTags(book.tags).map(t => t.id === tagId ? (def ? { ...def } : null) : t).filter(Boolean);
+    const tags = sanitizeBookTags(sanitizeBookTags(book.tags).map(t => t.id === tagId ? def : t).filter(Boolean));
     await dbSaveBook({ ...book, tags });
   }
 }
@@ -276,7 +310,7 @@ async function renderTagManager() {
   (await dbGetAllBooks()).forEach(b => bookTagIds(b).forEach(id => counts.set(id, (counts.get(id) || 0) + 1)));
   box.innerHTML = (tagDefs || []).map((t, i) => `<div class="book-tag-row">
       ${tagPillHtml(t, 'tag-pill-lg')}
-      <span class="hint">${counts.get(t.id) || 0} เรื่อง</span>
+      <span class="hint">${counts.get(t.id) || 0} เรื่อง${t.pin === 'top' ? ' · ⬆ บนสุดเสมอ' : t.pin === 'bottom' ? ' · ⬇ ล่างสุดเสมอ' : ''}</span>
       <span class="tag-row-actions">
         <button type="button" class="btn btn-sm" onclick="moveTag(${i}, -1)" ${i === 0 ? 'disabled' : ''} aria-label="เลื่อนขึ้น">▲</button>
         <button type="button" class="btn btn-sm" onclick="moveTag(${i}, 1)" ${i === tagDefs.length - 1 ? 'disabled' : ''} aria-label="เลื่อนลง">▼</button>

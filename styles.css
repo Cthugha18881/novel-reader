@@ -1273,3 +1273,5 @@ body.no-book .toc-btn { display: none !important; }
 .tag-color-row input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface); cursor: pointer; }
 .tag-presets { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag-edit-preview { padding: 10px; border-radius: 8px; background: var(--surface-2); min-height: 44px; display: flex; align-items: center; }
+.tag-choice-row { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+.tag-choice-row label { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; cursor: pointer; }
