@@ -6,7 +6,7 @@
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/hosted-config.js"></script>
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.26.2</title>
+  <title>Dusktale v3.27.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -189,6 +189,7 @@
             <option value="chapters">ตอนมากสุด</option>
           </select>
         </div>
+        <div id="home-tag-filter" class="home-tag-filter" aria-label="กรองตามแท็ก"></div>
         <div id="home-grid" class="home-grid"></div>
         <p class="legal-links"><a href="#" onclick="openFeedbackModal(); return false;">💬 ส่งความเห็น / แจ้งปัญหา</a> · <a href="legal/privacy.html">นโยบายความเป็นส่วนตัว</a> · <a href="legal/terms.html">ข้อกำหนดการใช้งาน</a></p>
       </div>
@@ -590,6 +591,58 @@
       <div id="chaplist-batch" class="home-detail-batch chaplist-batch" data-batch-for="" aria-live="polite"></div>
       <input type="search" id="chaplist-search" class="form-input toc-search" placeholder="ค้นชื่อตอน หรือพิมพ์เลขตอน" aria-label="ค้นหาตอน" oninput="renderChapterListModal()" onkeydown="onTocSearchKey(event)">
       <div id="chaplist-list" class="toc-list" role="list"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: แท็กของหนังสือ (js/tags.js) -->
+  <div class="modal-overlay" id="book-tags-modal" style="z-index: 70;">
+    <div class="modal-box tag-modal-box">
+      <div class="modal-head">
+        <div class="modal-title">🏷️ แท็ก <span id="book-tags-title" class="toc-book-title"></span></div>
+        <button class="modal-close" onclick="closeModal('book-tags-modal')" aria-label="ปิด">✕</button>
+      </div>
+      <div id="book-tags-list" class="book-tags-list"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="openTagEditor()">+ สร้างแท็กใหม่</button>
+        <button class="btn btn-primary" onclick="closeModal('book-tags-modal')">เสร็จ</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="tag-manager-modal" style="z-index: 70;">
+    <div class="modal-box tag-modal-box">
+      <div class="modal-head">
+        <div class="modal-title">🏷️ แท็กทั้งหมด</div>
+        <button class="modal-close" onclick="closeModal('tag-manager-modal')" aria-label="ปิด">✕</button>
+      </div>
+      <div class="hint" style="margin-bottom: 8px;">แก้คำหรือสีของแท็ก ทุกเรื่องที่ติดแท็กนั้นจะเปลี่ยนตาม · ลำดับนี้ใช้เรียงแท็กบนปกและแถบกรอง</div>
+      <div id="tag-manager-list" class="book-tags-list"></div>
+      <div class="modal-actions">
+        <button class="btn" onclick="openTagEditor()">+ เพิ่มแท็กใหม่</button>
+        <button class="btn btn-primary" onclick="closeModal('tag-manager-modal')">เสร็จ</button>
+      </div>
+    </div>
+  </div>
+  <div class="modal-overlay" id="tag-edit-modal" style="z-index: 72;">
+    <div class="modal-box tag-modal-box">
+      <div class="modal-head">
+        <div class="modal-title" id="tag-edit-heading">เพิ่มแท็กใหม่</div>
+        <button class="modal-close" onclick="closeModal('tag-edit-modal')" aria-label="ปิด">✕</button>
+      </div>
+      <label class="form-label" for="tag-edit-label">คำในแท็ก</label>
+      <input type="text" id="tag-edit-label" class="form-input" maxlength="40" placeholder="เช่น ชอบมาก / อ่านจบแล้ว" oninput="updateTagEditPreview()" onkeydown="if (event.key === 'Enter') saveTagFromEditor()">
+      <label class="form-label" for="tag-edit-color" style="margin-top: 10px;">สี</label>
+      <div class="tag-color-row">
+        <input type="color" id="tag-edit-color" value="#2563eb" oninput="updateTagEditPreview()" aria-label="เลือกสีเอง">
+        <div id="tag-edit-presets" class="tag-presets"></div>
+      </div>
+      <div class="form-label" style="margin-top: 10px;">ตัวอย่าง</div>
+      <div id="tag-edit-preview" class="tag-edit-preview"></div>
+      <div id="tag-edit-hint" class="hint"></div>
+      <div class="modal-actions">
+        <button class="btn btn-danger" id="tag-edit-delete" onclick="deleteTagFromEditor()" hidden>ลบแท็ก</button>
+        <button class="btn" onclick="closeModal('tag-edit-modal')">ยกเลิก</button>
+        <button class="btn btn-primary" onclick="saveTagFromEditor()">บันทึก</button>
+      </div>
     </div>
   </div>
 
@@ -1177,6 +1230,7 @@
   <script src="js/shelf.js"></script>
   <script src="js/updates.js"></script>
   <script src="js/home.js"></script>
+  <script src="js/tags.js"></script>
   <script src="js/assistant.js"></script>
   <script src="js/reader.js"></script>
   <script src="js/bgm.js"></script>

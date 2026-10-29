@@ -186,6 +186,7 @@ async function renderHomeGrid() {
   const token = ++homeRenderToken;
   const books = await dbGetAllBooks();
   const entries = await Promise.all(books.map(async b => ({ b, count: await dbCountChaptersByBook(b.bookId).catch(() => 0), cover: await getBookCover(b.bookId) })));
+  if (typeof mergeTagDefsFromBooks === 'function') await mergeTagDefsFromBooks(books);
   if (token !== homeRenderToken) return;
   homeBooksCache = entries;
   const sortEl = document.getElementById('home-sort');
@@ -243,11 +244,15 @@ function renderHomeCards() {
     </div>`;
     return;
   }
-  const list = sortHomeEntries(homeBooksCache, readPref('nov_home_sort', 'recent'))
+  if (typeof renderTagFilterBar === 'function') renderTagFilterBar();
+  const byText = sortHomeEntries(homeBooksCache, readPref('nov_home_sort', 'recent'))
     .filter(x => !query || String(x.b.title || '').toLowerCase().includes(query) || String(x.b.author || '').toLowerCase().includes(query));
+  const tagFilter = typeof getTagFilter === 'function' ? getTagFilter() : new Set();
+  const list = typeof filterEntriesByTags === 'function' ? filterEntriesByTags(byText, tagFilter) : byText;
+  const why = [query ? `"${escapeHtml(query)}"` : '', tagFilter.size ? 'แท็กที่เลือก' : ''].filter(Boolean).join(' และ');
   grid.innerHTML = list.length
     ? list.map(homeCardHtml).join('')
-    : `<div class="home-empty"><b>ไม่พบเรื่องที่ตรงกับ "${escapeHtml(query)}"</b></div>`;
+    : `<div class="home-empty"><b>ไม่พบเรื่องที่ตรงกับ${why}</b>${tagFilter.size ? '<div class="home-empty-actions"><button class="btn" onclick="clearTagFilter()">ล้างตัวกรองแท็ก</button></div>' : ''}</div>`;
 }
 
 function homeCardHtml({ b, count, cover }) {
@@ -264,9 +269,12 @@ function homeCardHtml({ b, count, cover }) {
     typeof isBookFollowed === 'function' && isBookFollowed(b) ? '<span class="cover-badge follow" title="ติดตามตอนใหม่อยู่">🔔</span>' : ''
   ].join('');
   return `<article class="home-card${batching ? ' is-batching' : ''}" data-book="${escapeHtml(b.bookId)}">
-    <button class="home-cover" onclick="openHome({ bookId: ${id} })" aria-label="${escapeHtml(b.title || 'นิยาย')}: ดูรายละเอียดและตอนทั้งหมด">
-      ${homeCoverHtml(b, cover)}<span class="cover-badges">${badges}</span>
-    </button>
+    <div class="home-cover-wrap">
+      <button class="home-cover" onclick="openHome({ bookId: ${id} })" aria-label="${escapeHtml(b.title || 'นิยาย')}: ดูรายละเอียดและตอนทั้งหมด">
+        ${homeCoverHtml(b, cover)}<span class="cover-badges">${badges}</span>
+      </button>
+      ${typeof coverTagsHtml === 'function' ? coverTagsHtml(b) : ''}
+    </div>
     <div class="home-card-body">
       <button class="home-card-title" onclick="openHome({ bookId: ${id} })">${escapeHtml(b.title || 'นิยายเรื่องใหม่')}</button>
       <div class="home-card-meta">${escapeHtml(getGenreThaiName(b.genre))} · ${count} ตอน</div>

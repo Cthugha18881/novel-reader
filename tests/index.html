@@ -40,6 +40,7 @@
   <script src="../js/shelf.js"></script>
   <script src="../js/updates.js"></script>
   <script src="../js/home.js"></script>
+  <script src="../js/tags.js"></script>
   <script src="../js/assistant.js"></script>
   <script src="../js/reader.js"></script>
   <script src="../js/bgm.js"></script>
@@ -1090,6 +1091,14 @@
         decideSyncMerge({ baseFp: 'a', localFp: undefined, remoteDeleted: false }) === 'apply' &&
         decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: true }) === 'apply' &&
         decideSyncMerge({ baseFp: undefined, localFp: 'b', firstSync: false }) === 'keep';
+    });
+    test('แท็ก: ตรวจข้อมูลแท็กในหนังสือ (สีต้องเป็น #rrggbb กัน style แปลกปลอม) และกรองหลายสี', () => {
+      const t = sanitizeBookTags([{ id: 'fav', label: 'ชอบ', color: '#E11D48' }, { id: 'x', label: 'y', color: 'red;background:url(x)' }, { id: 'fav', label: 'ซ้ำ', color: '#000000' }, { id: 'bad id!', label: 'z', color: '#111111' }, 'junk']);
+      const entries = [{ b: { tags: [{ id: 'a' }] } }, { b: { tags: [{ id: 'b' }] } }, { b: {} }];
+      const style = tagPillStyle('#ffffff');
+      return t.length === 2 && t[0].color === '#e11d48' && t[1].color === '#64748b' &&
+        filterEntriesByTags(entries, new Set(['a'])).length === 1 && filterEntriesByTags(entries, new Set(['a', 'b'])).length === 2 &&
+        filterEntriesByTags(entries, new Set()).length === 3 && style.includes('0.8)') && style.includes('#1e293b') && tagPillStyle('#1d4ed8').includes('#fff');
     });
     test('ตรวจเนื้อหา: หน้าโฆษณาคั่น/รอโหลด และเลขตอนของตอนที่บันทึกไว้', () => {
       const real = 'He walked into the hall. '.repeat(80);

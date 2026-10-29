@@ -658,7 +658,22 @@ function sanitizeBookRecord(raw) {
   });
   if ('lastChapterId' in b && !isValidId(b.lastChapterId)) delete b.lastChapterId;
   if ('lastUrl' in b) b.lastUrl = asHttpUrl(b.lastUrl);
+  if ('tags' in b) b.tags = sanitizeBookTags(b.tags);
   return b;
+}
+
+// ---------- แท็กบนชั้นหนังสือ (js/tags.js) ----------
+// เก็บกับหนังสือเป็น [{ id, label, color }] (ซิงก์ข้ามเครื่องได้) สีต้องเป็น #rrggbb เพราะใช้ใน style
+function sanitizeTagColor(color) {
+  return /^#[0-9a-f]{6}$/i.test(String(color || '')) ? String(color).toLowerCase() : '#64748b';
+}
+
+function sanitizeBookTags(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  return list.filter(t => isPlainRecord(t) && /^[a-z0-9_-]{1,40}$/i.test(String(t.id || '')) && !seen.has(t.id) && seen.add(t.id))
+    .slice(0, 20)
+    .map(t => ({ id: String(t.id), label: asText(t.label).slice(0, 40), color: sanitizeTagColor(t.color) }));
 }
 
 function sanitizeChapterRecord(raw) {
