@@ -15,16 +15,52 @@ const TAG_COLOR_PRESETS = ['#e11d48', '#ea580c', '#d97706', '#16a34a', '#0891b2'
 
 let tagDefs = null;
 
+// เรคคอร์ด meta: { key, value: [แท็ก], updatedAt } updatedAt ใช้ตัดสินตอนซิงก์ว่าเครื่องไหนแก้ล่าสุด
+// แท็กเริ่มต้น/รุ่นก่อนที่ไม่มีเวลา ใช้ updatedAt = 1 เพื่อให้รายการที่แก้จากเครื่องอื่นชนะเสมอ
 async function loadTagDefs() {
   if (tagDefs) return tagDefs;
-  const saved = await dbGetMeta(TAG_DEFS_META).catch(() => undefined);
-  tagDefs = Array.isArray(saved) ? sanitizeBookTags(saved, { keepPin: true }) : sanitizeBookTags(TAG_DEFAULTS, { keepPin: true });
-  if (!Array.isArray(saved)) await saveTagDefs();
+  const rec = await readTagDefsRecord();
+  tagDefs = Array.isArray(rec?.value) ? sanitizeBookTags(rec.value, { keepPin: true }) : sanitizeBookTags(TAG_DEFAULTS, { keepPin: true });
+  if (!Array.isArray(rec?.value) || !Number.isFinite(rec.updatedAt)) await writeTagDefsRecord(Number.isFinite(rec?.updatedAt) ? rec.updatedAt : 1);
   return tagDefs;
 }
 
+function readTagDefsRecord() {
+  return new Promise((resolve) => {
+    try {
+      const req = db.transaction('meta', 'readonly').objectStore('meta').get(TAG_DEFS_META);
+      req.onsuccess = () => resolve(req.result || null);
+      req.onerror = () => resolve(null);
+    } catch (e) {
+      resolve(null);
+    }
+  });
+}
+
+function writeTagDefsRecord(updatedAt) {
+  return new Promise((resolve) => {
+    try {
+      const tx = db.transaction('meta', 'readwrite');
+      tx.objectStore('meta').put({ key: TAG_DEFS_META, value: tagDefs, updatedAt });
+      tx.oncomplete = () => resolve();
+      tx.onerror = tx.onabort = () => { console.warn('save tags failed:', tx.error); resolve(); };
+    } catch (e) {
+      resolve();
+    }
+  });
+}
+
+/** ผู้ใช้แก้รายการแท็ก: บันทึกพร้อมเวลา แล้วให้ซิงก์ส่งไปเครื่องอื่น */
 async function saveTagDefs() {
-  await dbSetMeta(TAG_DEFS_META, tagDefs).catch(err => console.warn('save tags failed:', err));
+  await writeTagDefsRecord(Date.now());
+  markDataChanged('books');
+}
+
+/** ซิงก์ได้รายการแท็กใหม่จากเครื่องอื่น: โหลดใหม่และวาดชั้นหนังสือ */
+async function reloadTagDefs() {
+  tagDefs = null;
+  await loadTagDefs();
+  await afterTagsChanged();
 }
 
 /** แท็กที่มากับหนังสือ (เช่นซิงก์จากเครื่องอื่น) แต่เครื่องนี้ยังไม่รู้จัก: เพิ่มเข้ารายการ */
@@ -38,7 +74,8 @@ async function mergeTagDefsFromBooks(books) {
     tagDefs.push({ ...t, pin: 'normal' });
     added = true;
   }));
-  if (added) await saveTagDefs();
+  // คงเวลาเดิม: แค่เติมแท็กที่รู้จากหนังสือ ไม่ใช่การแก้ ไม่ควรชนะรายการที่เครื่องอื่นแก้ล่าสุด
+  if (added) await writeTagDefsRecord((await readTagDefsRecord())?.updatedAt || 1);
 }
 
 function getTagDef(id) {

@@ -7,8 +7,8 @@ export const SYNC_LIMITS = {
   pullLimit: 100
 };
 
-// key ของรายการ: b:<เรื่อง> c:<ตอน> g:<คำศัพท์> d:<ข้อมูลเสริมของเรื่อง>
-const KEY_PATTERN = /^[bcgd]:[^\u0000-\u001f]{1,290}$/;
+// key ของรายการ: b:<เรื่อง> c:<ตอน> g:<คำศัพท์> d:<ข้อมูลเสริมของเรื่อง> m:<ค่าของบัญชี เช่นรายการแท็ก>
+const KEY_PATTERN = /^[bcgdm]:[^\u0000-\u001f]{1,290}$/;
 
 /** ตรวจ body ของ /api/sync/push และตัด key ซ้ำในคำขอเดียว (เก็บตัวหลังสุด) */
 export function validatePushBody(body) {

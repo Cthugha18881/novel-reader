@@ -100,3 +100,8 @@ test('pull / status: อ่านเฉพาะของผู้ใช้ค�
   const s = await (await status(req('GET', '/api/sync/status'))).json();
   assert.deepEqual(s, { enabled: false, used: 2048, limit: 0, count: 1, seq: 3, lastAt: null });
 });
+
+test('validatePushBody: รับ m:shelf_tags (ค่าของบัญชี) แต่ไม่รับ prefix อื่นที่ไม่รู้จัก', () => {
+  assert.equal(validatePushBody({ records: [{ key: 'm:shelf_tags', data: 'z1:x' }] }).ok, true);
+  assert.equal(validatePushBody({ records: [{ key: 'x:shelf_tags', data: 'z1:x' }] }).ok, false);
+});

@@ -11,8 +11,22 @@ const SYNC_STORES = [
   { store: 'books', prefix: 'b', idOf: r => r?.bookId },
   { store: 'chapters', prefix: 'c', idOf: r => r?.id },
   { store: 'glossaries', prefix: 'g', idOf: r => r?.src },
-  { store: 'bookData', prefix: 'd', idOf: r => r?.bookId }
+  { store: 'bookData', prefix: 'd', idOf: r => r?.bookId },
+  // ค่าของบัญชีที่ต้องตรงกันทุกเครื่อง (เก็บใน meta) ซิงก์เฉพาะคีย์ที่ระบุ ค่าภายในอื่นของ meta ไม่ซิงก์
+  { store: 'meta', prefix: 'm', idOf: r => SYNCED_META_KEYS.has(r?.key) ? r.key : null }
 ];
+// shelf_tags = รายการแท็กบนชั้นหนังสือ (คำ สี สีตัวอักษร ตำแหน่งบนชั้น ลำดับ) js/tags.js
+const SYNCED_META_KEYS = new Set(['shelf_tags']);
+
+/** ตรวจรายการที่ดึงมาจากคลาวด์ (ใช้ตัวตรวจเดียวกับไฟล์สำรอง + meta ที่ซิงก์ได้) */
+function sanitizeSyncedRecord(store, rec) {
+  if (store !== 'meta') return BACKUP_SANITIZERS[store](rec);
+  if (!rec || typeof rec !== 'object' || !SYNCED_META_KEYS.has(rec.key)) return null;
+  if (rec.key === 'shelf_tags') {
+    return { key: 'shelf_tags', value: sanitizeBookTags(rec.value, { keepPin: true }), updatedAt: Number.isFinite(rec.updatedAt) ? rec.updatedAt : 0 };
+  }
+  return null;
+}
 const SYNC_STATE_KEY = 'sync_state';
 const SYNC_STATE_VERSION = 2;
 const SYNC_ENABLED_KEY = 'nov_sync_enabled';
@@ -28,7 +42,7 @@ function syncKeyOf(def, rec) {
 }
 
 function parseSyncKey(key) {
-  const m = /^([bcgd]):(.+)$/.exec(String(key || ''));
+  const m = /^([bcgdm]):(.+)$/.exec(String(key || ''));
   if (!m) return null;
   const def = SYNC_STORES.find(s => s.prefix === m[1]);
   return def ? { ...def, id: m[2] } : null;
@@ -397,6 +411,7 @@ function syncWriteLocal(ops) {
 
 // ---------- ซิงก์ ----------
 let cloudSyncRunning = null;
+let syncMetaUnsupported = false;
 let cloudSyncApplying = false;
 let cloudSyncTimer = null;
 let cloudSyncLast = { at: 0, ok: null, message: '', pulled: 0, pushed: 0 };
@@ -448,14 +463,14 @@ async function doCloudSync({ pullOnly = false, onProgress = null, restoring = fa
     try {
       await syncWriteLocal(writes);
       // แจ้งแท็บอื่นในเครื่องนี้ (ไม่ตั้งรอบซิงก์ใหม่ เพราะ cloudSyncApplying)
-      const kinds = { books: 'books', chapters: 'chapters', glossaries: 'glossary', bookData: 'bookData' };
+      const kinds = { books: 'books', chapters: 'chapters', glossaries: 'glossary', bookData: 'bookData', meta: 'books' };
       [...new Set(writes.map(w => w.store))].forEach(s => markDataChanged(kinds[s]));
     } finally { cloudSyncApplying = false; }
     writes.forEach(op => {
       if (op.deleted) delete state.fps[op.key];
       else state.fps[op.key] = syncFingerprint(op.rec);
       touched.stores.add(op.store);
-      const bookId = op.store === 'chapters' ? (op.rec?.bookId || op.localBookId) : (op.store === 'glossaries' ? null : op.id);
+      const bookId = op.store === 'chapters' ? (op.rec?.bookId || op.localBookId) : (op.store === 'glossaries' || op.store === 'meta' ? null : op.id);
       if (bookId) touched.bookIds.add(bookId);
       if (op.store === 'chapters') { touched.chapIds.add(op.id); if (op.deleted) touched.deletedChapters = true; }
     });
@@ -489,7 +504,7 @@ async function doCloudSync({ pullOnly = false, onProgress = null, restoring = fa
         let rec = null;
         if (!r.deleted) {
           try {
-            rec = BACKUP_SANITIZERS[def.store](await decodeSyncData(r.data));
+            rec = sanitizeSyncedRecord(def.store, await decodeSyncData(r.data));
           } catch (e) {
             console.warn('sync: skip bad record', r.key, e.message);
             skipped++;
@@ -582,7 +597,10 @@ async function doCloudSync({ pullOnly = false, onProgress = null, restoring = fa
     const outgoing = [];
     for (const c of changed) outgoing.push({ key: c.key, fp: c.fp, data: await encodeSyncData(c.rec) });
     deletedKeys.forEach(key => outgoing.push({ key, deleted: true }));
-    const batches = chunkSyncRecords(outgoing);
+    // ค่าของบัญชี (m:) ส่งแยกเป็นชุดสุดท้าย: เซิร์ฟเวอร์รุ่นเก่าที่ยังไม่รู้จักจะปฏิเสธ ไม่ให้ทำให้ชุดอื่นส่งไม่ได้
+    const metaOut = outgoing.filter(r => r.key.startsWith('m:'));
+    const batches = chunkSyncRecords(outgoing.filter(r => !r.key.startsWith('m:')));
+    if (metaOut.length && !syncMetaUnsupported) batches.push(metaOut);
     for (let i = 0; i < batches.length; i++) {
       report(`กำลังส่งขึ้นคลาวด์... (${pushed}/${outgoing.length} รายการ)`);
       try {
@@ -593,6 +611,11 @@ async function doCloudSync({ pullOnly = false, onProgress = null, restoring = fa
         if (Number(res.seq) && i === batches.length - 1) state.pushedSeq = Number(res.seq);
         await dbSetMeta(SYNC_STATE_KEY, state);
       } catch (err) {
+        if (batches[i] === metaOut && err.status === 400) {
+          syncMetaUnsupported = true;
+          console.warn('sync: server does not accept account settings yet');
+          continue;
+        }
         pushError = err;
         break;
       }
@@ -618,6 +641,7 @@ async function doCloudSync({ pullOnly = false, onProgress = null, restoring = fa
 async function refreshAfterCloudPull(touched) {
   try {
     await dbGetAllBooks();  // อัปเดตภาษาของแต่ละเรื่องใน cache
+    if (touched.stores.has('meta') && typeof reloadTagDefs === 'function') await reloadTagDefs();
     if (touched.stores.has('glossaries')) {
       await refreshInMemoryGlossaryCache();
       if (document.getElementById('glossary-modal')?.classList.contains('active') && typeof renderGlossaryUI === 'function') await renderGlossaryUI();
