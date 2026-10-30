@@ -289,7 +289,8 @@ async function runBatchQueue(firstJob) {
   maybeRunAutoBackup().then(() => { renderSafetyBanner(); renderBookshelfBackupNote(); });
 }
 
-async function runBatchJob({ bookId, count }) {
+// chapIds = แปลเฉพาะตอนที่ผู้ใช้เลือก (ตอนที่รอแปลแปลครั้งแรก / ตอนที่แปลแล้วแปลใหม่) ไม่ไล่ตอนถัดไปจาก URL
+async function runBatchJob({ bookId, count, chapIds = null }) {
   const finish = (kind, desc, done) => {
     batchResults[bookId] = { kind, desc, count, done };
   };
@@ -302,7 +303,7 @@ async function runBatchJob({ bookId, count }) {
   let lastChap = bookChaps[bookChaps.length - 1];
   let targetUrl = lastChap?.nextUrl;
   // ตอนที่รอแปล (จากการวางข้อความ/ไฟล์ หรือสร้างจากสารบัญ) แปลก่อนตามลำดับ แล้วค่อยไล่ตอนถัดไปจาก URL
-  const pendingQueue = bookChaps.filter(isPendingChapter);
+  const pendingQueue = chapIds ? bookChaps.filter(c => chapIds.includes(c.id)) : bookChaps.filter(isPendingChapter);
 
   // context ของเรื่องที่แปลล่วงหน้า แยกจากเรื่องที่ผู้ใช้กำลังอ่านอยู่โดยสมบูรณ์
   const ctx = makeBookContext(bookRecord);
@@ -346,14 +347,18 @@ async function runBatchJob({ bookId, count }) {
     for (let i = 1; i <= count; i++) {
       if (signal.aborted) break;
 
+      if (chapIds && !pendingQueue.length) { finishedAll = true; break; }
       if (pendingQueue.length) {
         const pendingChap = pendingQueue.shift();
-        progress(`กำลังแปลตอนที่รอแปล ${i}/${count}: ${pendingChap.title}`);
+        // อ่านใหม่จากฐานข้อมูล: ระหว่างรอคิวอาจถูกแปลไปแล้วจากที่อื่น
+        const freshChap = chapIds ? ((await dbGetChaptersByBook(bookId)).find(c => c.id === pendingChap.id) || null) : pendingChap;
+        if (!freshChap) { if (i === count) finishedAll = true; continue; }
+        const retranslate = chapIds && !isPendingChapter(freshChap);
+        progress(`${chapIds ? 'กำลังแปลตอนที่เลือก' : 'กำลังแปลตอนที่รอแปล'} ${i}/${count}: ${freshChap.title}`);
         try {
-          await translatePendingChapterCore(pendingChap, ctx, {
-            signal,
-            onStatus: (msg) => progress(`[${i}/${count}] ${msg.substring(0, 60)}`)
-          });
+          const onStatus = (msg) => progress(`[${i}/${count}] ${msg.substring(0, 60)}`);
+          if (retranslate) await retranslateChapterCore(freshChap, ctx, { signal, onStatus, keepEdits: true });
+          else await translatePendingChapterCore(freshChap, ctx, { signal, onStatus });
           successCount++;
           consecutiveBlocks = 0;
           if (i === count) finishedAll = true;
@@ -363,17 +368,18 @@ async function runBatchJob({ bookId, count }) {
           // อีกแท็บกำลังแปลตอนนี้อยู่: ข้ามไปตอนถัดไป
           if (err instanceof LockBusyError) continue;
           if (err?.kind === 'blocked') {
-            await markPendingChapterBlocked(pendingChap, err).catch(e => console.warn('Mark blocked failed:', e));
+            await markPendingChapterBlocked(freshChap, err).catch(e => console.warn('Mark blocked failed:', e));
             refreshShelfViewOnly(bookId);
-            if (noteBlocked(pendingChap.title, err)) break;
+            if (noteBlocked(freshChap.title, err)) break;
             if (i === count) finishedAll = true;
             continue;
           }
-          stopDesc = `หยุดที่ "${pendingChap.title}": ${err.message}`;
+          stopDesc = `หยุดที่ "${freshChap.title}": ${err.message}`;
           break;
         }
         continue;
       }
+      if (chapIds) { finishedAll = true; break; }
 
       if (!targetUrl && lastChap?.sourceUrl) {
         // ครั้งก่อนหาตอนถัดไปไม่เจอ (เช่นเว็บบล็อกชั่วคราว): ลองหาจากหน้าของตอนล่าสุดอีกครั้ง
@@ -620,6 +626,47 @@ function updateSelectedDeleteBtn(bookId) {
   const countEl = document.getElementById(`shelf-select-count-${bookId}`);
   if (bar) bar.hidden = chks.length === 0;
   if (countEl) countEl.textContent = `เลือกไว้ ${chks.length} ตอน`;
+}
+
+/** แถบตอนที่เลือก → "แปลที่เลือก": ตอนที่รอแปล/ถูกบล็อกแปลครั้งแรก ตอนที่แปลแล้วแปลใหม่ (เก็บคำแปลเดิมในประวัติ) */
+async function translateSelectedChapters(bookId) {
+  const ids = Array.from(document.querySelectorAll('.chap-chk:checked')).filter(c => c.dataset.bookId === bookId).map(c => c.value);
+  if (!ids.length) return;
+  if (batchCurrent?.bookId === bookId || batchQueue.some(j => j.bookId === bookId)) return appAlert('เรื่องนี้กำลังแปลล่วงหน้าหรืออยู่ในคิวแล้ว รอให้เสร็จหรือกดหยุดก่อน');
+  if (!hasActiveApiKey()) return appAlert("กรุณาใส่ API Key ในเมนู 'ตั้งค่า' ก่อนใช้งาน");
+  const bookChaps = (await dbGetChaptersByBook(bookId)).sort((a, b) => a.order - b.order);
+  const chosen = bookChaps.filter(c => ids.includes(c.id));
+  // ตอนกันก๊อป: ข้อความเป็นของหลอก ต้องดึงจากเว็บใหม่ทีละตอน ไม่แปลรวม
+  const usable = chosen.filter(c => isPendingChapter(c) || (c.chapterType !== 'placeholder' && (c.paragraphs || []).some(p => p.src)));
+  const skippedCount = chosen.length - usable.length;
+  if (!usable.length) return appAlert('ตอนที่เลือกเป็นตอนกันก๊อปหรือไม่มีต้นฉบับทั้งหมด ใช้ "ดึงจากหน้าเว็บใหม่" ที่ตอนนั้นแทน');
+  const max = getBatchMax();
+  if (usable.length > max) {
+    if (max < BATCH_HARD_MAX && typeof showPlanLimit === 'function') return showPlanLimit('batch');
+    return appAlert(`เลือกได้ครั้งละไม่เกิน ${max} ตอน`);
+  }
+  const pending = usable.filter(isPendingChapter).length;
+  const again = usable.length - pending;
+  const book = (await dbGetAllBooks()).find(b => b.bookId === bookId) || { bookId };
+  const est = await estimateBatchTokens(bookId, bookChaps, getBookSourceLang(book));
+  const parts = [pending ? `ยังไม่แปล/ถูกบล็อก ${pending} ตอน` : '', again ? `แปลใหม่ ${again} ตอน (คำแปลเดิมเก็บในประวัติ 🕘 ย่อหน้าที่แก้เองคงไว้)` : ''].filter(Boolean);
+  const ok = await appConfirm(
+    `แปลตอนที่เลือก ${usable.length} ตอน: ${parts.join(' · ')}${skippedCount ? `\nข้าม ${skippedCount} ตอนที่เป็นตอนกันก๊อป (ใช้ "ดึงจากหน้าเว็บใหม่" ที่ตอนนั้น)` : ''}\n\n` +
+    `ใช้ประมาณ ${formatTokenCount(est.input * usable.length)} input token + ${formatTokenCount(est.output * usable.length)} output token (ค่าประมาณ)\nตอนที่ถูกบล็อกอีกจะข้ามไปตอนถัดไปให้เอง`,
+    { title: `แปลตอนที่เลือก: ${book.title || 'นิยาย'}`, confirmLabel: `แปล ${usable.length} ตอน` });
+  if (!ok) return;
+  document.querySelectorAll('.chap-chk:checked').forEach(c => { if (c.dataset.bookId === bookId) c.checked = false; });
+  updateSelectedDeleteBtn(bookId);
+  delete batchResults[bookId];
+  const job = { bookId, count: usable.length, chapIds: usable.map(c => c.id), title: book.title || 'นิยาย' };
+  if (batchCurrent) {
+    batchQueue.push(job);
+    renderBatchProgress(bookId);
+    showGlobalToast(`"${job.title}" เข้าคิวแล้ว จะเริ่มแปลเมื่อเรื่องก่อนหน้าเสร็จ`);
+    setTimeout(hideGlobalToast, 2500);
+    return;
+  }
+  runBatchQueue(job);
 }
 
 function toggleSelectAllChaps(bookId) {

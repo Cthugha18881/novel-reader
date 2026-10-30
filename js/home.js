@@ -345,6 +345,7 @@ async function renderHomeDetail(bookId) {
       </div>
       <div class="shelf-select-bar" id="shelf-select-bar-${escapeHtml(bookId)}" hidden>
         <span id="shelf-select-count-${escapeHtml(bookId)}">เลือกไว้ 0 ตอน</span>
+        <button class="btn btn-primary" onclick="translateSelectedChapters(${id})" title="แปลตอนที่เลือก: ตอนที่รอแปลหรือถูกบล็อกแปลครั้งแรก ตอนที่แปลแล้วแปลใหม่ (เก็บคำแปลเดิมในประวัติ)">🔄 แปลที่เลือก</button>
         <button class="btn" onclick="openMoveChaptersModal(${id})" title="ย้ายตอนที่เลือกไปเรื่องอื่น หรือแยกเป็นเรื่องใหม่">↪ ย้ายไปเรื่องอื่น</button>
         <button class="btn btn-danger" onclick="deleteSelectedChapters(${id})">🗑️ ลบที่เลือก</button>
       </div>

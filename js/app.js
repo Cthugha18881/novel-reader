@@ -1013,20 +1013,7 @@ async function retranslateSpecificChapterDirect(chapId) {
   const controller = beginTask('retranslate');
   showGlobalToast(`กำลังแปล "${chapter.title}" ใหม่...`);
   try {
-    // ใช้ summary ของตอนเนื้อเรื่องก่อนหน้าเป็นบริบท (ไม่ใช่ของบทตัวเอง และข้ามประกาศผู้เขียน)
-    const bookChaps = await dbGetChaptersByBook(bookId);
-    const result = await translateChapter(rawText, ctx, {
-      signal: controller.signal,
-      onStatus: showGlobalToast,
-      rawChapTitle: chapter.title,
-      prevChapter: findPrevStoryChapter(bookChaps, chapter.order ?? 0)
-    });
-    if (keepEdits) result.paragraphs = mergeUserEdits(chapter.paragraphs, result.paragraphs);
-    // แปลใหม่จากข้อความตัวอย่างเดิม: ยังเป็นแค่ตัวอย่าง คงป้ายและข้อมูลการล็อกไว้
-    const keptLock = chapter.previewOnly ? chapter.lockInfo : null;
-    if (chapter.previewOnly) { result.previewOnly = true; result.summary = ''; }
-    await applyTranslationToChapter(chapter, result, { updateTitle: false });
-    if (keptLock) { chapter.lockInfo = keptLock; await dbSaveChapter(chapter); }
+    await retranslateChapterCore(chapter, ctx, { signal: controller.signal, onStatus: showGlobalToast, keepEdits });
     appAlert(`แปล "${chapter.title}" ใหม่และบันทึกแล้ว${keepEdits ? ` (เก็บย่อหน้าที่แก้เองไว้ ${editedCount} ย่อหน้า)` : ''}`);
   } catch (err) {
     if (!isAbortError(err)) appAlert(`แปลบทใหม่ไม่สำเร็จ: ${err.message}`);
@@ -1034,6 +1021,30 @@ async function retranslateSpecificChapterDirect(chapId) {
     endTask('retranslate', controller);
     hideGlobalToast();
   }
+}
+
+/**
+ * แปลตอนที่แปลแล้วใหม่จากต้นฉบับที่เก็บไว้ (ไม่มีกล่องถาม: ผู้เรียกถามผู้ใช้เอง)
+ * คำแปลเดิมเก็บในประวัติเวอร์ชัน keepEdits = คงย่อหน้าที่ผู้ใช้แก้เอง
+ */
+async function retranslateChapterCore(chapter, ctx, { signal = null, onStatus = null, keepEdits = true } = {}) {
+  const rawText = (chapter.paragraphs || []).map(p => p.src || '').filter(Boolean).join('\n\n');
+  if (!rawText) throw new Error('ตอนนี้ไม่มีข้อความต้นฉบับ จึงแปลใหม่ไม่ได้');
+  // ใช้ summary ของตอนเนื้อเรื่องก่อนหน้าเป็นบริบท (ไม่ใช่ของบทตัวเอง และข้ามประกาศผู้เขียน)
+  const bookChaps = await dbGetChaptersByBook(chapter.bookId);
+  const result = await translateChapter(rawText, ctx, {
+    signal,
+    onStatus,
+    rawChapTitle: chapter.title,
+    prevChapter: findPrevStoryChapter(bookChaps, chapter.order ?? 0)
+  });
+  if (keepEdits) result.paragraphs = mergeUserEdits(chapter.paragraphs, result.paragraphs);
+  // แปลใหม่จากข้อความตัวอย่างเดิม: ยังเป็นแค่ตัวอย่าง คงป้ายและข้อมูลการล็อกไว้
+  const keptLock = chapter.previewOnly ? chapter.lockInfo : null;
+  if (chapter.previewOnly) { result.previewOnly = true; result.summary = ''; }
+  await applyTranslationToChapter(chapter, result, { updateTitle: false });
+  if (keptLock) { chapter.lockInfo = keptLock; await dbSaveChapter(chapter); }
+  return result;
 }
 
 /**
