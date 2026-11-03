@@ -28,10 +28,15 @@ async function getActiveGlossaryForBook(bookId) {
   const allItems = await dbGetAllGlossaryItems();
   const bookLang = getCachedBookLang(bookId);
   const activeMap = {};
+  const leftover = getLeftoverRegex(bookLang);
   allItems.forEach(item => {
     const attached = Array.isArray(item.books) && item.books.includes(bookId);
     if (attached || (item.scope === 'global' && getTermLang(item) === bookLang)) {
       const cleanTgt = resolveTermForBook(item, bookId);
+      // คำที่ AI เพิ่มเอง (ยังไม่มีใครยืนยัน) แต่ "คำแปล" ยังเป็นภาษาต้นฉบับ: ไม่ส่งให้ AI ใช้
+      // ไม่อย่างนั้น AI จะใส่อักษรจีนตามคลังศัพท์ทุกตอน และขั้นแก้อักษรที่หลงเหลือก็แก้ไม่ได้ (ยิ่งแปลยาว คำแบบนี้ยิ่งสะสม)
+      // คำที่ผู้ใช้ใส่หรือยืนยันเองใช้ตามเดิมเสมอ (ไม่แตะข้อมูลในคลัง)
+      if (cleanTgt && item.auto && leftover && leftover.test(cleanTgt)) return;
       if (cleanTgt) {
         activeMap[item.src] = { ...item, resolvedTgt: cleanTgt };
       }
@@ -942,6 +947,9 @@ ${isBibleEnabled ? `\n${buildCharacterExtractionInstruction(extras.bible, rawTex
     if (typeof item?.src !== 'string' || typeof item?.tgt !== 'string' || !item.src || !item.tgt) continue;
     const cleanSrc = cleanTermString(item.src);
     const cleanTgt = cleanTermString(item.tgt);
+    // AI ส่งคำแปลที่ยังเป็นภาษาต้นฉบับมา (เช่นคัดลอกชื่อจีนมาทั้งตัว): ไม่เก็บเข้าคลัง
+    const leftoverRe = getLeftoverRegex(ctx.sourceLang);
+    if (!cleanTgt || cleanTgt === cleanSrc || (leftoverRe && leftoverRe.test(cleanTgt))) continue;
     const existing = existingItems.find(x => x.src === cleanSrc);
     if (!existing) {
       const newItem = {

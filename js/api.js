@@ -1559,7 +1559,15 @@ async function fixLeftoverSourceScript(paragraphs, ctx, pctx, { signal = null, o
 ${JSON.stringify(chunk)}
 ตอบกลับเป็น JSON เท่านั้น: {"verified":[{"i":หมายเลข,"th":"ข้อความไทยที่ไม่มีตัวอักษรต้นฉบับหลงเหลือแล้ว"}]}`;
     try {
-      const parsed = await callLLMJson(prompt, { signal, onStatus, schema: SCHEMAS.verify, role: 'aux' });
+      // โมเดลงานรองล้ม (เช่นโควตาต่อวันหมดระหว่างแปลยาวๆ): ลองด้วยโมเดลหลักอีกครั้ง ไม่ปล่อยอักษรจีนค้างเงียบๆ
+      let parsed;
+      try {
+        parsed = await callLLMJson(prompt, { signal, onStatus, schema: SCHEMAS.verify, role: 'aux' });
+      } catch (auxErr) {
+        if (isAbortError(auxErr) || auxErr?.kind === 'budget') throw auxErr;
+        console.warn('Leftover fix with aux model failed, retrying with main model:', auxErr?.message);
+        parsed = await callLLMJson(prompt, { signal, onStatus, schema: SCHEMAS.verify, role: 'main' });
+      }
       const allowed = new Set(chunk.map(c => c.i));
       (Array.isArray(parsed?.verified) ? parsed.verified : []).forEach(v => {
         const i = Number(v?.i);
@@ -1862,8 +1870,15 @@ async function executeApiCall(rawText, ctx, {
     paragraphs,
     missingCount: stillMissing,
     chapterType,
-    translationMeta: { ...buildTranslationMeta(), qualityMode }
+    translationMeta: { ...buildTranslationMeta(), qualityMode, leftover: countLeftoverParagraphs(paragraphs, ctx.sourceLang) }
   };
+}
+
+/** ย่อหน้าที่ยังมีตัวอักษรต้นฉบับหลงเหลือหลังผ่านทุกขั้นแล้ว (แสดงในผลแปลล่วงหน้าและรายงานคุณภาพ) */
+function countLeftoverParagraphs(paragraphs, lang) {
+  const leftover = getLeftoverRegex(lang);
+  if (!leftover) return 0;
+  return (paragraphs || []).filter(p => p.kind !== 'site_junk' && leftover.test(p.th || '')).length;
 }
 
 /** ตอนกันก๊อป/ตอนที่ล็อกไว้: ไม่เรียก AI เก็บต้นฉบับไว้รอดึงเนื้อหาจริงภายหลัง */

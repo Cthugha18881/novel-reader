@@ -1100,6 +1100,10 @@
         filterEntriesByTags(entries, new Set(['a'])).length === 1 && filterEntriesByTags(entries, new Set(['a', 'b'])).length === 2 &&
         filterEntriesByTags(entries, new Set()).length === 3 && style.includes('0.8)') && style.includes('#1e293b') && tagPillStyle('#1d4ed8').includes('#fff');
     });
+    test('อักษรต้นฉบับหลงเหลือ: นับเฉพาะย่อหน้าที่แปลแล้ว ไม่นับข้อความเว็บ และภาษาที่ตรวจไม่ได้ได้ 0', () => {
+      return countLeftoverParagraphs([{ th: 'เขามอง林动' }, { th: 'ปกติ' }, { th: '收藏本站', kind: 'site_junk' }], 'zh') === 1 &&
+        countLeftoverParagraphs([{ th: 'He said hi' }], 'en') === 0 && countLeftoverParagraphs([], 'zh') === 0;
+    });
     test('แท็ก: สีตัวอักษรขาว/ดำ และลำดับบนชั้น (บนสุดเสมอ/ล่างสุดเสมอ ค่าเริ่มต้นไม่เปลี่ยนลำดับ)', () => {
       const defs = [{ id: 'red', pin: 'top' }, { id: 'purple', pin: 'top' }, { id: 'teal', pin: 'normal' }, { id: 'orange', pin: 'bottom' }];
       const e = (n, ...tags) => ({ n, b: { tags: tags.map(id => ({ id })) } });

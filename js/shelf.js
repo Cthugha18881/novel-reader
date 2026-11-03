@@ -318,6 +318,7 @@ async function runBatchJob({ bookId, count, chapIds = null }) {
 
   const controller = beginTask('batch');
   const signal = controller.signal;
+  const batchStartedAt = Date.now();
   isBatchRunning = true;
   batchCurrent = { bookId, count, done: 0, desc: 'เตรียมคิว...', title: bookRecord.title };
   renderBatchProgress(bookId);
@@ -547,11 +548,17 @@ async function runBatchJob({ bookId, count, chapIds = null }) {
   }
 
   const skippedNote = describeBatchSkipped(skipped, lastBlockErr);
-  const withSkipped = (desc) => skippedNote ? `${desc}\n${skippedNote}` : desc;
+  // ตอนที่แปลในรอบนี้แต่ยังมีตัวอักษรต้นฉบับหลงเหลือ: บอกให้รู้ (ไม่ซ่อนปัญหาคุณภาพ)
+  const leftoverChaps = (await dbGetChaptersByBook(bookId).catch(() => []))
+    .filter(c => (c.translationMeta?.translatedAt || 0) >= batchStartedAt && (c.translationMeta?.leftover || 0) > 0);
+  const leftoverNote = leftoverChaps.length
+    ? `${leftoverChaps.length} ตอนยังมีตัวอักษรต้นฉบับหลงเหลือ (${leftoverChaps.reduce((n, c) => n + c.translationMeta.leftover, 0)} ย่อหน้า) ดูและแก้ได้ที่ 📋 รายงานคุณภาพ`
+    : '';
+  const withSkipped = (desc) => [desc, skippedNote, leftoverNote].filter(Boolean).join('\n');
   if (stoppedByLock) finish('locked', withSkipped(stopDesc), successCount);
   else if (signal.aborted) finish('stopped', withSkipped(`หยุดตามคำสั่งแล้ว (บันทึกไว้ ${successCount} ตอน)`), successCount);
   else if (finishedAll && skipped.length) finish('partial', withSkipped(`บันทึก ${successCount} ตอน`), successCount);
-  else if (finishedAll) finish('done', `บันทึกครบ ${successCount} ตอน อ่านแบบออฟไลน์ได้`, successCount);
+  else if (finishedAll) finish('done', withSkipped(`บันทึกครบ ${successCount} ตอน อ่านแบบออฟไลน์ได้`), successCount);
   else finish('error', withSkipped(stopDesc || 'หยุดก่อนครบจำนวนที่ตั้งไว้'), successCount);
   if (batchResults[bookId]) batchResults[bookId].skipped = skipped.length;
   renderBatchProgress(bookId);
