@@ -28,7 +28,10 @@ function getQualityPlan(mode) {
 // หาคำที่น่าจะเป็นชื่อเฉพาะด้วยกฎของแต่ละภาษา ส่งให้ AI เลือกเฉพาะที่เป็นชื่อจริงและแปล
 // คำทั่วไปที่ปนมา AI จะไม่เลือก (มีไว้ช่วยไม่ให้ AI มองข้ามคำ ไม่ใช่ตัวตัดสิน)
 const ZH_FUNCTION_CHARS = /[的了是在不一我你他她它们这那有和就都也说着过到把被让从对向很要会能没么吗呢吧啊个上下中来去得地之为与而但却又再还已自其所以如此道想看听走]/;
-const ZH_NAME_SUFFIX = /(?:城|镇|村|宗|门|派|宫|殿|阁|楼|府|谷|山|峰|岛|州|国|族|学院|帝国|诀|功|经|掌|拳|剑|刀|术|阵|丹|丸|草|果|境|期|阶|兽|会|盟|帮)/;
+const ZH_NAME_SUFFIX = /(?:城|镇|村|宗|门|派|宫|殿|阁|楼|府|谷|山|峰|岛|州|国|族|学院|帝国|诀|功|经|掌|拳|剑|刀|术|阵|丹|丸|草|境|期|阶|兽|盟|帮)/;
+// แซ่ที่พบบ่อย: ชื่อคนจีนขึ้นต้นด้วยแซ่ ใช้คัดคำซ้ำที่น่าจะเป็นชื่อคน แทนการนับทุกคำซ้ำ (ซึ่งได้คำนามทั่วไปปนมามาก)
+const ZH_SURNAMES = '王李张刘陈杨黄赵吴周徐孙马朱胡郭何高林罗郑梁谢宋唐许韩冯邓曹彭曾肖田董袁潘蒋蔡余杜叶程苏魏吕丁任沈姚卢姜崔钟谭陆汪范金石廖贾夏韦付方白邹孟熊秦邱江尹薛闫段雷侯龙史陶黎贺顾毛郝龚邵钱严覃武戴莫孔汤常温康施文牛樊葛邢齐易乔伍庞颜倪庄聂章鲁岳翟殷詹申欧耿兰焦俞左柳甘祝包宁尚符舒阮柯纪梅童凌毕单季裴霍涂苗谷盛曲翁冉骆蓝路游辛靳管柴蒙鲍华喻祁蒲房滕屈饶解牟艾尤穆农司卓古吉缪简车项连芦麦褚娄窦戚岑景党宫费卜冷晏席卫米柏宗瞿桂佟臧闵苟邬边卞姬师仇栾隋商刁沙荣巫寇桑郎甄丛仲虞敖巩佘池查麻苑迟邝封谈匡鞠惠荆冀郁胥班储栗燕楚鄢劳谌奚皮粟冼蔺楼闻厉伊仝郜阚权帅屠豆朴盖练廉禹井祖漆巴丰支卿狄计索宣晋初云容敬扈晁芮普阙浦戈伏鹿薄邸雍辜羊乌母裘亓修邰赫杭况宿鲜印逯隆茹诸战慕危玉银亢嵇哈湛宾戎勾茅揭尉冶斯束檀衣展阴昝智幸奉植衡富尧';
+const ZH_COMPOUND_SURNAMES = ['司徒', '欧阳', '上官', '诸葛', '东方', '慕容', '皇甫', '令狐', '夏侯', '公孙', '南宫', '西门', '独孤', '长孙', '宇文', '端木', '轩辕', '尉迟', '司马', '百里', '东郭', '呼延', '澹台', '公冶', '太史', '申屠'];
 const EN_STOP_CAPS = new Set(['I', 'The', 'A', 'An', 'He', 'She', 'It', 'They', 'We', 'You', 'His', 'Her', 'Its', 'Their', 'Our', 'My', 'Your', 'This', 'That', 'These', 'Those', 'But', 'And', 'Or', 'So', 'If', 'When', 'What', 'Why', 'How', 'Where', 'Who', 'Then', 'There', 'Here', 'Yes', 'No', 'Oh', 'Well', 'Mr', 'Mrs', 'Ms', 'Sir', 'Chapter', 'Not', 'Just', 'After', 'Before', 'As', 'In', 'On', 'At', 'For', 'With', 'Even', 'Still', 'Now', 'Only', 'Because', 'While', 'Although']);
 const KO_STOP_WORDS = new Set(['그', '그녀', '그들', '나', '너', '우리', '자신', '사람', '이것', '그것', '저것', '무엇', '지금', '여기', '거기', '하나', '모두', '정말', '그냥', '다시', '이미', '아직', '조금', '그런', '이런', '어떤']);
 
@@ -56,16 +59,16 @@ function mineTermCandidates(text, lang, knownSrcs = new Set()) {
       bump(m[1]);
       if (m[1].length === 3) bump(m[1].slice(1));
     }
-    // คำซ้ำทั่วไป 2-4 ตัวที่ไม่มีตัวอักษรไวยากรณ์ (ชื่อคนมักซ้ำหลายครั้งในตอน)
-    for (let len = 2; len <= 4; len++) {
-      const seen = new Map();
-      for (let i = 0; i + len <= t.length; i++) {
-        const w = t.slice(i, i + len);
-        if (!/^[一-鿿]+$/.test(w) || ZH_FUNCTION_CHARS.test(w)) continue;
-        seen.set(w, (seen.get(w) || 0) + 1);
-      }
-      seen.forEach((n, w) => { if (n >= 4) local.set(w, (local.get(w) || 0) + n); });
+    // ชื่อคนที่ไม่ได้มาก่อน "道/说": คำ 2-3 ตัวที่ขึ้นต้นด้วยแซ่ (หรือแซ่สองตัว + 1-2 ตัว) และซ้ำตั้งแต่ 3 ครั้ง
+    // (ไม่นับทุกคำซ้ำ เพราะได้คำนามทั่วไป เช่น ผลไม้ สภาพอากาศ อาชีพ ปนมาแล้ว AI รับไว้)
+    const seen = new Map();
+    const count = (w) => { if (/^[一-鿿]+$/.test(w) && !ZH_FUNCTION_CHARS.test(w.slice(1))) seen.set(w, (seen.get(w) || 0) + 1); };
+    for (let i = 0; i < t.length; i++) {
+      const two = t.slice(i, i + 2);
+      if (ZH_COMPOUND_SURNAMES.includes(two)) { count(t.slice(i, i + 3)); count(t.slice(i, i + 4)); continue; }
+      if (ZH_SURNAMES.includes(t[i])) { count(t.slice(i, i + 2)); count(t.slice(i, i + 3)); }
     }
+    seen.forEach((n, w) => { if (n >= 3) local.set(w, (local.get(w) || 0) + n); });
     // ตัดคำสั้นที่ซ้ำเท่ากับคำยาวที่ครอบมันอยู่ (เช่น 阳镇 เป็นส่วนของ 青阳镇)
     const entries = [...local.entries()].filter(([, n]) => n >= 2);
     entries.forEach(([w, n]) => {
@@ -150,12 +153,14 @@ async function analyzeChapter(sourceParas, ruleKinds, ctx, { signal = null, onSt
   const schemaProps = {};
   if (wantTerms) {
     tasks.push(`งาน "newTerms": ชื่อเฉพาะที่ "ยังไม่อยู่ในรายชื่อที่รู้จัก" ด้านล่าง เพื่อให้แปลชื่อเดียวกันตรงกันทุกตอน
-- เก็บ: ชื่อคน สัตว์ เผ่าพันธุ์, สถานที่ สำนัก องค์กร ตระกูล, ฉายา ตำแหน่ง, วิชา ทักษะ สกิล, ไอเทม อาวุธ ทรัพยากร, ระดับพลัง ขั้น เลเวล และศัพท์เฉพาะของโลกในเรื่อง${GENRE_TERM_HINTS[ctx.genre] ? ` (แนวนี้มักมี: ${GENRE_TERM_HINTS[ctx.genre]})` : ''}
+- หลักการ: เก็บเฉพาะคำที่ "ถ้าไม่ล็อกคำแปลไว้ ตอนต่อไปอาจแปลไม่เหมือนกัน" คือชื่อที่ต้องทับศัพท์ ชื่อที่ผู้แต่งตั้งขึ้น และศัพท์เฉพาะของโลกในเรื่อง
+- เก็บ: ชื่อคน สัตว์/สิ่งมีชีวิตเฉพาะเรื่อง เผ่าพันธุ์, สถานที่ สำนัก องค์กร ตระกูล, ฉายา ตำแหน่งเฉพาะเรื่อง, วิชา ทักษะ สกิล, ไอเทม อาวุธ ทรัพยากรที่มีชื่อเฉพาะ, ระดับพลัง ขั้น และค่าสถานะของระบบ${GENRE_TERM_HINTS[ctx.genre] ? ` (แนวนี้มักมี: ${GENRE_TERM_HINTS[ctx.genre]})` : ''}
+- ห้ามเก็บคำทั่วไปที่มีคำไทยตรงตัวอยู่แล้ว แม้จะพบบ่อยในตอนนี้: อาหาร ผลไม้ ถั่ว พืช ต้นไม้ สัตว์ทั่วไป สภาพอากาศ สี ส่วนของร่างกาย สิ่งของเครื่องใช้ อาวุธทั่วไป (มีด ธนู หอก) ยานพาหนะ อาชีพ ตำแหน่งงานทั่วไป คำเรียกญาติ ช่วงเวลา อายุ ตัวเลข เลขห้อง สรรพนาม
+- ห้ามเก็บชื่อตอน ประโยค หรือวลียาวที่บรรยายเหตุการณ์ และห้ามเก็บอักษรตัวเดียว
 - คำในวงเล็บ 【 】 〖 〗 『 』 [ ] มักเป็นชื่อเฉพาะ ให้พิจารณาทุกคำ
-${candidates.length ? `- คำที่ระบบหาไว้ให้ (อาจมีคำทั่วไปปน ให้เลือกเฉพาะที่เป็นชื่อเฉพาะจริง และเพิ่มคำที่ระบบหาไม่เจอด้วย): ${candidates.join(', ')}\n` : ''}${localStorage.getItem('nov_enable_deep_ner') === 'true' ? '- เก็บคำประสมพิเศษ ฉายาตัวละคร คำเรียกเฉพาะของเผ่าพันธุ์ และตำแหน่งเฉพาะถิ่นด้วย\n' : ''}- ห้ามเลือกคำทั่วไป สรรพนาม คำเรียกญาติทั่วไป
-- "src" ตรงตามต้นฉบับทุกตัวอักษร ไม่รวมคำลงท้ายที่ไม่ใช่ชื่อ (เช่น さん 님)
-- "tgt" ต้องเป็นภาษาไทยทั้งหมด (ทับศัพท์หรือแปลความหมายตามที่นิยมในนิยายแปลไทย) ห้ามมีตัวอักษรภาษา${langName} ห้ามมีวงเล็บหรือเครื่องหมายคำพูด
-- ชื่อที่เกี่ยวข้องกับคำแปลที่มีอยู่แล้ว (นามสกุลเดียวกัน สำนักเดียวกัน) ให้แปลส่วนที่ซ้ำให้เหมือนกัน`);
+${candidates.length ? `- คำที่ระบบหาไว้ให้ (อาจมีคำทั่วไปปน ให้เลือกเฉพาะที่เป็นชื่อเฉพาะจริง และเพิ่มคำที่ระบบหาไม่เจอด้วย): ${candidates.join(', ')}\n` : ''}${localStorage.getItem('nov_enable_deep_ner') === 'true' ? '- เก็บคำประสมพิเศษ ฉายาตัวละคร คำเรียกเฉพาะของเผ่าพันธุ์ และตำแหน่งเฉพาะถิ่นด้วย\n' : ''}- "src" ตรงตามต้นฉบับทุกตัวอักษร ไม่รวมคำลงท้ายที่ไม่ใช่ชื่อ (เช่น さん 님)
+- "tgt" ต้องเป็นภาษาไทยทั้งหมด (ทับศัพท์หรือแปลความหมายตามที่นิยมในนิยายแปลไทย) ห้ามมีตัวอักษรภาษา${langName} ห้ามมีวงเล็บ เครื่องหมายคำพูด หรือวรรณยุกต์พินอิน
+${['zh', 'ko'].includes(normalizeLang(ctx.sourceLang)) ? `- ชื่อคน${langName}ที่ทับศัพท์ เขียนติดกันไม่เว้นวรรค (เช่น ${normalizeLang(ctx.sourceLang) === 'ko' ? '김독자 = คิมดกจา' : '司徒安 = ซือถูอัน'}) ส่วนชื่อที่ต้นฉบับคั่นด้วย · (ชื่อต่างชาติ) ให้เว้นวรรคแทน ·\n` : ''}- ชื่อที่เกี่ยวข้องกับคำแปลที่มีอยู่แล้ว (นามสกุลเดียวกัน สำนักเดียวกัน) ให้แปลส่วนที่ซ้ำให้เหมือนกัน`);
     schemaProps.newTerms = { type: 'array', items: termItemSchema };
   }
   if (wantChars) {
@@ -191,15 +196,48 @@ NOVEL>>>`;
   let termsAdded = 0;
   if (wantTerms) {
     for (const item of (Array.isArray(parsed?.newTerms) ? parsed.newTerms : [])) {
-      const checked = validateGlossaryTerm(item?.src, item?.tgt, ctx.sourceLang);
+      const valid = validateGlossaryTerm(item?.src, item?.tgt, ctx.sourceLang);
       // ต้องเป็นคำที่อยู่ในตอนนี้จริง (กัน AI แต่งชื่อที่ไม่มี)
-      if (!checked || !plainText.includes(checked.src)) continue;
+      if (!valid || !plainText.includes(valid.src)) continue;
       const category = TERM_CATEGORIES.includes(item.category) ? item.category : 'character';
+      const checked = normalizeAutoTermTgt(valid, category, ctx.sourceLang);
       terms.push({ ...checked, category });
       if (!benchmark && await saveAutoTerm(checked, category, ctx)) termsAdded++;
     }
   }
   return { terms, storyLog: wantLog ? (parsed?.storyLog || null) : null, termsAdded, candidates: candidates.length };
+}
+
+/**
+ * ชื่อคนจีน/เกาหลีที่ AI ทับศัพท์แบบเว้นวรรค (高命 = "เกา มิ่ง") ให้เขียนติดกันตามแบบนิยายแปลไทย
+ * เฉพาะชื่อสั้นที่ต้นฉบับไม่มีตัวคั่น (ชื่อต่างชาติที่คั่นด้วย · ยังเว้นวรรคตามเดิม) ใช้กับคำที่ AI เพิ่มเองเท่านั้น
+ */
+function normalizeAutoTermTgt(term, category, lang) {
+  const code = normalizeLang(lang);
+  if (!term || category !== 'character' || !['zh', 'ko'].includes(code)) return term;
+  const plainName = code === 'zh' ? /^[㐀-鿿]{2,4}$/ : /^[가-힯]{2,4}$/;
+  if (!plainName.test(term.src) || !/^[฀-๿]+(?: [฀-๿]+){1,2}$/.test(term.tgt)) return term;
+  return { ...term, tgt: term.tgt.replace(/ /g, '') };
+}
+
+/**
+ * ชื่อคนในคลังเขียนติดกัน แต่คำแปลเว้นวรรคกลางชื่อ (คลัง "เกามิ่ง" คำแปล "เกา มิ่ง") แก้ให้ตรงคลังโดยไม่ใช้ API
+ * เฉพาะย่อหน้าที่ต้นฉบับมีชื่อนั้นจริง และเฉพาะต้นฉบับภาษาจีน/เกาหลี คืนจำนวนย่อหน้าที่แก้
+ */
+function joinSpacedNames(paragraphs, activeTerms, lang) {
+  if (!['zh', 'ko'].includes(normalizeLang(lang))) return 0;
+  const names = Object.values(activeTerms || {})
+    .filter(v => v.src && v.category === 'character' && /^[฀-๿]{3,}$/.test(v.resolvedTgt || ''))
+    .map(v => ({ src: v.src, tgt: v.resolvedTgt, re: new RegExp([...v.resolvedTgt].join(' ?'), 'g') }));
+  if (!names.length) return 0;
+  let fixed = 0;
+  for (const p of paragraphs) {
+    if (!p?.th || !p.src || p.kind === 'site_junk' || p.th === UNTRANSLATED_MARK) continue;
+    let th = p.th;
+    for (const n of names) if (p.src.includes(n.src)) th = th.replace(n.re, n.tgt);
+    if (th !== p.th) { p.th = th; fixed++; }
+  }
+  return fixed;
 }
 
 /** เก็บคำที่ AI เสนอ (ผ่านตัวตรวจแล้ว) เข้าคลังเป็น "AI เพิ่มเอง" ถ้ามีคำนี้อยู่แล้วผูกกับเรื่องนี้แทน คืน true ถ้าเป็นคำใหม่ */
@@ -390,7 +428,8 @@ async function collectNewTermsFromDraft(newTerms, paragraphs, ctx, { benchmark =
     if (!checked || seen.has(checked.src) || !srcText.includes(checked.src) || !thText.includes(checked.tgt)) continue;
     seen.add(checked.src);
     const category = TERM_CATEGORIES.includes(item.category) ? item.category : 'character';
-    if (await saveAutoTerm(checked, category, ctx)) added++;
+    // ชื่อที่เว้นวรรคถูกเก็บแบบติดกัน แล้วขั้นซ่อมจะแก้ย่อหน้าในตอนนี้ให้ตรงคลัง
+    if (await saveAutoTerm(normalizeAutoTermTgt(checked, category, ctx.sourceLang), category, ctx)) added++;
   }
   return added;
 }
@@ -456,6 +495,7 @@ async function translateChapterV2(rawText, ctx, {
   if (isStoryLike) {
     const added = await collectNewTermsFromDraft(draft.newTerms, paragraphs, ctx, { benchmark });
     if (added) pctx = await loadPromptContext(ctx);
+    joinSpacedNames(paragraphs, pctx.activeTerms, ctx.sourceLang);
   }
 
   // ขั้น 3: ตรวจด้วยกฎ + ซ่อม

@@ -884,6 +884,12 @@ function validateGlossaryTerm(src, tgt, lang) {
   const t = cleanTermString(tgt);
   if (!s || !t || s.length > 40 || t.length > 60) return null;
   if (t === s || t.toLowerCase() === s.toLowerCase()) return null;
+  // ตัวเดียว (เช่น 雪 陈) ไปตรงกับคำอื่นที่มีตัวนั้นอยู่ด้วย (新陈代谢) ทำให้บังคับคำแปลผิดที่
+  if (/^[぀-ヿ㐀-鿿가-힯]$/.test(s)) return null;
+  // ตัวเลขล้วน เลขห้อง เลเวล (2507, LV.6) ไม่ใช่ชื่อเฉพาะ
+  if (/^(?:lv\.?\s*)?[\d\s.,:：+\-%]+$/i.test(s)) return null;
+  // อักษรละตินมีวรรณยุกต์ (เช่น พินอิน yǒu) = ทับศัพท์ไม่เสร็จ
+  if (/[À-ɏḀ-ỿ]/.test(t)) return null;
   if (/[【】〖〗\[\]「」『』《》<>{}"“”]/.test(t)) return null;
   const leftover = getLeftoverRegex(lang);
   if (leftover && leftover.test(t)) return null;

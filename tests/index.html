@@ -1115,6 +1115,28 @@
         validateGlossaryTerm('Tower', 'Tower of God', 'en') === null && validateGlossaryTerm('魔', 'ปีศาจ【魔】', 'zh') === null &&
         validateGlossaryTerm('田中', 'ทานากะ', 'ja')?.tgt === 'ทานากะ' && validateGlossaryTerm('김철수', '김철수', 'ko') === null;
     });
+    test('ตัวตรวจคำศัพท์กลาง: ไม่เก็บอักษรตัวเดียว ตัวเลข/เลเวล และคำแปลที่ยังมีวรรณยุกต์พินอิน', () => {
+      return validateGlossaryTerm('雪', 'หิมะ', 'zh') === null && validateGlossaryTerm('陈', 'เฒ่าเฉิน', 'zh') === null &&
+        validateGlossaryTerm('2507', 'ห้อง 2507', 'zh') === null && validateGlossaryTerm('LV.6', 'ระดับ 6', 'zh') === null &&
+        validateGlossaryTerm('魏大友', 'เว่ยต้าหยǒว', 'zh') === null && validateGlossaryTerm('高命', 'เกามิ่ง', 'zh')?.tgt === 'เกามิ่ง' &&
+        validateGlossaryTerm('7号', 'หมายเลขเจ็ด', 'zh')?.tgt === 'หมายเลขเจ็ด';
+    });
+    test('ชื่อคนจีน/เกาหลีเขียนติดกัน: คำที่ AI เพิ่มเองตัดช่องว่างกลางชื่อ และแก้คำแปลที่เว้นวรรคให้ตรงคลัง', () => {
+      const n1 = normalizeAutoTermTgt({ src: '高命', tgt: 'เกา มิ่ง' }, 'character', 'zh');
+      const n2 = normalizeAutoTermTgt({ src: '菲利普·赫伯特', tgt: 'ฟิลิป เฮอร์เบิร์ต' }, 'character', 'zh');
+      const n3 = normalizeAutoTermTgt({ src: '含江市', tgt: 'เมือง หานเจียง' }, 'location', 'zh');
+      const n4 = normalizeAutoTermTgt({ src: '佐藤和真', tgt: 'ซาโต้ คาซึมะ' }, 'character', 'ja');
+      const n5 = normalizeAutoTermTgt({ src: '김독자', tgt: 'คิม ดกจา' }, 'character', 'ko');
+      const paras = [{ src: '高命看着他', th: 'เกา มิ่ง มองเขา' }, { src: '他走了', th: 'เกา มิ่ง ไปแล้ว' }, { src: '高命', th: 'เกามิ่ง' }];
+      const fixed = joinSpacedNames(paras, { '高命': { src: '高命', category: 'character', resolvedTgt: 'เกามิ่ง' } }, 'zh');
+      return n1.tgt === 'เกามิ่ง' && n2.tgt === 'ฟิลิป เฮอร์เบิร์ต' && n3.tgt === 'เมือง หานเจียง' && n4.tgt === 'ซาโต้ คาซึมะ' && n5.tgt === 'คิมดกจา' &&
+        fixed === 1 && paras[0].th === 'เกามิ่ง มองเขา' && paras[1].th === 'เกา มิ่ง ไปแล้ว' && paras[2].th === 'เกามิ่ง';
+    });
+    test('ตัวช่วยหาคำภาษาจีน: เจอชื่อคนที่ขึ้นต้นด้วยแซ่ (รวมแซ่สองตัว) แต่ไม่เอาคำนามทั่วไปที่ซ้ำบ่อย', () => {
+      const zh = '核桃很香。核桃很多。核桃好吃。核桃又大。雪花飘落。雪花很白。雪花纷飞。高命笑了。高命跑了。高命哭了。司徒安笑了。司徒安跑了。司徒安哭了。';
+      const z = mineTermCandidates(zh, 'zh');
+      return z.includes('高命') && z.includes('司徒安') && !z.includes('核桃') && !z.includes('雪花') && !z.includes('司徒');
+    });
     test('ตัวช่วยหาคำ: เจอชื่อที่ซ้ำ ชื่อสถานที่ คำในวงเล็บ ทุกภาษา และไม่เอาคำที่รู้จักแล้ว', () => {
       const zh = '林动笑道：“好。”林动说：“走吧。”众人来到青阳镇。青阳镇很热闹。他施展【大荒囚天指】。林动道：“来！”';
       const z = mineTermCandidates(zh, 'zh');
