@@ -251,8 +251,9 @@ function getQualityMode() {
   return localStorage.getItem('nov_enable_bilingual_verify') === 'false' ? 'fast' : 'standard';
 }
 
-// ระบบแปลเริ่มต้น: 'legacy' ระหว่างเทียบผลระบบใหม่กับระบบเดิมด้วยเรื่องจริง ผ่านแล้วเปลี่ยนเป็น 'v2'
-const DEFAULT_TRANSLATE_PIPELINE = 'legacy';
+// ระบบแปลเริ่มต้น: 'v2' (pipeline.js) ตั้งแต่ v3.30.0 หลังเทียบกับระบบเดิมด้วยนิยายจริง 3 เรื่อง 30 ตอน
+// ผู้ใช้ที่ติ๊ก "ใช้ระบบแปลรุ่นเดิม" ไว้เองยังใช้ระบบเดิมต่อ (เก็บค่าที่เลือกใน nov_translate_pipeline)
+const DEFAULT_TRANSLATE_PIPELINE = 'v2';
 
 /** ใช้ระบบแปลรุ่นเดิมไหม (ตั้งเองได้ที่ ตั้งค่า -> การแปล ไม่ตั้ง = ตามค่าเริ่มต้นด้านบน) */
 function isLegacyPipeline() {
@@ -968,6 +969,28 @@ function rescueEmptyBrackets(thText, srcText) {
   });
 }
 
+/** แยก JSON ระดับบนสุดที่ปิดครบออกเป็นก้อนๆ (ข้ามข้อความที่อยู่นอกวงเล็บ และไม่นับวงเล็บในสตริง) */
+function splitTopLevelJson(str) {
+  const out = [];
+  let depth = 0, start = -1, inStr = false, esc = false;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === '\\') esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') { if (depth > 0) inStr = true; continue; }
+    if (ch === '{' || ch === '[') { if (depth === 0) start = i; depth++; }
+    else if ((ch === '}' || ch === ']') && depth > 0) {
+      depth--;
+      if (depth === 0 && start >= 0) { out.push(str.slice(start, i + 1)); start = -1; }
+    }
+  }
+  return out;
+}
+
 function cleanAndParseJSON(rawStr) {
   if (!rawStr) throw new Error("ผลลัพธ์ว่างเปล่า");
 
@@ -1005,6 +1028,18 @@ function cleanAndParseJSON(rawStr) {
   try {
     return JSON.parse(str);
   } catch (err) {
+    // โมเดลส่ง JSON ครบแล้วต่อด้วยอย่างอื่น (JSON อีกก้อน คำอธิบาย) หรือแยกงานเป็นหลายก้อน: ใช้ทุกก้อนที่อ่านได้ รวมคีย์ (ก้อนแรกชนะ)
+    // อ่านเรียงจากก้อนแรก หยุดที่ก้อนแรกที่อ่านไม่ได้ (ก้อนแรกเสีย = โครงสร้างหลักเสีย ใช้วิธีกู้ย่อหน้าด้านล่างแทน)
+    const pieces = [];
+    for (const s of splitTopLevelJson(str)) {
+      let v = null;
+      try { v = JSON.parse(s); } catch (e) { break; }
+      if (!v || typeof v !== 'object' || Array.isArray(v)) break;
+      pieces.push(v);
+    }
+    if (pieces.length) {
+      return pieces.reduce((acc, o) => { Object.keys(o).forEach(k => { if (!(k in acc)) acc[k] = o[k]; }); return acc; }, {});
+    }
     // กู้ย่อหน้าที่อ่านได้ ย่อหน้าที่หายจะถูกเติมทีหลังด้วยรอบ gap-fill
     const unescape = (s) => { try { return JSON.parse(`"${s}"`); } catch (e) { return s; } };
     const pick = (key) => { const m = rawStr.match(new RegExp(`"${key}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`)); return m ? unescape(m[1]) : ''; };

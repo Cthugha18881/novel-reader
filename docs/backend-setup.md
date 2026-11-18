@@ -26,7 +26,7 @@
    - ใช้คีย์ใหม่ อย่าใช้คีย์ส่วนตัวที่เคยใช้ทดสอบในแอพ
 2. คัดลอกคีย์ (`sk-or-v1-...`) เก็บไว้ ใช้ในข้อ 3
 3. หาชื่อโมเดล Luna: เข้า [openrouter.ai/models](https://openrouter.ai/models) ค้นคำว่า `luna` แล้วคัดลอกชื่อเต็ม (รูปแบบ `ผู้ให้บริการ/ชื่อโมเดล`) เก็บไว้ใช้เป็น `DT_MODEL`
-4. เติมเครดิตที่ [openrouter.ai/settings/credits](https://openrouter.ai/settings/credits) (ประมาณ $0.005 ต่อตอนในโหมดสมดุล $5 แปลได้ ~1,000 ตอน)
+4. เติมเครดิตที่ [openrouter.ai/settings/credits](https://openrouter.ai/settings/credits) (ประมาณ $0.005 ต่อตอนในโหมดมาตรฐาน $5 แปลได้ ~1,000 ตอน)
 
 ## 2. Supabase: บัญชีผู้ใช้และฐานข้อมูล
 

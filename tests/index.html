@@ -123,6 +123,13 @@
       return eq(r.paragraphs, [{ i: 0, th: 'หนึ่ง' }, { i: 1, th: 'สอง "คำพูด"' }]) && r._partial === true;
     });
     test('cleanAndParseJSON: JSON เสียหมดโยน error', () => { try { cleanAndParseJSON('not json'); return false; } catch (e) { return true; } });
+    test('cleanAndParseJSON: JSON ครบแล้วมีอย่างอื่นต่อท้าย หรือแยกงานเป็นหลายก้อน ใช้ทุกก้อนที่อ่านได้ (ก้อนแรกชนะ)', () => {
+      return eq(cleanAndParseJSON('{"newTerms":[{"src":"秦铭"}]}{"storyLog":{"events":[]}}'), { newTerms: [{ src: '秦铭' }], storyLog: { events: [] } }) &&
+        eq(cleanAndParseJSON('{"a":1}\n\nหมายเหตุ: ตรวจแล้ว {ไม่มีปัญหา}'), { a: 1 }) &&
+        eq(cleanAndParseJSON('{"a":1,"s":"มี } ในข้อความ"}{"a":5,"b":2}'), { a: 1, s: 'มี } ในข้อความ', b: 2 }) &&
+        eq(cleanAndParseJSON('ผลลัพธ์: {"a":1}'), { a: 1 }) &&
+        cleanAndParseJSON('{"paragraphs":[{"i":0,"th":"หนึ่ง"},{"i":1,"th":"สอ')._partial === true;
+    });
 
     // ---------- Chunking / glossary filter ----------
     test('splitSourceParagraphs: แยกตามบรรทัดว่าง', () => eq(splitSourceParagraphs('甲\n\n乙\n\n\n丙 '), ['甲', '乙', '丙']));
