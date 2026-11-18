@@ -37,6 +37,8 @@ async function getActiveGlossaryForBook(bookId) {
       // ไม่อย่างนั้น AI จะใส่อักษรจีนตามคลังศัพท์ทุกตอน และขั้นแก้อักษรที่หลงเหลือก็แก้ไม่ได้ (ยิ่งแปลยาว คำแบบนี้ยิ่งสะสม)
       // คำที่ผู้ใช้ใส่หรือยืนยันเองใช้ตามเดิมเสมอ (ไม่แตะข้อมูลในคลัง)
       if (cleanTgt && item.auto && leftover && leftover.test(cleanTgt)) return;
+      // เช่นเดียวกับคำแปลที่ทับศัพท์ไม่เสร็จ ยังมีอักษรละตินพิมพ์เล็ก ("หม่า yang") ต้นฉบับภาษาอังกฤษไม่นับ
+      if (cleanTgt && item.auto && bookLang !== 'en' && /[a-z]{2,}/.test(cleanTgt)) return;
       if (cleanTgt) {
         activeMap[item.src] = { ...item, resolvedTgt: cleanTgt };
       }
@@ -888,8 +890,8 @@ function validateGlossaryTerm(src, tgt, lang) {
   if (/^[぀-ヿ㐀-鿿가-힯]$/.test(s)) return null;
   // ตัวเลขล้วน เลขห้อง เลเวล (2507, LV.6) ไม่ใช่ชื่อเฉพาะ
   if (/^(?:lv\.?\s*)?[\d\s.,:：+\-%]+$/i.test(s)) return null;
-  // อักษรละตินมีวรรณยุกต์ (เช่น พินอิน yǒu) = ทับศัพท์ไม่เสร็จ
-  if (/[À-ɏḀ-ỿ]/.test(t)) return null;
+  // อักษรละตินมีวรรณยุกต์ (พินอิน yǒu) หรือตัวพิมพ์เล็กค้าง ("หม่า yang") = ทับศัพท์ไม่เสร็จ (ตัวย่อพิมพ์ใหญ่ เช่น HP ยังใช้ได้)
+  if (/[À-ɏḀ-ỿ]/.test(t) || /[a-z]{2,}/.test(t)) return null;
   if (/[【】〖〗\[\]「」『』《》<>{}"“”]/.test(t)) return null;
   const leftover = getLeftoverRegex(lang);
   if (leftover && leftover.test(t)) return null;

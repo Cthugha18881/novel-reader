@@ -1119,7 +1119,15 @@
       return validateGlossaryTerm('雪', 'หิมะ', 'zh') === null && validateGlossaryTerm('陈', 'เฒ่าเฉิน', 'zh') === null &&
         validateGlossaryTerm('2507', 'ห้อง 2507', 'zh') === null && validateGlossaryTerm('LV.6', 'ระดับ 6', 'zh') === null &&
         validateGlossaryTerm('魏大友', 'เว่ยต้าหยǒว', 'zh') === null && validateGlossaryTerm('高命', 'เกามิ่ง', 'zh')?.tgt === 'เกามิ่ง' &&
-        validateGlossaryTerm('7号', 'หมายเลขเจ็ด', 'zh')?.tgt === 'หมายเลขเจ็ด';
+        validateGlossaryTerm('7号', 'หมายเลขเจ็ด', 'zh')?.tgt === 'หมายเลขเจ็ด' &&
+        validateGlossaryTerm('马阳', 'หม่า yang', 'zh') === null && validateGlossaryTerm('生命值', 'ค่า HP', 'zh')?.tgt === 'ค่า HP';
+    });
+    test('ตรวจย่อหน้าก่อนซ่อม: ต้นฉบับภาษาจีนแต่คำแปลมีพินอินค้าง (ตัวย่อพิมพ์ใหญ่และคำที่ต้นฉบับมีไม่นับ)', () => {
+      const stray = diagnoseParagraphForRepair({ src: '马阳说道', th: 'หม่า yang กล่าว' }, {}, 'zh');
+      const caps = diagnoseParagraphForRepair({ src: '他的HP很低', th: 'HP ของเขาต่ำมาก' }, {}, 'zh');
+      const inSrc = diagnoseParagraphForRepair({ src: '他打开了app', th: 'เขาเปิด app' }, {}, 'zh');
+      return stray.some(x => x.reason === 'leftover-latin' && x.note.includes('yang')) && caps.length === 0 && inSrc.length === 0 &&
+        nameStyleRule('zh').includes('เฒ่าหวัง') && nameStyleRule('ko').includes('คิมดกจา') && nameStyleRule('ja') === '';
     });
     test('ชื่อคนจีน/เกาหลีเขียนติดกัน: คำที่ AI เพิ่มเองตัดช่องว่างกลางชื่อ และแก้คำแปลที่เว้นวรรคให้ตรงคลัง', () => {
       const n1 = normalizeAutoTermTgt({ src: '高命', tgt: 'เกา มิ่ง' }, 'character', 'zh');

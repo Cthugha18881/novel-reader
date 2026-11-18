@@ -114,6 +114,14 @@ const GENRE_TERM_HINTS = {
   kr_fantasy: 'สกิล กิลด์ ระดับฮันเตอร์ ดันเจี้ยน ประตูมิติ'
 };
 
+/** กติกาการเขียนชื่อคน (ขั้นวิเคราะห์และขั้นแปลของระบบรุ่น 2 ใช้ข้อความเดียวกัน) คืน '' ถ้าภาษานั้นไม่มีกติกาเพิ่ม */
+function nameStyleRule(lang) {
+  const code = normalizeLang(lang);
+  if (code === 'zh') return '- ชื่อคนจีนที่ทับศัพท์ เขียนติดกันไม่เว้นวรรค (เช่น 司徒安 = ซือถูอัน) แต่คำที่บอกวัย ฐานะ หรือความสัมพันธ์ที่ติดกับชื่อ (老头 老汉 阿婆 婆婆 大爷 大娘 大叔 叔 婶 哥 姐 掌柜 师父) ให้แปลความหมายแบบนิยายแปลไทย ไม่ทับศัพท์ (เช่น 王老头 = เฒ่าหวัง, 张阿婆 = ยายจาง, 赵大爷 = ลุงจ้าว) ชื่อต่างชาติที่ต้นฉบับคั่นด้วย · ให้เว้นวรรคแทน ·\n';
+  if (code === 'ko') return '- ชื่อคนเกาหลีที่ทับศัพท์ เขียนติดกันไม่เว้นวรรค (เช่น 김독자 = คิมดกจา) คำเรียกที่บอกความสัมพันธ์ (형 누나 언니 오빠 선배) ใช้คำที่นิยมในนิยายแปลไทย\n';
+  return '';
+}
+
 /** ต้นฉบับเฉพาะเนื้อเรื่องพร้อมเลขย่อหน้า [P12] (เลขตรงกับลำดับย่อหน้าของตอน ใช้แบ่งช่วงอารมณ์ของบันทึก) */
 function storySourceWithMarkersFromParas(sourceParas, ruleKinds, limit = ANALYZE_SOURCE_LIMIT) {
   const lines = [];
@@ -159,8 +167,9 @@ async function analyzeChapter(sourceParas, ruleKinds, ctx, { signal = null, onSt
 - ห้ามเก็บชื่อตอน ประโยค หรือวลียาวที่บรรยายเหตุการณ์ และห้ามเก็บอักษรตัวเดียว
 - คำในวงเล็บ 【 】 〖 〗 『 』 [ ] มักเป็นชื่อเฉพาะ ให้พิจารณาทุกคำ
 ${candidates.length ? `- คำที่ระบบหาไว้ให้ (อาจมีคำทั่วไปปน ให้เลือกเฉพาะที่เป็นชื่อเฉพาะจริง และเพิ่มคำที่ระบบหาไม่เจอด้วย): ${candidates.join(', ')}\n` : ''}${localStorage.getItem('nov_enable_deep_ner') === 'true' ? '- เก็บคำประสมพิเศษ ฉายาตัวละคร คำเรียกเฉพาะของเผ่าพันธุ์ และตำแหน่งเฉพาะถิ่นด้วย\n' : ''}- "src" ตรงตามต้นฉบับทุกตัวอักษร ไม่รวมคำลงท้ายที่ไม่ใช่ชื่อ (เช่น さん 님)
-- "tgt" ต้องเป็นภาษาไทยทั้งหมด (ทับศัพท์หรือแปลความหมายตามที่นิยมในนิยายแปลไทย) ห้ามมีตัวอักษรภาษา${langName} ห้ามมีวงเล็บ เครื่องหมายคำพูด หรือวรรณยุกต์พินอิน
-${['zh', 'ko'].includes(normalizeLang(ctx.sourceLang)) ? `- ชื่อคน${langName}ที่ทับศัพท์ เขียนติดกันไม่เว้นวรรค (เช่น ${normalizeLang(ctx.sourceLang) === 'ko' ? '김독자 = คิมดกจา' : '司徒安 = ซือถูอัน'}) ส่วนชื่อที่ต้นฉบับคั่นด้วย · (ชื่อต่างชาติ) ให้เว้นวรรคแทน ·\n` : ''}- ชื่อที่เกี่ยวข้องกับคำแปลที่มีอยู่แล้ว (นามสกุลเดียวกัน สำนักเดียวกัน) ให้แปลส่วนที่ซ้ำให้เหมือนกัน`);
+- "tgt" ต้องเป็นภาษาไทยทั้งหมด (ทับศัพท์หรือแปลความหมายตามที่นิยมในนิยายแปลไทย) ห้ามมีตัวอักษรภาษา${langName} ห้ามมีวงเล็บ เครื่องหมายคำพูด${normalizeLang(ctx.sourceLang) !== 'en' ? ' หรืออักษรละติน (ทับศัพท์ให้ครบทุกพยางค์ เช่น ห้ามเขียน "หลิน feng")' : ''}
+${nameStyleRule(ctx.sourceLang)}- คำประสมที่ผู้แต่งใช้ในความหมายเฉพาะของเรื่อง (ชื่อพลัง ปรากฏการณ์ ยุคสมัย) ให้เก็บแม้จะแปลตามตัวอักษรได้
+- ชื่อที่เกี่ยวข้องกับคำแปลที่มีอยู่แล้ว (นามสกุลเดียวกัน สำนักเดียวกัน) ให้แปลส่วนที่ซ้ำให้เหมือนกัน`);
     schemaProps.newTerms = { type: 'array', items: termItemSchema };
   }
   if (wantChars) {
@@ -285,12 +294,16 @@ function diagnoseParagraphForRepair(p, activeTerms, lang) {
     .slice(0, 6)
     .map(([s, v]) => `${s} ต้องเป็น "${v.resolvedTgt}"`);
   if (wrongNames.length) out.push({ reason: 'glossary', count: wrongNames.length, note: `ชื่อไม่ตรงคลังศัพท์: ${wrongNames.join(', ')}` });
-  // ต้นฉบับภาษาอังกฤษ: คำอังกฤษจากต้นฉบับที่ยังค้างในคำแปล (ยกเว้นคำที่อยู่ในคำแปลของคลังศัพท์ เช่น HP)
+  const termText = Object.values(activeTerms || {}).map(v => v.resolvedTgt || '').join(' ').toLowerCase();
+  const srcLower = src.toLowerCase();
   if (normalizeLang(lang) === 'en') {
-    const termText = Object.values(activeTerms || {}).map(v => v.resolvedTgt || '').join(' ').toLowerCase();
-    const srcLower = src.toLowerCase();
+    // ต้นฉบับภาษาอังกฤษ: คำอังกฤษจากต้นฉบับที่ยังค้างในคำแปล (ยกเว้นคำที่อยู่ในคำแปลของคลังศัพท์ เช่น HP)
     const stuck = [...new Set((th.match(/[A-Za-z]{4,}/g) || []).filter(w => srcLower.includes(w.toLowerCase()) && !termText.includes(w.toLowerCase())))];
     if (stuck.length) out.push({ reason: 'leftover-latin', note: `มีคำภาษาอังกฤษค้าง: ${stuck.slice(0, 6).join(', ')} ให้แปลหรือทับศัพท์เป็นไทย` });
+  } else {
+    // ภาษาอื่น: คำละตินพิมพ์เล็กที่ต้นฉบับไม่มี = พินอิน/โรมาจิที่ทับศัพท์ไม่เสร็จ (เช่น "หม่า yang") ตัวย่อพิมพ์ใหญ่ไม่นับ
+    const stray = [...new Set((th.match(/[A-Za-z]*[a-z]{2,}[A-Za-z]*/g) || []).filter(w => !srcLower.includes(w.toLowerCase()) && !termText.includes(w.toLowerCase())))];
+    if (stray.length) out.push({ reason: 'leftover-latin', note: `มีอักษรละตินค้าง (ทับศัพท์ไม่เสร็จ): ${stray.slice(0, 6).join(', ')} ให้เขียนเป็นภาษาไทย` });
   }
   return out;
 }
