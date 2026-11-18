@@ -70,7 +70,7 @@ function renderBenchmarkSetup(rows) {
       <button class="btn" onclick="addBenchmarkRow()">+ เพิ่มโมเดล</button>
       <label style="font-size: 12px;">โหมดคุณภาพ
         <select class="form-input" id="bench-quality" style="width: auto;">
-          ${QUALITY_MODES.map(m => `<option value="${m}" ${m === getQualityMode() ? 'selected' : ''}>${({ fast: 'เร็ว', balanced: 'สมดุล', thorough: 'ละเอียด', best: 'ดีที่สุด' })[m]}</option>`).join('')}
+          ${QUALITY_MODES.map(m => `<option value="${m}" ${m === getQualityMode() ? 'selected' : ''}>${QUALITY_MODE_LABELS[m]}</option>`).join('')}
         </select></label>
       <span style="margin-left: auto; display: flex; gap: 6px;">
         <button class="btn btn-danger" id="bench-stop-btn" style="display: none;" onclick="abortTask('benchmark')">หยุด</button>

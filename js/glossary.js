@@ -873,6 +873,25 @@ async function delGloss(src) {
   renderVirtualWindow(currentChapterIndex);
 }
 
+// ---------- ตัวตรวจคำศัพท์กลาง ----------
+// ทุกทางที่ AI เพิ่มคำเข้าคลังเอง (ขั้นวิเคราะห์ตอน, ชื่อที่เก็บตกจากขั้นแปล, สแกนแบบรุ่นเดิม) ต้องผ่านตัวตรวจนี้
+// คำที่ผู้ใช้พิมพ์เองไม่ผ่านตัวตรวจนี้ (เก็บตามที่ใส่เสมอ)
+const THAI_CHAR_REGEX = /[\u0E00-\u0E7F]/;
+
+/** คืน { src, tgt } ที่ใช้ได้ หรือ null ถ้าไม่ควรเก็บ (คำแปลยังเป็นภาษาต้นฉบับ/เหมือนต้นฉบับ/ไม่ใช่ภาษาไทย/มีวงเล็บ/ยาวผิดปกติ) */
+function validateGlossaryTerm(src, tgt, lang) {
+  const s = cleanTermString(src);
+  const t = cleanTermString(tgt);
+  if (!s || !t || s.length > 40 || t.length > 60) return null;
+  if (t === s || t.toLowerCase() === s.toLowerCase()) return null;
+  if (/[【】〖〗\[\]「」『』《》<>{}"“”]/.test(t)) return null;
+  const leftover = getLeftoverRegex(lang);
+  if (leftover && leftover.test(t)) return null;
+  // ปลายทางเป็นภาษาไทย: ต้องมีอักษรไทย ยกเว้นตัวย่อสั้นๆ เช่น HP, MP, S+
+  if (!THAI_CHAR_REGEX.test(t) && !/^[A-Z0-9][A-Z0-9.+\-]{0,5}$/.test(t)) return null;
+  return { src: s, tgt: t };
+}
+
 // โยน error ออกไปให้ผู้เรียกตัดสินใจ (pipeline แปลจะข้ามไป, ปุ่มสแกนเองจะแจ้งผู้ใช้)
 // สแกนก่อนแปล: คำศัพท์ใหม่ + ข้อมูลตัวละครสำหรับคู่มือเรื่อง (รวมเป็นคำขอเดียว)
 async function extractAndStoreAutoGlossary(rawText, ctx, { signal = null, onStatus = null, force = false } = {}) {
@@ -945,11 +964,11 @@ ${isBibleEnabled ? `\n${buildCharacterExtractionInstruction(extras.bible, rawTex
   let addedCount = 0;
   for (const item of items) {
     if (typeof item?.src !== 'string' || typeof item?.tgt !== 'string' || !item.src || !item.tgt) continue;
-    const cleanSrc = cleanTermString(item.src);
-    const cleanTgt = cleanTermString(item.tgt);
-    // AI ส่งคำแปลที่ยังเป็นภาษาต้นฉบับมา (เช่นคัดลอกชื่อจีนมาทั้งตัว): ไม่เก็บเข้าคลัง
-    const leftoverRe = getLeftoverRegex(ctx.sourceLang);
-    if (!cleanTgt || cleanTgt === cleanSrc || (leftoverRe && leftoverRe.test(cleanTgt))) continue;
+    // AI ส่งคำแปลที่ยังเป็นภาษาต้นฉบับมา (เช่นคัดลอกชื่อจีนมาทั้งตัว): ไม่เก็บเข้าคลัง (ตัวตรวจคำศัพท์กลาง)
+    const checked = validateGlossaryTerm(item.src, item.tgt, ctx.sourceLang);
+    if (!checked) continue;
+    const cleanSrc = checked.src;
+    const cleanTgt = checked.tgt;
     const existing = existingItems.find(x => x.src === cleanSrc);
     if (!existing) {
       const newItem = {

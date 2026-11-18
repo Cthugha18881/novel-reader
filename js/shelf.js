@@ -111,15 +111,21 @@ function estimateChapterTokens(bookChaps, lang) {
   const code = normalizeLang(lang);
   const src = avgChars * TOKENS_PER_SRC_CHAR[code];
   const out = avgChars * OUTPUT_TOKENS_PER_SRC_CHAR[code];
-  // สแกนก่อนแปล + แปล (ทุกโหมด)
-  let input = (src + 1500) + (src + PROMPT_OVERHEAD_TOKENS);
-  let output = 600 + out;
   const mode = getQualityMode();
-  if (mode === 'balanced') { input += 0.3 * (src + out) + 1000; output += 0.3 * out; }
-  if (mode === 'thorough') { input += src + out + 1000; output += out; }
-  if (mode === 'best') {
-    input += 0.3 * (src + out) + 1000 + (src + out + 1500) + (src + 2 * out + 800);
-    output += 0.3 * out + out + 400;
+  let input, output;
+  if (typeof isLegacyPipeline === 'function' && isLegacyPipeline()) {
+    // ระบบรุ่นเดิม: สแกนก่อนแปล + แปล + บันทึกเหตุการณ์ (+ ตรวจย่อหน้าน่าสงสัย / เกลา + ตรวจความหมาย)
+    input = (src + 1500) + (src + PROMPT_OVERHEAD_TOKENS) + (src + 1200);
+    output = 600 + out + 700;
+    if (mode !== 'fast') { input += 0.3 * (src + out) + 1000; output += 0.3 * out; }
+    if (mode === 'best') { input += (src + out + 1500) + (src + 2 * out + 800); output += out + 400; }
+  } else {
+    // ระบบรุ่น 2 (pipeline.js): วิเคราะห์ตอน (คำศัพท์ + ตัวละคร + บันทึกเหตุการณ์) + แปล + ซ่อม (+ เกลา + ตรวจความหมาย)
+    input = (src + 2500) + (src + PROMPT_OVERHEAD_TOKENS);
+    output = 900 + out + 150;
+    if (mode === 'fast') { input += 0.1 * (src + out); output += 0.05 * out; }
+    else { input += 0.25 * (src + out) + 800; output += 0.2 * out; }
+    if (mode === 'best') { input += (src + out + 1500) + 0.6 * (src + 2 * out) + 800; output += out + 400; }
   }
   return { input: Math.round(input), output: Math.round(output), avgChars: Math.round(avgChars) };
 }
@@ -129,7 +135,7 @@ function formatTokenCount(n) {
 }
 
 function formatBatchEstimate(est, count) {
-  const labels = { fast: 'เร็ว', balanced: 'สมดุล', thorough: 'ละเอียด', best: 'ดีที่สุด' };
+  const labels = QUALITY_MODE_LABELS;
   const basis = est.fromHistory
     ? `คิดจากที่ใช้จริงเฉลี่ย ${est.fromHistory} ตอนล่าสุดของเรื่องนี้`
     : `ตอนละประมาณ ${est.avgChars.toLocaleString()} ตัวอักษรต้นฉบับ`;

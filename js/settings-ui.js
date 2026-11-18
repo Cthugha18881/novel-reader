@@ -235,6 +235,9 @@ async function saveSettings() {
   localStorage.setItem('nov_enable_infinite', document.getElementById('enable-infinite-scroll').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_prefetch', document.getElementById('enable-live-prefetch').checked ? 'true' : 'false');
   localStorage.setItem('nov_enable_auto_glossary', document.getElementById('enable-auto-glossary').checked ? 'true' : 'false');
+  const legacyChk = document.getElementById('use-legacy-pipeline');
+  // เก็บค่าที่เลือกไว้ชัดเจน (ไม่ขึ้นกับค่าเริ่มต้นที่อาจเปลี่ยนในรุ่นถัดไป) เฉพาะเมื่อผู้ใช้เปลี่ยนจากค่าที่เห็นตอนเปิด
+  if (legacyChk && legacyChk.checked !== isLegacyPipeline()) localStorage.setItem('nov_translate_pipeline', legacyChk.checked ? 'legacy' : 'v2');
   const showJunk = document.getElementById('show-junk-paras').checked;
   localStorage.setItem('nov_show_junk', showJunk ? 'true' : 'false');
   document.body.classList.toggle('show-junk', showJunk);
@@ -292,6 +295,8 @@ function loadSettings() {
 
   const qualitySelect = document.getElementById('quality-mode-select');
   if (qualitySelect) qualitySelect.value = getQualityMode();
+  const legacyPipelineChk = document.getElementById('use-legacy-pipeline');
+  if (legacyPipelineChk) legacyPipelineChk.checked = isLegacyPipeline();
   const fallbackSelect = document.getElementById('llm-fallback-provider');
   if (fallbackSelect) fallbackSelect.value = getFallbackProvider();
 

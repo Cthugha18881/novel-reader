@@ -61,6 +61,18 @@ const SCHEMAS = {
     },
     used_entities: { type: 'array', items: termItemSchema }
   }),
+  // ระบบแปลรุ่น 2: ส่งกลับเฉพาะชื่อที่ไม่มีในคลังศัพท์ที่ให้ไป (new_terms) แทนทุกชื่อ (ลด token ขาออก)
+  translationV2: strictObject({
+    translatedBookTitle: { type: 'string' },
+    translatedChapterTitle: { type: 'string' },
+    chapter_type: { type: 'string', enum: CHAPTER_TYPES },
+    chapter_summary: { type: 'string' },
+    paragraphs: {
+      type: 'array',
+      items: strictObject({ i: { type: 'integer' }, th: { type: 'string' }, kind: { type: 'string', enum: AI_PARAGRAPH_KINDS } })
+    },
+    new_terms: { type: 'array', items: termItemSchema }
+  }),
   verify: strictObject({ verified: numberedThSchema }),
   polish: strictObject({ polished: numberedThSchema }),
   fidelity: strictObject({
@@ -215,21 +227,37 @@ function findExistingBookForUrl(url, books) {
 // เพิ่มเลขนี้ทุกครั้งที่เปลี่ยน prompt แปลอย่างมีนัยสำคัญ เพื่อให้รู้ว่าตอนไหนแปลด้วย prompt รุ่นเก่า
 const PROMPT_VERSION = '3.1';
 
-// โหมดคุณภาพ: fast = แปลรอบเดียว, balanced = + ตรวจย่อหน้าน่าสงสัย, thorough = + ตรวจทุกย่อหน้า,
-// best = แปล -> บรรณาธิการเกลาสำนวน -> ตรวจความหมายเทียบต้นฉบับ (+ ตรวจย่อหน้าน่าสงสัย)
-const QUALITY_MODES = ['fast', 'balanced', 'thorough', 'best'];
+// โหมดคุณภาพ 3 ระดับ (รายละเอียดว่าแต่ละระดับทำอะไรอยู่ที่ QUALITY_PLANS ใน pipeline.js)
+// fast = เร็ว, standard = มาตรฐาน, best = ดีที่สุด (เฉพาะแพ็กเกจที่เปิดให้)
+const QUALITY_MODES = ['fast', 'standard', 'best'];
+// ชื่อโหมดจากรุ่นก่อน 4 ระดับ: สมดุล/ละเอียด รวมเป็นมาตรฐาน (ตอนที่แปลไว้แล้วยังแสดงชื่อเดิมได้)
+const LEGACY_QUALITY_MODE_MAP = { balanced: 'standard', thorough: 'standard' };
+
+/** แปลงชื่อโหมดรุ่นก่อนเป็นโหมดปัจจุบัน */
+function normalizeQualityMode(mode) {
+  if (QUALITY_MODES.includes(mode)) return mode;
+  return LEGACY_QUALITY_MODE_MAP[mode] || '';
+}
 
 function getQualityMode() {
-  const mode = localStorage.getItem('nov_quality_mode');
+  const mode = normalizeQualityMode(localStorage.getItem('nov_quality_mode'));
   // โหมด "ดีที่สุด" เฉพาะแพ็กเกจที่เปิดให้ (ค่าที่ตั้งไว้ยังเก็บไว้ อัปเกรดแล้วกลับมาใช้ได้เลย)
-  if (mode === 'best' && typeof planAllows === 'function' && !planAllows('bestMode')) return 'balanced';
-  if (QUALITY_MODES.includes(mode)) return mode;
-  // ค่าจากรุ่นก่อน (nov_verify_mode / nov_enable_bilingual_verify)
+  if (mode === 'best' && typeof planAllows === 'function' && !planAllows('bestMode')) return 'standard';
+  if (mode) return mode;
+  // ค่าจากรุ่นก่อนมาก (nov_verify_mode / nov_enable_bilingual_verify)
   const legacy = localStorage.getItem('nov_verify_mode');
   if (legacy === 'off') return 'fast';
-  if (legacy === 'full') return 'thorough';
-  if (legacy === 'smart') return 'balanced';
-  return localStorage.getItem('nov_enable_bilingual_verify') === 'false' ? 'fast' : 'balanced';
+  if (legacy === 'full' || legacy === 'smart') return 'standard';
+  return localStorage.getItem('nov_enable_bilingual_verify') === 'false' ? 'fast' : 'standard';
+}
+
+// ระบบแปลเริ่มต้น: 'legacy' ระหว่างเทียบผลระบบใหม่กับระบบเดิมด้วยเรื่องจริง ผ่านแล้วเปลี่ยนเป็น 'v2'
+const DEFAULT_TRANSLATE_PIPELINE = 'legacy';
+
+/** ใช้ระบบแปลรุ่นเดิมไหม (ตั้งเองได้ที่ ตั้งค่า -> การแปล ไม่ตั้ง = ตามค่าเริ่มต้นด้านบน) */
+function isLegacyPipeline() {
+  const v = localStorage.getItem('nov_translate_pipeline');
+  return (v === 'legacy' || v === 'v2' ? v : DEFAULT_TRANSLATE_PIPELINE) === 'legacy';
 }
 
 function buildTranslationMeta() {
@@ -1314,7 +1342,7 @@ function makeParagraphDiagnoser(activeTerms, lang = DEFAULT_SOURCE_LANG) {
 
 // โหมดตรวจทานคำนวณจากโหมดคุณภาพ (โหมด best ใช้การตรวจความหมายหลังเกลาแทนการตรวจทุกย่อหน้า)
 function getVerifyMode() {
-  return ({ fast: 'off', balanced: 'smart', thorough: 'full', best: 'smart' })[getQualityMode()];
+  return ({ fast: 'off', standard: 'smart', best: 'smart' })[getQualityMode()] || 'smart';
 }
 
 // ---------- Shared prompt context ----------
@@ -1588,8 +1616,11 @@ async function saveUsedEntities(entities, bookId, lang = DEFAULT_SOURCE_LANG) {
   if (!Array.isArray(entities)) return;
   for (const ent of entities) {
     if (typeof ent?.src !== 'string' || typeof ent?.tgt !== 'string' || !ent.src || !ent.tgt) continue;
-    const cleanSrc = cleanTermString(ent.src);
-    const cleanTgt = cleanTermString(ent.tgt);
+    // ตัวตรวจคำศัพท์กลาง (glossary.js): คำแปลที่ยังเป็นภาษาต้นฉบับ/ไม่ใช่ภาษาไทย ไม่เก็บเข้าคลัง
+    const checked = validateGlossaryTerm(ent.src, ent.tgt, lang);
+    if (!checked) continue;
+    const cleanSrc = checked.src;
+    const cleanTgt = checked.tgt;
     const existing = inMemoryGlossaryCache.find(x => x.src === cleanSrc);
     if (!existing) {
       await dbSaveGlossaryItem({
@@ -1626,12 +1657,12 @@ const SCENE_STYLE = `การปรับสำนวนตามฉาก:
  * ส่งแยกเป็น system prompt เพื่อให้ผู้ให้บริการ cache ไว้ได้ (Claude ใช้ cache_control, Gemini/OpenAI cache ส่วนต้นที่เหมือนเดิมเอง)
  * ห้ามใส่ข้อมูลที่เปลี่ยนไปในแต่ละครั้ง (คลังศัพท์ที่เกี่ยวข้อง, บริบทตอนก่อน, เนื้อหา) ไว้ในส่วนนี้ ไม่งั้น cache จะไม่ทำงาน
  */
-function buildTranslationSystemPrompt(ctx, { noteMode = false } = {}) {
+function buildTranslationSystemPrompt(ctx, { noteMode = false, variant = '' } = {}) {
   const styleSection = noteMode
     ? `ลักษณะของข้อความ:\n${NOTE_MODE_STYLE}`
     : `แนวเรื่องและสรรพนาม:\n${getGenreInstruction(ctx.genre)}\n\n${SCENE_STYLE}\n\nข้อควรระวังเฉพาะต้นฉบับภาษา${getLangName(ctx.sourceLang)}:\n${getLanguageInstruction(ctx.sourceLang)}`;
 
-  return `คุณคือนักแปลนิยาย${getLangName(ctx.sourceLang)}-ไทยมืออาชีพ งานของคุณต้องอ่านแล้วเหมือนนิยายที่เขียนเป็นภาษาไทยตั้งแต่แรก แต่เนื้อหาตรงกับต้นฉบับทุกประการ
+  const prompt = `คุณคือนักแปลนิยาย${getLangName(ctx.sourceLang)}-ไทยมืออาชีพ งานของคุณต้องอ่านแล้วเหมือนนิยายที่เขียนเป็นภาษาไทยตั้งแต่แรก แต่เนื้อหาตรงกับต้นฉบับทุกประการ
 
 ลำดับความสำคัญ (ข้อบนสำคัญกว่าข้อล่าง):
 1. ความหมายตรงต้นฉบับ: ไม่เพิ่ม ไม่ตัด ไม่ตีความเกิน รักษาว่าใครทำอะไรกับใคร คำปฏิเสธ เงื่อนไข และตัวเลข
@@ -1663,6 +1694,13 @@ ${styleSection}
   "used_entities": [ {"src": "คำตามต้นฉบับ", "tgt": "คำแปลไทย", "category": "character|title|location|skill|equipment|resource|realm"} ]
 }
 การแปลชื่อตอน/ชื่อเรื่อง ให้ทำตามที่ระบุในแต่ละคำขอ`;
+  if (variant !== 'v2') return prompt;
+  // ระบบรุ่น 2: ให้ส่งเฉพาะชื่อเฉพาะที่ไม่อยู่ในคลังศัพท์ (เก็บตกคำที่ขั้นวิเคราะห์หลุด) และต้องเป็นภาษาไทยล้วน
+  return prompt
+    .replace('- "used_entities": ชื่อเฉพาะสำคัญและระดับพลังที่ปรากฏในเนื้อเรื่อง พร้อมคำแปลที่ใช้',
+      `- "new_terms": เฉพาะชื่อเฉพาะ (คน สถานที่ สำนัก วิชา ไอเทม ระดับพลัง ฉายา) ที่ปรากฏในเนื้อเรื่องแต่ "ไม่อยู่ในคลังศัพท์ที่ให้มา" พร้อมคำแปลไทยที่คุณใช้ในคำแปลนี้ ถ้าไม่มีให้ส่ง [] (ห้ามส่งคำที่มีในคลังแล้ว ห้ามส่งคำทั่วไป "tgt" ต้องเป็นภาษาไทยล้วน ไม่มีตัวอักษรภาษา${getLangName(ctx.sourceLang)})`)
+    .replace('"used_entities": [ {"src": "คำตามต้นฉบับ", "tgt": "คำแปลไทย", "category": "character|title|location|skill|equipment|resource|realm"} ]',
+      '"new_terms": [ {"src": "คำตามต้นฉบับ", "tgt": "คำแปลไทย", "category": "character|title|location|skill|equipment|resource|realm"} ]');
 }
 
 /** ส่วนที่เปลี่ยนในแต่ละคำขอ: บริบทของเรื่อง/ตอน คลังศัพท์ที่เกี่ยวข้อง และย่อหน้าที่ต้องแปล */
@@ -1698,8 +1736,9 @@ async function translateChunkAdaptive(chunk, ctx, options) {
     const chunkText = chunk.map(c => c.src).join('\n');
     const contextBlocks = options.pctx ? buildContextBlocks(options.pctx, chunkText, { includeExamples: !options.noteMode }) : '';
     const prompt = buildTranslationPrompt(chunk, ctx, { ...options, contextBlocks });
-    const system = buildTranslationSystemPrompt(ctx, { noteMode: options.noteMode });
-    const parsed = await callLLMJson(prompt, { system, signal: options.signal, onStatus: options.onStatus, schema: SCHEMAS.translation });
+    const v2 = options.variant === 'v2';
+    const system = buildTranslationSystemPrompt(ctx, { noteMode: options.noteMode, variant: options.variant });
+    const parsed = await callLLMJson(prompt, { system, signal: options.signal, onStatus: options.onStatus, schema: v2 ? SCHEMAS.translationV2 : SCHEMAS.translation });
     const allowed = new Set(chunk.map(c => c.i));
     const map = new Map();
     const kinds = new Map();
@@ -1713,7 +1752,8 @@ async function translateChunkAdaptive(chunk, ctx, options) {
         if (AI_PARAGRAPH_KINDS.includes(p?.kind)) kinds.set(i, p.kind);
       }
     });
-    return { map, kinds, meta: parsed || {}, entities: Array.isArray(parsed?.used_entities) ? parsed.used_entities : [] };
+    const ents = v2 ? parsed?.new_terms : parsed?.used_entities;
+    return { map, kinds, meta: parsed || {}, entities: Array.isArray(ents) ? ents : [] };
   } catch (err) {
     if (err?.kind === 'truncated' && chunk.length > 1) {
       const mid = Math.ceil(chunk.length / 2);
@@ -1741,7 +1781,7 @@ async function executeApiCall(rawText, ctx, {
   if (paras.length === 0) throw new Error('ไม่พบย่อหน้าต้นฉบับสำหรับแปล');
   const kindsByRule = ruleKinds || labelParagraphsByRules(paras);
   const rule = chapterRule || classifyChapterByRules(rawChapTitle, rawText);
-  const qualityMode = QUALITY_MODES.includes(qualityModeOverride) ? qualityModeOverride : getQualityMode();
+  const qualityMode = normalizeQualityMode(qualityModeOverride) || getQualityMode();
 
   // ข้อความจากหน้าเว็บไม่ส่งให้ AI แปล (เก็บต้นฉบับไว้ และซ่อนตอนแสดงผล)
   const items = paras
@@ -1848,7 +1888,7 @@ async function executeApiCall(rawText, ctx, {
   }
 
   if (isStoryLike) {
-    paragraphs = await bilingualCrossVerificationPass(paragraphs, ctx, { signal, onStatus, pctx, mode: ({ fast: 'off', balanced: 'smart', thorough: 'full', best: 'smart' })[qualityMode] });
+    paragraphs = await bilingualCrossVerificationPass(paragraphs, ctx, { signal, onStatus, pctx, mode: ({ fast: 'off', standard: 'smart', best: 'smart' })[qualityMode] || 'smart' });
     if (qualityMode === 'best') {
       const polished = await polishParagraphs(paragraphs, ctx, pctx, { signal, onStatus });
       paragraphs = await fidelityCheck(polished.paragraphs, polished.changed, ctx, pctx, { signal, onStatus });
@@ -1936,6 +1976,14 @@ async function translateChapter(rawText, ctx, { onStatus = null, signal = null, 
   const ruleKinds = labelParagraphsByRules(sourceParas);
   const noteMode = chapterRule.type === 'author_note' && chapterRule.confidence === 'high';
 
+  // ระบบแปลรุ่น 2 (pipeline.js) เป็นค่าเริ่มต้น ระบบรุ่นเดิมด้านล่างยังเลือกใช้ได้ในตั้งค่า
+  if (!isLegacyPipeline() && typeof translateChapterV2 === 'function') {
+    return translateChapterV2(rawText, ctx, {
+      onStatus, signal, rawChapTitle, rawBookTitle, prevSummary, prevChapter, benchmark, qualityMode,
+      sourceParas, ruleKinds, chapterRule, noteMode
+    });
+  }
+
   // สแกนคำศัพท์และตัวละครจากเนื้อเรื่องเท่านั้น (ไม่รวมข้อความผู้เขียนและข้อความเว็บ)
   const storyText = sourceParas.filter((_, i) => ruleKinds[i] === 'story').join('\n\n');
   if (!noteMode && storyText && !benchmark) {
@@ -1964,7 +2012,7 @@ async function translateChapter(rawText, ctx, { onStatus = null, signal = null, 
       console.warn('Story log skipped:', err.message);
     }
   }
-  if (!noteMode) await recordChapterAverage(signal, getQualityMode());
+  if (!noteMode) await recordChapterAverage(signal, normalizeQualityMode(qualityMode) || getQualityMode());
   if (typeof recordChapterTranslated === 'function') await recordChapterTranslated();
   return result;
 }

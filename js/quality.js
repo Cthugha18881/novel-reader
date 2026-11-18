@@ -101,7 +101,7 @@ async function openVersionHistory(chapId) {
 function versionLabel(v) {
   const meta = v.translationMeta || {};
   const model = meta.model ? ` · ${meta.model}` : '';
-  const mode = meta.qualityMode ? ` · ${({ fast: 'เร็ว', balanced: 'สมดุล', thorough: 'ละเอียด', best: 'ดีที่สุด' })[meta.qualityMode] || meta.qualityMode}` : '';
+  const mode = meta.qualityMode ? ` · ${QUALITY_MODE_LABELS[meta.qualityMode] || meta.qualityMode}` : '';
   return `${new Date(v.at).toLocaleString('th-TH')} (${VERSION_REASON_LABELS[v.reason] || v.reason}${model}${mode})`;
 }
 

@@ -6,7 +6,7 @@
   <!-- ต้องเป็นสคริปต์แรก: ตั้ง Content-Security-Policy ก่อนโหลดอย่างอื่น -->
   <script src="js/hosted-config.js"></script>
   <script src="js/csp.js"></script>
-  <title>Dusktale v3.28.1</title>
+  <title>Dusktale v3.29.0</title>
   <meta name="description" content="อ่านและแปลนิยายจีนเป็นภาษาไทยด้วย AI พร้อมคลังศัพท์อัจฉริยะ">
   <meta name="theme-color" content="#222248">
   <link rel="manifest" href="manifest.webmanifest">
@@ -1105,14 +1105,14 @@
         <div class="form-group">
           <label class="form-label" for="quality-mode-select">🛡️ โหมดคุณภาพการแปล</label>
           <select id="quality-mode-select" class="form-input">
-            <option value="fast">เร็ว — แปลรอบเดียว (ประหยัดสุด)</option>
-            <option value="balanced">สมดุล — แปล + ตรวจย่อหน้าที่น่าสงสัย (แนะนำ)</option>
-            <option value="thorough">ละเอียด — แปล + ตรวจทุกย่อหน้าเทียบต้นฉบับ (~2 เท่า)</option>
-            <option value="best">ดีที่สุด — แปล + บรรณาธิการเกลาสำนวน + ตรวจความหมาย (~1.5-3 เท่า ขึ้นกับโมเดล ลองเทียบด้วย 🧪 เทียบโมเดล)</option>
+            <option value="fast">เร็ว — วิเคราะห์ตอน + แปล + ซ่อมเฉพาะปัญหาร้ายแรง (ประหยัดสุด ~2 คำขอ/ตอน)</option>
+            <option value="standard">มาตรฐาน — + ซ่อมทุกปัญหาที่ตรวจพบ เช่นชื่อไม่ตรงคลังศัพท์ (แนะนำ ~2-3 คำขอ/ตอน)</option>
+            <option value="best">ดีที่สุด — + บรรณาธิการเกลาสำนวน + ตรวจความหมาย (~1.6-2 เท่าของมาตรฐาน)</option>
           </select>
           <div class="hint">
-            ทุกโหมดมีการแก้อักษรจีนที่หลงเหลือ และทำความสะอาดเครื่องหมาย/คำสะกดผิดอัตโนมัติ (ไม่เสีย token)<br>
-            โหมด "ดีที่สุด": ชื่อในคลังศัพท์ถูกล็อกระหว่างเกลา และย่อหน้าที่ตรวจแล้วความหมายเพี้ยนจะกลับไปใช้ฉบับก่อนเกลา
+            ทุกระดับ: อ่านต้นฉบับรอบเดียวเพื่อเก็บชื่อเฉพาะใหม่ ข้อมูลตัวละคร และบันทึกเหตุการณ์ · ตรวจด้วยกฎ (ไม่เสีย token) แล้วซ่อมตัวอักษรต้นฉบับที่หลงเหลือ · ทำความสะอาดเครื่องหมาย/คำสะกดผิด<br>
+            มาตรฐาน: ซ่อมเพิ่มเมื่อชื่อไม่ตรงคลังศัพท์ วงเล็บไม่ครบ ความยาวผิดปกติ หรือคำภาษาอังกฤษค้าง (ตอนที่ไม่มีปัญหา จำนวนคำขอเท่าระดับเร็ว)<br>
+            ดีที่สุด: ชื่อในคลังศัพท์ถูกล็อกระหว่างเกลา และย่อหน้าที่ตรวจแล้วความหมายเพี้ยนจะกลับไปใช้ฉบับก่อนเกลา
           </div>
         </div>
 
@@ -1126,7 +1126,11 @@
         </label>
         <label class="settings-check">
           <input type="checkbox" id="enable-deep-ner-scan">
-          <span><b>สแกนคำศัพท์เชิงลึก</b><small>สแกน 2 รอบ จับระดับพลังทุกขั้น ฉายา และวิชาได้ครบขึ้น (ใช้โควตาเพิ่ม)</small></span>
+          <span><b>สแกนคำศัพท์เชิงลึก</b><small>ให้ AI เก็บคำประสมพิเศษ ฉายา และคำเรียกเฉพาะถิ่นเพิ่มด้วย (ใช้โควตาเพิ่มเล็กน้อย)</small></span>
+        </label>
+        <label class="settings-check">
+          <input type="checkbox" id="use-legacy-pipeline">
+          <span><b>ใช้ระบบแปลรุ่นเดิม</b><small>ช่วงนี้ยังใช้ระบบเดิมเป็นค่าเริ่มต้นระหว่างทดสอบระบบใหม่ เอาติ๊กออกเพื่อลองระบบใหม่ (อ่านต้นฉบับรอบเดียว ซ่อมตัวอักษรต้นฉบับที่หลงเหลือ ใช้คำขอน้อยกว่า)</small></span>
         </label>
         </div>
 
@@ -1240,6 +1244,7 @@
   <script src="js/glossary.js"></script>
   <script src="js/bible.js"></script>
   <script src="js/storylog.js"></script>
+  <script src="js/pipeline.js"></script>
   <script src="js/shelf.js"></script>
   <script src="js/updates.js"></script>
   <script src="js/home.js"></script>

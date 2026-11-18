@@ -37,6 +37,7 @@
   <script src="../js/glossary.js"></script>
   <script src="../js/bible.js"></script>
   <script src="../js/storylog.js"></script>
+  <script src="../js/pipeline.js"></script>
   <script src="../js/shelf.js"></script>
   <script src="../js/updates.js"></script>
   <script src="../js/home.js"></script>
@@ -352,7 +353,7 @@
       localStorage.setItem('nov_quality_mode', 'best');
       const b = [getQualityMode(), getVerifyMode()];
       keep.forEach(([k, v]) => v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v));
-      return eq([a, ...b], ['thorough', 'best', 'smart']);
+      return eq([a, ...b], ['standard', 'best', 'smart']);
     });
     test('buildChapterTail: ท้ายตอนเฉพาะเนื้อเรื่อง', () => {
       const ch = { paragraphs: [{ th: 'หนึ่ง' }, { th: 'สอง' }, { th: 'ขอโหวต', kind: 'author_note' }, { th: '', kind: 'site_junk' }] };
@@ -444,9 +445,9 @@
     test('estimateChapterTokens: โหมดที่ละเอียดกว่าใช้ token มากกว่า', () => {
       const keep = localStorage.getItem('nov_quality_mode');
       const chs = [{ paragraphs: [{ src: '字'.repeat(3000) }] }];
-      const est = ['fast', 'balanced', 'thorough', 'best'].map(m => { localStorage.setItem('nov_quality_mode', m); const e = estimateChapterTokens(chs, 'zh'); return e.input + e.output; });
+      const est = ['fast', 'standard', 'best'].map(m => { localStorage.setItem('nov_quality_mode', m); const e = estimateChapterTokens(chs, 'zh'); return e.input + e.output; });
       keep === null ? localStorage.removeItem('nov_quality_mode') : localStorage.setItem('nov_quality_mode', keep);
-      return est[0] < est[1] && est[1] < est[2] && est[2] < est[3];
+      return est[0] < est[1] && est[1] < est[2];
     });
     test('getActiveLlmConfig: override ผู้ให้บริการ', () => getActiveLlmConfig('main', 'anthropic').provider === 'anthropic' && getActiveLlmConfig('main', 'bogus').provider === getActiveProvider());
 
@@ -1099,6 +1100,46 @@
       return t.length === 2 && t[0].color === '#e11d48' && t[1].color === '#64748b' &&
         filterEntriesByTags(entries, new Set(['a'])).length === 1 && filterEntriesByTags(entries, new Set(['a', 'b'])).length === 2 &&
         filterEntriesByTags(entries, new Set()).length === 3 && style.includes('0.8)') && style.includes('#1e293b') && tagPillStyle('#1d4ed8').includes('#fff');
+    });
+    test('ระบบแปลรุ่น 2: โหมด 3 ระดับ แปลงชื่อโหมดเก่า (สมดุล/ละเอียด -> มาตรฐาน)', () => {
+      return normalizeQualityMode('balanced') === 'standard' && normalizeQualityMode('thorough') === 'standard' &&
+        normalizeQualityMode('best') === 'best' && normalizeQualityMode('fast') === 'fast' && normalizeQualityMode('x') === '' &&
+        QUALITY_MODES.length === 3 && getQualityPlan('fast').repair === 'critical' && getQualityPlan('best').polish === true &&
+        getQualityPlan('balanced').repair === 'all';
+    });
+    test('ตัวตรวจคำศัพท์กลาง: คำแปลต้องเป็นภาษาไทย ไม่มีตัวอักษรต้นฉบับ ไม่เหมือนต้นฉบับ', () => {
+      return validateGlossaryTerm('林动', 'หลินต้ง', 'zh')?.tgt === 'หลินต้ง' &&
+        validateGlossaryTerm('武祖', '武祖', 'zh') === null && validateGlossaryTerm('天妖貂', 'เทียน妖เตียว', 'zh') === null &&
+        validateGlossaryTerm('Klein', 'Klein', 'en') === null && validateGlossaryTerm('Klein', 'klein', 'en') === null &&
+        validateGlossaryTerm('Klein', 'ไคลน์', 'en')?.tgt === 'ไคลน์' && validateGlossaryTerm('Mana Point', 'MP', 'en')?.tgt === 'MP' &&
+        validateGlossaryTerm('Tower', 'Tower of God', 'en') === null && validateGlossaryTerm('魔', 'ปีศาจ【魔】', 'zh') === null &&
+        validateGlossaryTerm('田中', 'ทานากะ', 'ja')?.tgt === 'ทานากะ' && validateGlossaryTerm('김철수', '김철수', 'ko') === null;
+    });
+    test('ตัวช่วยหาคำ: เจอชื่อที่ซ้ำ ชื่อสถานที่ คำในวงเล็บ ทุกภาษา และไม่เอาคำที่รู้จักแล้ว', () => {
+      const zh = '林动笑道：“好。”林动说：“走吧。”众人来到青阳镇。青阳镇很热闹。他施展【大荒囚天指】。林动道：“来！”';
+      const z = mineTermCandidates(zh, 'zh');
+      const zKnown = mineTermCandidates(zh, 'zh', new Set(['林动']));
+      const ja = 'アルフレッドは笑った。田中さんが来た。アルフレッドの剣。田中さんは怒った。';
+      const ko = '김철수는 웃었다. 김철수가 말했다. 김철수의 검이 빛났다.';
+      const en = 'He met Klein Moretti at noon. Later, Klein Moretti left the Tingen City station. The bells of Tingen City rang.';
+      const e = mineTermCandidates(en, 'en');
+      return z.includes('林动') && z.includes('青阳镇') && z.includes('大荒囚天指') && !z.includes('阳镇') && !zKnown.includes('林动') &&
+        mineTermCandidates(ja, 'ja').includes('アルフレッド') && mineTermCandidates(ja, 'ja').includes('田中') &&
+        mineTermCandidates(ko, 'ko').includes('김철수') && e.includes('Klein Moretti') && e.includes('Tingen City') && !e.includes('He') && !e.includes('The');
+    });
+    test('ตรวจย่อหน้าก่อนซ่อม: บอกตัวอักษรที่หลงเหลือ ชื่อที่ผิด ย่อหน้าที่ยังไม่แปล และคำอังกฤษค้าง', () => {
+      const terms = { '林动': { resolvedTgt: 'หลินต้ง' } };
+      const left = diagnoseParagraphForRepair({ src: '林动看着妖兽', th: 'หลินต้งมองดู妖兽' }, terms, 'zh');
+      const name = diagnoseParagraphForRepair({ src: '林动看着天空', th: 'หลินตงมองท้องฟ้าอยู่นานมาก' }, terms, 'zh');
+      const empty = diagnoseParagraphForRepair({ src: '林动', th: UNTRANSLATED_MARK }, terms, 'zh');
+      const en = diagnoseParagraphForRepair({ src: 'Klein grabbed the Revolver quickly.', th: 'ไคลน์คว้า Revolver อย่างรวดเร็ว' }, {}, 'en');
+      const ok = diagnoseParagraphForRepair({ src: '林动看着天空', th: 'หลินต้งมองท้องฟ้าอยู่นาน' }, terms, 'zh');
+      const note = diagnoseParagraphForRepair({ src: '求月票', th: 'ขอโหวต求', kind: 'author_note' }, terms, 'zh');
+      return left[0].reason === 'leftover-script' && left[0].note.includes('妖兽') && name.some(x => x.reason === 'glossary' && x.note.includes('หลินต้ง')) &&
+        empty[0].reason === 'untranslated' && en.some(x => x.reason === 'leftover-latin' && x.note.includes('Revolver')) && ok.length === 0 &&
+        note.length === 1 && note[0].reason === 'leftover-script' &&
+        repairScore([{ reason: 'glossary', count: 1 }]) < repairScore([{ reason: 'glossary', count: 3 }]) &&
+        repairScore([]) < repairScore([{ reason: 'leftover-script', count: 1 }]);
     });
     test('อักษรต้นฉบับหลงเหลือ: นับเฉพาะย่อหน้าที่แปลแล้ว ไม่นับข้อความเว็บ และภาษาที่ตรวจไม่ได้ได้ 0', () => {
       return countLeftoverParagraphs([{ th: 'เขามอง林动' }, { th: 'ปกติ' }, { th: '收藏本站', kind: 'site_junk' }], 'zh') === 1 &&
