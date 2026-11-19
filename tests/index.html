@@ -1129,6 +1129,29 @@
         validateGlossaryTerm('7号', 'หมายเลขเจ็ด', 'zh')?.tgt === 'หมายเลขเจ็ด' &&
         validateGlossaryTerm('马阳', 'หม่า yang', 'zh') === null && validateGlossaryTerm('生命值', 'ค่า HP', 'zh')?.tgt === 'ค่า HP';
     });
+    test('คลังศัพท์ที่ใช้แปล: ข้ามคำที่ AI เพิ่มเองแต่ไม่ผ่านตัวตรวจ (อักษรตัวเดียว) คำที่ผู้ใช้ใส่/แก้เองใช้ตามเดิม / ขั้นซ่อมไม่บังคับอักษรตัวเดียว', async () => {
+      const origGet = window.dbGetAllGlossaryItems, origLang = window.getCachedBookLang;
+      window.dbGetAllGlossaryItems = async () => [
+        { src: '死', tgt: 'ตาย', auto: true, confirmed: true, books: ['b1'] },
+        { src: '时', tgt: 'กาล', auto: true, confirmed: true, userSet: true, books: ['b1'] },
+        { src: '陈', tgt: 'เฉิน', books: ['b1'] },
+        { src: '高命', tgt: 'เกามิ่ง', auto: true, books: ['b1'] },
+        { src: '马阳', tgt: 'หม่า yang', auto: true, books: ['b1'] }
+      ];
+      window.getCachedBookLang = () => 'zh';
+      try {
+        const a = await getActiveGlossaryForBook('b1');
+        const d1 = diagnoseParagraphForRepair({ src: '陈年旧事', th: 'เรื่องเก่าแก่' }, a, 'zh');
+        const d2 = makeParagraphDiagnoser(a, 'zh')({ src: '时光飞逝', th: 'กาลเวลาผ่านไป' });
+        const d3 = diagnoseParagraphForRepair({ src: '高命来了', th: 'เกาหมิงมาแล้ว' }, a, 'zh');
+        return Object.keys(a).sort().join(',') === ['时', '陈', '高命'].sort().join(',') &&
+          !d1.some(x => x.reason === 'glossary') && !d2.includes('glossary') && d3.some(x => x.reason === 'glossary') &&
+          isSingleCjkChar('死') && !isSingleCjkChar('死亡') && AUTO_TERM_NO_GENERIC_RULE.includes('时光');
+      } finally {
+        window.dbGetAllGlossaryItems = origGet;
+        window.getCachedBookLang = origLang;
+      }
+    });
     test('ตรวจย่อหน้าก่อนซ่อม: ต้นฉบับภาษาจีนแต่คำแปลมีพินอินค้าง (ตัวย่อพิมพ์ใหญ่และคำที่ต้นฉบับมีไม่นับ)', () => {
       const stray = diagnoseParagraphForRepair({ src: '马阳说道', th: 'หม่า yang กล่าว' }, {}, 'zh');
       const caps = diagnoseParagraphForRepair({ src: '他的HP很低', th: 'HP ของเขาต่ำมาก' }, {}, 'zh');

@@ -245,10 +245,13 @@ async function buildQualityReport(bookId) {
     }
   });
   report.pendingCharacters = (extras.bible?.characters || []).filter(ch => ch.pending).map(ch => ({ src: ch.src, name: activeTerms[ch.src]?.resolvedTgt || ch.src }));
-  report.newTerms = glossary
-    .filter(t => t.auto && !t.confirmed && Array.isArray(t.books) && t.books.includes(bookId))
-    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))
-    .map(t => ({ src: t.src, tgt: resolveTermForBook(t, bookId), category: t.category, count: t.count || 1 }));
+  const toRow = t => ({ src: t.src, tgt: resolveTermForBook(t, bookId), category: t.category, count: t.count || 1 });
+  const bookAuto = glossary
+    .filter(t => t.auto && Array.isArray(t.books) && t.books.includes(bookId))
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+  report.newTerms = bookAuto.filter(t => !t.confirmed && activeTerms[t.src]).map(toRow);
+  // คำที่ AI เพิ่มแต่ไม่ผ่านตัวตรวจคำศัพท์รุ่นปัจจุบัน (getActiveGlossaryForBook ข้ามไปแล้ว ไม่ได้ใช้แปล)
+  report.rejectedTerms = bookAuto.filter(t => !activeTerms[t.src]).map(toRow);
   return report;
 }
 
@@ -290,7 +293,7 @@ async function renderQualityReport() {
   const r = await buildQualityReport(bookId);
   const isCurrent = bookId === currentBookId;
   const reasonText = (reasons) => reasons.map(x => SUSPICIOUS_REASON_LABELS[x] || x).join(', ');
-  const total = r.suspicious.length + r.fidelity.length + r.oldPrompt.length + r.pendingCharacters.length + r.newTerms.length;
+  const total = r.suspicious.length + r.fidelity.length + r.oldPrompt.length + r.pendingCharacters.length + r.newTerms.length + r.rejectedTerms.length;
   box.innerHTML = `
     <div class="quality-head">
       <div><b>${escapeHtml(r.title)}</b> · ${r.chapters.toLocaleString()} ตอน</div>
@@ -318,8 +321,16 @@ async function renderQualityReport() {
         <span style="display: flex; gap: 4px;">
           <button class="btn" style="padding: 1px 8px; font-size: 11px;" onclick="confirmGlossaryTerms([${jsArg(t.src)}]).then(renderQualityReport)">✓</button>
           ${isCurrent ? `<button class="btn" style="padding: 1px 8px; font-size: 11px;" onclick="openEditTermModal(${jsArg(t.src)})">✎ แก้</button>` : ''}
+          <button class="btn" style="padding: 1px 8px; font-size: 11px;" onclick="delGloss(${jsArg(t.src)}).then(renderQualityReport)" title="ไม่ใช่ชื่อเฉพาะ ลบออกจากคลัง" aria-label="ลบ ${escapeHtml(t.src)}">🗑️</button>
         </span></div>`)}`, {
       hint: 'ตรวจคำแปลชื่อที่ AI ตั้งให้ ถ้าถูกแล้วกดยืนยัน ถ้าผิดกดแก้ (ระบบแทนชื่อในตอนที่แปลแล้วให้)'
+    })}
+    ${qualitySection('🚫 คำที่ AI เพิ่มแต่ไม่ผ่านเกณฑ์ (ไม่ได้ใช้แปลแล้ว)', r.rejectedTerms.length, `
+      <div style="margin-bottom: 6px;"><button class="btn btn-secondary" style="padding: 3px 10px; font-size: 12px;" onclick="deleteRejectedTerms(${jsArg(bookId)})">🗑️ ลบทั้งหมดออกจากคลัง</button></div>
+      ${limitList(r.rejectedTerms, t => `<div class="quality-term">
+        <span><b>${escapeHtml(t.src)}</b> → ${escapeHtml(t.tgt)} <small style="opacity: 0.6;">${escapeHtml(getCategoryLabel(t.category))}</small></span>
+        ${isCurrent ? `<button class="btn" style="padding: 1px 8px; font-size: 11px;" onclick="openEditTermModal(${jsArg(t.src)})" title="แก้แล้วระบบจะใช้ตามที่แก้">✎ แก้</button>` : ''}</div>`)}`, {
+      hint: 'อักษรตัวเดียว ตัวเลขล้วน หรือคำแปลที่ยังมีอักษรต้นฉบับ/อักษรละตินค้าง (ส่วนใหญ่เก็บไว้ก่อนระบบตรวจคำเข้มขึ้น) ระบบข้ามคำพวกนี้ตอนแปลแล้ว ตอนที่แปลไปแล้วไม่เปลี่ยน'
     })}
     ${qualitySection('⏳ ตอนที่ยังไม่ได้แปล', r.pending.length, limitList(r.pending, x => qualityItemButton(x, bookId)))}
     ${qualitySection('🔒 ตอนกันก๊อป / ตอนที่ต้องซื้อ', r.locked.length, limitList(r.locked, x => qualityItemButton(x, bookId)))}
@@ -341,5 +352,13 @@ async function confirmAllNewTerms(bookId) {
   const list = inMemoryGlossaryCache.filter(t => t.auto && !t.confirmed && Array.isArray(t.books) && t.books.includes(bookId)).map(t => t.src);
   if (!list.length || !(await appConfirm(`คำศัพท์ใหม่ ${list.length} คำจะถูกบันทึกว่าตรวจแล้ว คำแปลไม่เปลี่ยน`, { title: 'ยืนยันคำศัพท์', confirmLabel: `ยืนยัน ${list.length} คำ` }))) return;
   await confirmGlossaryTerms(list);
+  await renderQualityReport();
+}
+
+async function deleteRejectedTerms(bookId) {
+  const list = (await buildQualityReport(bookId)).rejectedTerms.map(t => t.src);
+  if (!list.length || !(await appConfirm(`คำที่ AI เพิ่มแต่ไม่ผ่านเกณฑ์ ${list.length} คำจะถูกลบออกจากคลังศัพท์ (ทุกเรื่องที่ใช้คำนี้) ตอนที่แปลแล้วไม่เปลี่ยน`, { title: 'ลบคำที่ไม่ผ่านเกณฑ์', confirmLabel: `ลบ ${list.length} คำ`, danger: true }))) return;
+  for (const src of list) await dbDeleteGlossaryItem(src);
+  if (typeof renderGlossaryUI === 'function') await renderGlossaryUI();
   await renderQualityReport();
 }

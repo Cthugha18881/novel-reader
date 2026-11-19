@@ -28,17 +28,14 @@ async function getActiveGlossaryForBook(bookId) {
   const allItems = await dbGetAllGlossaryItems();
   const bookLang = getCachedBookLang(bookId);
   const activeMap = {};
-  const leftover = getLeftoverRegex(bookLang);
   allItems.forEach(item => {
     const attached = Array.isArray(item.books) && item.books.includes(bookId);
     if (attached || (item.scope === 'global' && getTermLang(item) === bookLang)) {
       const cleanTgt = resolveTermForBook(item, bookId);
-      // คำที่ AI เพิ่มเอง (ยังไม่มีใครยืนยัน) แต่ "คำแปล" ยังเป็นภาษาต้นฉบับ: ไม่ส่งให้ AI ใช้
-      // ไม่อย่างนั้น AI จะใส่อักษรจีนตามคลังศัพท์ทุกตอน และขั้นแก้อักษรที่หลงเหลือก็แก้ไม่ได้ (ยิ่งแปลยาว คำแบบนี้ยิ่งสะสม)
-      // คำที่ผู้ใช้ใส่หรือยืนยันเองใช้ตามเดิมเสมอ (ไม่แตะข้อมูลในคลัง)
-      if (cleanTgt && item.auto && leftover && leftover.test(cleanTgt)) return;
-      // เช่นเดียวกับคำแปลที่ทับศัพท์ไม่เสร็จ ยังมีอักษรละตินพิมพ์เล็ก ("หม่า yang") ต้นฉบับภาษาอังกฤษไม่นับ
-      if (cleanTgt && item.auto && bookLang !== 'en' && /[a-z]{2,}/.test(cleanTgt)) return;
+      // คำที่ AI เพิ่มเองต้องผ่านตัวตรวจคำศัพท์กลางรุ่นปัจจุบันถึงจะส่งให้ AI ใช้ รวมคำที่เก็บไว้ก่อนตัวตรวจเข้มขึ้น
+      // (อักษรตัวเดียว 死 = ตาย ทำให้ 死亡 ถูกแปลแยกคำ, คำแปลที่ยังเป็นอักษรจีน, "หม่า yang")
+      // ไม่ลบออกจากคลัง (ลบได้จากรายงานคุณภาพ) คำที่ผู้ใช้ใส่หรือแก้เองใช้ตามเดิมเสมอ
+      if (cleanTgt && item.auto && !item.userSet && !validateGlossaryTerm(item.src, cleanTgt, bookLang)) return;
       if (cleanTgt) {
         activeMap[item.src] = { ...item, resolvedTgt: cleanTgt };
       }
@@ -624,7 +621,7 @@ async function addGlossary() {
     count: existing ? (existing.count || 1) + 1 : 1,
     overrides,
     ...(existing?.previousTgts ? { previousTgts: existing.previousTgts } : {}),
-    ...(existing?.auto ? { auto: true, confirmed: true } : {}),
+    ...(existing?.auto ? { auto: true, confirmed: true, userSet: true } : {}),
     updatedAt: Date.now()
   };
   await dbSaveGlossaryItem(item);
@@ -687,8 +684,8 @@ async function saveEditedGlossaryTerm() {
   }
   cur.category = newCat;
   cur.updatedAt = Date.now();
-  // ผู้ใช้ดู/แก้คำนี้แล้ว ไม่ต้องแสดงเป็นคำใหม่ที่รอยืนยันอีก
-  if (cur.auto) cur.confirmed = true;
+  // ผู้ใช้ดู/แก้คำนี้แล้ว ไม่ต้องแสดงเป็นคำใหม่ที่รอยืนยันอีก และใช้ตามที่แก้เสมอแม้ไม่ผ่านตัวตรวจคำของ AI
+  if (cur.auto) { cur.confirmed = true; cur.userSet = true; }
 
   await dbSaveGlossaryItem(cur);
   let syncError = null;
@@ -880,6 +877,14 @@ async function delGloss(src) {
 // คำที่ผู้ใช้พิมพ์เองไม่ผ่านตัวตรวจนี้ (เก็บตามที่ใส่เสมอ)
 const THAI_CHAR_REGEX = /[\u0E00-\u0E7F]/;
 
+/** \u0E2D\u0E31\u0E01\u0E29\u0E23\u0E08\u0E35\u0E19/\u0E0D\u0E35\u0E48\u0E1B\u0E38\u0E48\u0E19/\u0E40\u0E01\u0E32\u0E2B\u0E25\u0E35\u0E15\u0E31\u0E27\u0E40\u0E14\u0E35\u0E22\u0E27 (\u6B7B \u65F6 \u9648) \u0E44\u0E1B\u0E15\u0E23\u0E07\u0E01\u0E31\u0E1A\u0E04\u0E33\u0E2D\u0E37\u0E48\u0E19\u0E17\u0E35\u0E48\u0E21\u0E35\u0E15\u0E31\u0E27\u0E19\u0E31\u0E49\u0E19\u0E2D\u0E22\u0E39\u0E48\u0E14\u0E49\u0E27\u0E22 (\u6B7B\u4EA1 \u65F6\u5149 \u65B0\u9648\u4EE3\u8C22) */
+function isSingleCjkChar(s) {
+  return /^[\u3040-\u30FF\u3400-\u9FFF\uAC00-\uD7AF]$/.test(s || '');
+}
+
+// \u0E43\u0E0A\u0E49\u0E43\u0E19\u0E04\u0E33\u0E2A\u0E31\u0E48\u0E07\u0E17\u0E38\u0E01\u0E17\u0E32\u0E07\u0E17\u0E35\u0E48 AI \u0E40\u0E1E\u0E34\u0E48\u0E21\u0E04\u0E33\u0E40\u0E02\u0E49\u0E32\u0E04\u0E25\u0E31\u0E07\u0E40\u0E2D\u0E07 (\u0E02\u0E31\u0E49\u0E19\u0E27\u0E34\u0E40\u0E04\u0E23\u0E32\u0E30\u0E2B\u0E4C\u0E15\u0E2D\u0E19, \u0E40\u0E01\u0E47\u0E1A\u0E15\u0E01\u0E08\u0E32\u0E01\u0E02\u0E31\u0E49\u0E19\u0E41\u0E1B\u0E25, \u0E1B\u0E38\u0E48\u0E21\u0E2A\u0E41\u0E01\u0E19)
+const AUTO_TERM_NO_GENERIC_RULE = '\u0E2B\u0E49\u0E32\u0E21\u0E40\u0E01\u0E47\u0E1A\u0E04\u0E33\u0E01\u0E23\u0E34\u0E22\u0E32 \u0E04\u0E33\u0E04\u0E38\u0E13\u0E28\u0E31\u0E1E\u0E17\u0E4C \u0E41\u0E25\u0E30\u0E04\u0E33\u0E19\u0E32\u0E21\u0E19\u0E32\u0E21\u0E18\u0E23\u0E23\u0E21\u0E17\u0E31\u0E48\u0E27\u0E44\u0E1B (\u0E40\u0E0A\u0E48\u0E19 \u0E15\u0E32\u0E22 \u0E06\u0E48\u0E32 \u0E42\u0E01\u0E23\u0E18 \u0E40\u0E27\u0E25\u0E32 \u0E04\u0E27\u0E32\u0E21\u0E15\u0E32\u0E22 \u0E0A\u0E35\u0E27\u0E34\u0E15) \u0E41\u0E25\u0E30\u0E2B\u0E49\u0E32\u0E21\u0E15\u0E31\u0E14\u0E40\u0E01\u0E47\u0E1A\u0E41\u0E04\u0E48\u0E1A\u0E32\u0E07\u0E15\u0E31\u0E27\u0E2D\u0E31\u0E01\u0E29\u0E23\u0E02\u0E2D\u0E07\u0E04\u0E33\u0E17\u0E35\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E2D\u0E48\u0E32\u0E19\u0E23\u0E27\u0E21\u0E01\u0E31\u0E19 (\u0E40\u0E0A\u0E48\u0E19 \u0E40\u0E01\u0E47\u0E1A \u65F6 = \u0E01\u0E32\u0E25 \u0E08\u0E32\u0E01\u0E04\u0E33\u0E27\u0E48\u0E32 \u65F6\u5149) \u0E16\u0E49\u0E32\u0E04\u0E33\u0E17\u0E31\u0E49\u0E07\u0E04\u0E33\u0E44\u0E21\u0E48\u0E43\u0E0A\u0E48\u0E0A\u0E37\u0E48\u0E2D\u0E40\u0E09\u0E1E\u0E32\u0E30\u0E01\u0E47\u0E44\u0E21\u0E48\u0E15\u0E49\u0E2D\u0E07\u0E40\u0E01\u0E47\u0E1A';
+
 /** คืน { src, tgt } ที่ใช้ได้ หรือ null ถ้าไม่ควรเก็บ (คำแปลยังเป็นภาษาต้นฉบับ/เหมือนต้นฉบับ/ไม่ใช่ภาษาไทย/มีวงเล็บ/ยาวผิดปกติ) */
 function validateGlossaryTerm(src, tgt, lang) {
   const s = cleanTermString(src);
@@ -887,7 +892,7 @@ function validateGlossaryTerm(src, tgt, lang) {
   if (!s || !t || s.length > 40 || t.length > 60) return null;
   if (t === s || t.toLowerCase() === s.toLowerCase()) return null;
   // ตัวเดียว (เช่น 雪 陈) ไปตรงกับคำอื่นที่มีตัวนั้นอยู่ด้วย (新陈代谢) ทำให้บังคับคำแปลผิดที่
-  if (/^[぀-ヿ㐀-鿿가-힯]$/.test(s)) return null;
+  if (isSingleCjkChar(s)) return null;
   // ตัวเลขล้วน เลขห้อง เลเวล (2507, LV.6) ไม่ใช่ชื่อเฉพาะ
   if (/^(?:lv\.?\s*)?[\d\s.,:：+\-%]+$/i.test(s)) return null;
   // อักษรละตินมีวรรณยุกต์ (พินอิน yǒu) หรือตัวพิมพ์เล็กค้าง ("หม่า yang") = ทับศัพท์ไม่เสร็จ (ตัวย่อพิมพ์ใหญ่ เช่น HP ยังใช้ได้)
@@ -946,7 +951,7 @@ ${isDeepNer ? `4. **คำประสมพิเศษและฉายา:**
 - "realm": ขอบเขตลมปราณ, ลำดับขั้น, เลเวล, ระดับพลัง
 
 ข้อกำหนด:
-1. ห้ามเลือกคำทั่วไป (เช่น พ่อ, แม่, ประตู, ท้องฟ้า)
+1. ห้ามเลือกคำทั่วไป (เช่น พ่อ, แม่, ประตู, ท้องฟ้า) และอักษรตัวเดียว ${AUTO_TERM_NO_GENERIC_RULE}
 2. คำที่มีอยู่แล้วห้ามส่งซ้ำ: [${existingTerms.join(', ')}]
 3. คำแปลไทยใน "tgt" ต้องเป็นชื่อเฉพาะตรงตัว **ห้ามใส่วงเล็บทึบ 【 】 หรือเครื่องหมายคำพูดใดๆ ติดมา**
 ${isBibleEnabled ? `\n${buildCharacterExtractionInstruction(extras.bible, rawText)}\n` : ''}

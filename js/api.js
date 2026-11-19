@@ -1366,7 +1366,7 @@ function makeParagraphDiagnoser(activeTerms, lang = DEFAULT_SOURCE_LANG) {
       if (ratio < minRatio || ratio > maxRatio) reasons.push('length');
     }
     for (const [termSrc, v] of termEntries) {
-      if (src.includes(termSrc) && v.resolvedTgt && !th.includes(v.resolvedTgt)) {
+      if (!isSingleCjkChar(termSrc) && src.includes(termSrc) && v.resolvedTgt && !th.includes(v.resolvedTgt)) {
         reasons.push('glossary');
         break;
       }
@@ -1733,7 +1733,7 @@ ${styleSection}
   // ระบบรุ่น 2: ให้ส่งเฉพาะชื่อเฉพาะที่ไม่อยู่ในคลังศัพท์ (เก็บตกคำที่ขั้นวิเคราะห์หลุด) และต้องเป็นภาษาไทยล้วน
   return prompt
     .replace('- "used_entities": ชื่อเฉพาะสำคัญและระดับพลังที่ปรากฏในเนื้อเรื่อง พร้อมคำแปลที่ใช้',
-      `- "new_terms": เฉพาะชื่อเฉพาะ (คน สถานที่ สำนัก วิชา ไอเทม ระดับพลัง ฉายา) ที่ปรากฏในเนื้อเรื่องแต่ "ไม่อยู่ในคลังศัพท์ที่ให้มา" พร้อมคำแปลไทยที่คุณใช้ในคำแปลนี้ ถ้าไม่มีให้ส่ง [] (ห้ามส่งคำที่มีในคลังแล้ว ห้ามส่งคำทั่วไปที่มีคำไทยตรงตัว เช่น อาหาร พืช สัตว์ทั่วไป สิ่งของ อาชีพ คำเรียกญาติ อายุ ตัวเลข "tgt" ต้องเป็นภาษาไทยล้วน ไม่มีตัวอักษรภาษา${getLangName(ctx.sourceLang)}${normalizeLang(ctx.sourceLang) !== 'en' ? ' และไม่มีอักษรละตินพิมพ์เล็ก' : ''})${typeof nameStyleRule === 'function' && nameStyleRule(ctx.sourceLang) ? `\n${nameStyleRule(ctx.sourceLang).trim()} (ใช้ทั้งในคำแปลและ "new_terms")` : ''}`)
+      `- "new_terms": เฉพาะชื่อเฉพาะ (คน สถานที่ สำนัก วิชา ไอเทม ระดับพลัง ฉายา) ที่ปรากฏในเนื้อเรื่องแต่ "ไม่อยู่ในคลังศัพท์ที่ให้มา" พร้อมคำแปลไทยที่คุณใช้ในคำแปลนี้ ถ้าไม่มีให้ส่ง [] (ห้ามส่งคำที่มีในคลังแล้ว ห้ามส่งคำทั่วไปที่มีคำไทยตรงตัว เช่น อาหาร พืช สัตว์ทั่วไป สิ่งของ อาชีพ คำเรียกญาติ อายุ ตัวเลข คำกริยา คำนามนามธรรม เช่น ตาย เวลา ห้ามส่งอักษรตัวเดียวหรือแค่บางตัวอักษรของคำ "tgt" ต้องเป็นภาษาไทยล้วน ไม่มีตัวอักษรภาษา${getLangName(ctx.sourceLang)}${normalizeLang(ctx.sourceLang) !== 'en' ? ' และไม่มีอักษรละตินพิมพ์เล็ก' : ''})${typeof nameStyleRule === 'function' && nameStyleRule(ctx.sourceLang) ? `\n${nameStyleRule(ctx.sourceLang).trim()} (ใช้ทั้งในคำแปลและ "new_terms")` : ''}`)
     .replace('"used_entities": [ {"src": "คำตามต้นฉบับ", "tgt": "คำแปลไทย", "category": "character|title|location|skill|equipment|resource|realm"} ]',
       '"new_terms": [ {"src": "คำตามต้นฉบับ", "tgt": "คำแปลไทย", "category": "character|title|location|skill|equipment|resource|realm"} ]');
 }

@@ -165,6 +165,7 @@ async function analyzeChapter(sourceParas, ruleKinds, ctx, { signal = null, onSt
 - เก็บ: ชื่อคน สัตว์/สิ่งมีชีวิตเฉพาะเรื่อง เผ่าพันธุ์, สถานที่ สำนัก องค์กร ตระกูล, ฉายา ตำแหน่งเฉพาะเรื่อง, วิชา ทักษะ สกิล, ไอเทม อาวุธ ทรัพยากรที่มีชื่อเฉพาะ, ระดับพลัง ขั้น และค่าสถานะของระบบ${GENRE_TERM_HINTS[ctx.genre] ? ` (แนวนี้มักมี: ${GENRE_TERM_HINTS[ctx.genre]})` : ''}
 - ห้ามเก็บคำทั่วไปที่มีคำไทยตรงตัวอยู่แล้ว แม้จะพบบ่อยในตอนนี้: อาหาร ผลไม้ ถั่ว พืช ต้นไม้ สัตว์ทั่วไป สภาพอากาศ สี ส่วนของร่างกาย สิ่งของเครื่องใช้ อาวุธทั่วไป (มีด ธนู หอก) ยานพาหนะ อาชีพ ตำแหน่งงานทั่วไป คำเรียกญาติ ช่วงเวลา อายุ ตัวเลข เลขห้อง สรรพนาม
 - ห้ามเก็บชื่อตอน ประโยค หรือวลียาวที่บรรยายเหตุการณ์ และห้ามเก็บอักษรตัวเดียว
+- ${AUTO_TERM_NO_GENERIC_RULE}
 - คำในวงเล็บ 【 】 〖 〗 『 』 [ ] มักเป็นชื่อเฉพาะ ให้พิจารณาทุกคำ
 ${candidates.length ? `- คำที่ระบบหาไว้ให้ (อาจมีคำทั่วไปปน ให้เลือกเฉพาะที่เป็นชื่อเฉพาะจริง และเพิ่มคำที่ระบบหาไม่เจอด้วย): ${candidates.join(', ')}\n` : ''}${localStorage.getItem('nov_enable_deep_ner') === 'true' ? '- เก็บคำประสมพิเศษ ฉายาตัวละคร คำเรียกเฉพาะของเผ่าพันธุ์ และตำแหน่งเฉพาะถิ่นด้วย\n' : ''}- "src" ตรงตามต้นฉบับทุกตัวอักษร ไม่รวมคำลงท้ายที่ไม่ใช่ชื่อ (เช่น さん 님)
 - "tgt" ต้องเป็นภาษาไทยทั้งหมด (ทับศัพท์หรือแปลความหมายตามที่นิยมในนิยายแปลไทย) ห้ามมีตัวอักษรภาษา${langName} ห้ามมีวงเล็บ เครื่องหมายคำพูด${normalizeLang(ctx.sourceLang) !== 'en' ? ' หรืออักษรละติน (ทับศัพท์ให้ครบทุกพยางค์ เช่น ห้ามเขียน "หลิน feng")' : ''}
@@ -290,7 +291,8 @@ function diagnoseParagraphForRepair(p, activeTerms, lang) {
     else if (ratio > maxRatio) out.push({ reason: 'length', note: 'ยาวผิดปกติ อาจแปลซ้ำหรือเติมเนื้อหา' });
   }
   const wrongNames = Object.entries(activeTerms || {})
-    .filter(([s, v]) => s && src.includes(s) && v.resolvedTgt && !th.includes(v.resolvedTgt))
+    // อักษรตัวเดียว (ผู้ใช้ใส่เอง) ไม่บังคับ: ตัวนั้นอาจเป็นส่วนของคำอื่นที่แปลรวมกัน (死 ใน 死亡)
+    .filter(([s, v]) => s && !isSingleCjkChar(s) && src.includes(s) && v.resolvedTgt && !th.includes(v.resolvedTgt))
     .slice(0, 6)
     .map(([s, v]) => `${s} ต้องเป็น "${v.resolvedTgt}"`);
   if (wrongNames.length) out.push({ reason: 'glossary', count: wrongNames.length, note: `ชื่อไม่ตรงคลังศัพท์: ${wrongNames.join(', ')}` });
